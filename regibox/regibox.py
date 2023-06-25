@@ -132,7 +132,7 @@ def enroll(path: str) -> None:
 
 def main() -> None:
     LOGGER.info(f"Started at {START.isoformat()}")
-    class_time: str = "08:30"
+    class_time: str = "12:00"
     class_type: str = "WOD RATO"
     class_day: datetime.datetime = datetime.datetime.now(TIMEZONE) + datetime.timedelta(days=2)
     wait: int = 2
@@ -148,6 +148,11 @@ def main() -> None:
             time.sleep(wait)
         else:
             break
+    else:
+        raise RuntimeError(
+            f"Timed out waiting for class {class_type} at {class_day.date().isoformat()} on"
+            f" {class_time}, terminating."
+        )
     path: str = get_enroll_path(button)
     enroll(path)
     LOGGER.info(f"Enrolled at {path}")
@@ -155,4 +160,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except RuntimeError as e:
+        LOGGER.exception(e)
