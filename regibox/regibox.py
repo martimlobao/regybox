@@ -2,11 +2,12 @@ import datetime
 import logging
 import os
 import re
+import time
 
 import pytz
 import requests
 from bs4 import BeautifulSoup
-from bs4.element import Tag
+from bs4.element import NavigableString, Tag
 from dotenv import find_dotenv, load_dotenv
 
 TIMEZONE: pytz.BaseTzInfo = pytz.timezone("Europe/Lisbon")
@@ -14,7 +15,7 @@ START: datetime.datetime = datetime.datetime.now(TIMEZONE)
 LOGGER: logging.Logger = logging.getLogger("REGIBOX")
 logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] [%(filename)s:%(lineno)d] - %(message)s",
-    level=logging.DEBUG,
+    level=logging.INFO,
 )
 load_dotenv(dotenv_path=find_dotenv(usecwd=True))
 DOMAIN: str = "https://www.regibox.pt/app/app_nova/"
@@ -79,16 +80,24 @@ def get_enroll_buttons(year: int, month: int, day: int) -> list[Tag]:
 def pick_button(buttons: list[Tag], class_time: str, class_type: str) -> Tag:
     available_classes = []
     for button in buttons:
-        button_time: Tag = button.find_parent().find_parent().find("div", attrs={"align": "left"})
-        button_type: Tag = (
-            button_time.find_parent()
-            .find_parent()
-            .find("div", attrs={"align": "left", "class": "col-50"})
-            .text.strip()
+        button_class: Tag | None = button.find_parent(
+            "div", attrs={"class": "card2 round_rect_all_5"}
         )
-        available_classes.append(f"{button_type} @ {button_time.text}")
-        if button_time.text.startswith(class_time) and button_type == class_type:
-            LOGGER.info(f"Found button for '{button_type}' @ {button_time.text}")
+        if button_class is None:
+            continue
+
+        button_time: Tag | NavigableString | None = button_class.find(
+            "div", attrs={"align": "left", "class": "col"}
+        )
+        button_type: Tag | NavigableString | None = button_class.find(
+            "div", attrs={"align": "left", "class": "col-50"}
+        )
+        if button_time is None or button_type is None:
+            continue
+
+        available_classes.append(f"{button_type.text.strip()} @ {button_time.text}")
+        if button_time.text.startswith(class_time) and button_type.text.strip() == class_type:
+            LOGGER.info(f"Found button for '{button_type.text.strip()}' @ {button_time.text}")
             return button
     raise RuntimeError(
         f"Unable to find enroll button for class '{class_type}' at {class_time}. Available"
@@ -123,15 +132,26 @@ def enroll(path: str) -> None:
 
 def main() -> None:
     LOGGER.info(f"Started at {START.isoformat()}")
-    class_time: str = "12:00"
+    class_time: str = "08:30"
     class_type: str = "WOD RATO"
-    class_day: datetime.datetime = datetime.datetime.now(TIMEZONE) + datetime.timedelta(days=1)
-    buttons: list[Tag] = get_enroll_buttons(class_day.year, class_day.month, class_day.day)
-    button: Tag = pick_button(buttons, class_time, class_type)
+    class_day: datetime.datetime = datetime.datetime.now(TIMEZONE) + datetime.timedelta(days=2)
+    wait: int = 2
+    for _ in range(120 // wait):  # try for 2 minutes
+        buttons: list[Tag] = get_enroll_buttons(class_day.year, class_day.month, class_day.day)
+        try:
+            button: Tag = pick_button(buttons, class_time, class_type)
+        except RuntimeError:
+            LOGGER.info(
+                f"No button found for {class_type} at {class_day.date().isoformat()} on"
+                f" {class_time}, retrying in {wait} seconds."
+            )
+            time.sleep(wait)
+        else:
+            break
     path: str = get_enroll_path(button)
     enroll(path)
     LOGGER.info(f"Enrolled at {path}")
-    LOGGER.info(f"Runtime: {datetime.datetime.now(TIMEZONE) - START:.3}")
+    LOGGER.info(f"Runtime: {(datetime.datetime.now(TIMEZONE) - START).total_seconds():.3}")
 
 
 if __name__ == "__main__":
