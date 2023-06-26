@@ -3,7 +3,7 @@ name: Trigger Regibox
 on:
   workflow_dispatch:
   schedule:
-    - cron: "58 10 * * 6,0-3"
+    - cron: "54 10 * * 6,0-3"
 jobs:
   build:
     name: Trigger Regibox run
