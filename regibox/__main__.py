@@ -1,3 +1,5 @@
+import sys
+
 from regibox.regibox import LOGGER, main
 
 if __name__ == "__main__":
@@ -5,3 +7,4 @@ if __name__ == "__main__":
         main()
     except RuntimeError as e:
         LOGGER.exception(e)
+        sys.exit(1)
