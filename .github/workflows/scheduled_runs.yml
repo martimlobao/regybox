@@ -31,11 +31,11 @@ jobs:
           installer-parallel: true
       - name: Load cached venv
         id: cached-poetry-dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v2
         with:
-          path: ~/.cache/pypoetry/virtualenvs
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
-      - name: Install Dependencies using Poetry
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+      - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install
       - name: Get class date
@@ -56,9 +56,10 @@ jobs:
           password: ${{ secrets.EMAIL_PASSWORD }}
           # email subject
           subject: |
-            "Regibox Auto-enroll: ${{ job.status }} for ${{ env.CLASS_DATE }} at ${{ env.CLASS_TIME }}"
+            Regibox Auto-enroll: ${{ job.status }} for ${{ env.CLASS_DATE }} at ${{ env.CLASS_TIME }}
           body: |
             Job '${{ github.job }}' in worflow ${{ github.workflow }} of ${{ github.repository }} finished in a ${{ job.status }} state.
+
             See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
           to: m@rtimlobao.com
           from: Regibox Auto-enroll
