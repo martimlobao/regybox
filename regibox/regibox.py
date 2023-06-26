@@ -116,7 +116,7 @@ def get_enroll_path(button: Tag) -> str:
     return button_urls[0]
 
 
-def enroll(path: str) -> None:
+def submit_enroll(path: str) -> None:
     res: requests.models.Response = requests.get(DOMAIN + path, headers=HEADERS, timeout=10)
     res.raise_for_status()
     LOGGER.debug(f"Enrolled in class with response: '{res.text}'")
@@ -154,13 +154,6 @@ def main() -> None:
             f" {class_time}, terminating."
         )
     path: str = get_enroll_path(button)
-    enroll(path)
+    submit_enroll(path)
     LOGGER.info(f"Enrolled at {path}")
-    LOGGER.info(f"Runtime: {(datetime.datetime.now(TIMEZONE) - START).total_seconds():.3}")
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except RuntimeError as e:
-        LOGGER.exception(e)
+    LOGGER.info(f"Runtime: {(datetime.datetime.now(TIMEZONE) - START).total_seconds():.3f}")

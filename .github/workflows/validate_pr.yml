@@ -1,0 +1,45 @@
+name: Validate Pull Request
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-focal
+    steps:
+    - name: Check out repo content
+      uses: actions/checkout@v2
+    - name: Set up python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.10
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+    - name: Install Dependencies using Poetry
+      run: poetry install --with dev
+      if: steps.cache.outputs.cache-hit != 'true'
+    - run: poetry run black --preview --check regibox/ tests/
+    - run: poetry run isort regibox/ tests/
+    - run: poetry run mypy regibox/ tests/
+    - run: poetry run pylint regibox/ tests/
+    - run: poetry run ruff regibox/ tests/
+  test:
+    name: Test
+    runs-on: ubuntu-focal
+    steps:
+    - name: Check out repo content
+      uses: actions/checkout@v2
+    - name: Set up python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.10
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+    - name: Install Dependencies using Poetry
+      run: poetry install --with dev
+      if: steps.cache.outputs.cache-hit != 'true'
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - run: poetry run pytest tests/
