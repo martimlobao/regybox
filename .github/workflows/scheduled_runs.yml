@@ -50,17 +50,18 @@ jobs:
         if: always()
         uses: dawidd6/action-send-mail@v2
         with:
-          # mail server settings
           server_address: smtp.gmail.com
           server_port: 465
-          # user credentials
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           # email subject
-          subject: "Regibox Auto-enroll: ${{ job.status }} for ${{ env.CLASS_DATE }} at ${{ env.CLASS_TIME }}"
-          # email body as text
-          body: Job '${{ github.job }}' in worflow ${{ github.workflow }} of ${{ github.repository }} finished in a ${{ job.status }} state.
-          # comma-separated string, send email to
+          subject: >-
+            "Regibox Auto-enroll: ${{ job.status }} for ${{ env.CLASS_DATE }} at
+            ${{ env.CLASS_TIME }}"
+          body: >-
+            Job '${{ github.job }}' in worflow ${{ github.workflow }} of ${{ github.repository }}
+            finished in a ${{ job.status }} state.
+            \nSee
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           to: m@rtimlobao.com
-          # from email name
           from: Regibox Auto-enroll

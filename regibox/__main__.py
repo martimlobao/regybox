@@ -7,5 +7,5 @@ if __name__ == "__main__":
     try:
         main(class_date, class_time)
     except RuntimeError as e:
-        LOGGER.exception(e)
+        LOGGER.error(e)
         sys.exit(1)
