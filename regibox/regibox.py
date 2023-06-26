@@ -130,19 +130,22 @@ def submit_enroll(path: str) -> None:
     LOGGER.info(responses[0])
 
 
-def main() -> None:
+def main(
+    class_day: str | None = None, class_time: str = "12:00", class_type: str = "WOD RATO"
+) -> None:
     LOGGER.info(f"Started at {START.isoformat()}")
-    class_time: str = "12:00"
-    class_type: str = "WOD RATO"
-    class_day: datetime.datetime = datetime.datetime.now(TIMEZONE) + datetime.timedelta(days=2)
+    if not class_day:
+        date: datetime.datetime = datetime.datetime.now(TIMEZONE) + datetime.timedelta(days=2)
+    else:
+        date = datetime.datetime.strptime(class_day, "%Y-%m-%d").replace(tzinfo=TIMEZONE)
     wait: int = 2
     for _ in range(120 // wait):  # try for 2 minutes
-        buttons: list[Tag] = get_enroll_buttons(class_day.year, class_day.month, class_day.day)
+        buttons: list[Tag] = get_enroll_buttons(date.year, date.month, date.day)
         try:
             button: Tag = pick_button(buttons, class_time, class_type)
         except RuntimeError:
             LOGGER.info(
-                f"No button found for {class_type} at {class_day.date().isoformat()} on"
+                f"No button found for {class_type} at {date.date().isoformat()} on"
                 f" {class_time}, retrying in {wait} seconds."
             )
             time.sleep(wait)
@@ -150,7 +153,7 @@ def main() -> None:
             break
     else:
         raise RuntimeError(
-            f"Timed out waiting for class {class_type} at {class_day.date().isoformat()} on"
+            f"Timed out waiting for class {class_type} at {date.date().isoformat()} on"
             f" {class_time}, terminating."
         )
     path: str = get_enroll_path(button)
