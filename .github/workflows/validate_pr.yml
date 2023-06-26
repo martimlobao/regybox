@@ -36,13 +36,17 @@ jobs:
       - name: Install Dependencies using Poetry
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --with dev
-      - name: Lint
-        run: |
-          poetry run black --preview --check regibox/ tests/
-          poetry run isort regibox/ tests/
-          poetry run mypy regibox/ tests/
-          poetry run pylint regibox/ tests/
-          poetry run ruff regibox/ tests/
+      - name: Lint with black
+        run: poetry run black --preview --check regibox/ tests/
+      - name: Lint with isort
+        run: poetry run isort regibox/ tests/
+      - name: Lint with mypy
+        run: poetry run mypy regibox/ tests/
+      - name: Lint with pylint
+        run: poetry run pylint regibox/ tests/
+      - name: Lint with ruff
+        run: poetry run ruff regibox/ tests/
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -77,4 +81,6 @@ jobs:
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --with dev
       - name: Test
-        run: poetry run pytest tests/
+        run: |
+          poetry run coverage run --source=regibox/ -m pytest tests/
+          poetry run coverage report -m
