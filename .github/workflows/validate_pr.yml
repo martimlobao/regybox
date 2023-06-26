@@ -5,7 +5,7 @@ on:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-focal
+    runs-on: ubuntu-latest
     steps:
     - name: Check out repo content
       uses: actions/checkout@v2
