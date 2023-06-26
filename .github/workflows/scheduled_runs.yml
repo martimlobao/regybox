@@ -61,6 +61,6 @@ jobs:
           # email body as text
           body: Job '${{ github.job }}' in worflow ${{ github.workflow }} of ${{ github.repository }} finished in a ${{ job.status }} state.
           # comma-separated string, send email to
-          to: martimlobao+personal@gmail.com
+          to: m@rtimlobao.com
           # from email name
           from: Regibox Auto-enroll
