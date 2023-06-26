@@ -3,7 +3,7 @@ name: Trigger Regibox
 on:
   workflow_dispatch:
   schedule:
-    - cron: "58 11 * * 6,0-3"
+    - cron: "58 10 * * 6,0-3"
 jobs:
   build:
     name: Trigger Regibox run
@@ -33,12 +33,33 @@ jobs:
         id: cached-poetry-dependencies
         uses: actions/cache@v3
         with:
-          path: ~/.cache/pypoetry/virtualenvs
+          path: ~/.cache/pypoetry/
           key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
       - name: Install Dependencies using Poetry
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install
-      - name: Run Regibox
-        run: poetry run python -m regibox
+        run: poetry install --with dev
+      - name: Get class date
+        run: |
+          echo "CLASS_DATE=$(date -d '+2 days' +%F)" >> $GITHUB_ENV
+          echo "CLASS_TIME='12:00'" >> $GITHUB_ENV
+      - name: Regibox enroll
+        run: poetry run python -m regibox ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }}
         env:
           COOKIE: ${{ secrets.COOKIE }}
+      - name: Send mail
+        if: always()
+        uses: dawidd6/action-send-mail@v2
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          # email subject
+          subject: |
+            Regibox Auto-enroll: ${{ job.status }} for ${{ env.CLASS_DATE }} at ${{ env.CLASS_TIME }}
+          body: |
+            Job '${{ github.job }}' in worflow ${{ github.workflow }} of ${{ github.repository }} finished in a ${{ job.status }} state.
+
+            See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
+          to: m@rtimlobao.com
+          from: Regibox Auto-enroll
