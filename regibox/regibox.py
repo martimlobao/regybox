@@ -139,7 +139,7 @@ def main(
     else:
         date = datetime.datetime.strptime(class_day, "%Y-%m-%d").replace(tzinfo=TIMEZONE)
     wait: int = 3  # seconds
-    for _ in range(400 // (wait + 2)):  # try for about 6 minutes
+    for _ in range(600 // (wait + 2)):  # try for about 10 minutes
         buttons: list[Tag] = get_enroll_buttons(date.year, date.month, date.day)
         try:
             button: Tag = pick_button(buttons, class_time, class_type)
