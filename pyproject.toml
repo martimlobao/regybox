@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "regibox"
-version = "0.1.0"
+version = "0.2.0"
 description = "Automatically enroll in Regibox Crossfit classes"
 authors = ["Martim Lobao <m@rtimlobao.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.11"
 beautifulsoup4 = "^4.12.2"
 python-dotenv = "^1.0.0"
 pytz = "^2023.3"
@@ -16,10 +16,11 @@ requests = "^2.31.0"
 black = "^23.3.0"
 coverage = "^7.2.7"
 ipython = "^8.14.0"
-isort = "^5.12.0"
+isort = { extras = ["colors"], version = "^5.12.0" }
 mypy = "^1.4.0"
 pylint = "^2.17.4"
 pytest = "^7.4.0"
+pyupgrade = "^3.9.0"
 ruff = "^0"
 types-beautifulsoup4 = "^4.12.0.5"
 types-pytz = "^2023.3.0.0"
@@ -36,7 +37,10 @@ known_first_party = ["regibox"]
 line_length = 99
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
+
+[tool.pyupgrade]
+py311plus = true
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
