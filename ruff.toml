@@ -6,7 +6,6 @@ ignore = [
     "D",
     "EM",
     "TRY",
-    "PERF203",
 ]
 fixable = ["ALL"]
 
