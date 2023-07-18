@@ -52,7 +52,7 @@ jobs:
       - name: Lint with ruff
         run: poetry run ruff regibox/ tests/
       - name: Lint with yamllint
-        run: poetry run yamllint .
+        run: poetry run yamllint -s .
       - name: Lint with pyupgrade
         run: poetry run pyupgrade **/*.py
   test:
@@ -65,7 +65,7 @@ jobs:
         id: setup-python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
       - name: Load cached Poetry installation
         id: cached-poetry
         uses: actions/cache@v3

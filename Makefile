@@ -6,7 +6,7 @@ check:
 	poetry run mypy regibox/ tests/
 	poetry run pylint regibox/ tests/
 	poetry run ruff regibox/ tests/
-	poetry run yamllint .
+	poetry run yamllint -s .
 	poetry run pyupgrade **/*.py
 
 .PHONY: fix
