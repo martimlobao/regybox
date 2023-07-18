@@ -1,7 +1,9 @@
+---
 name: Validate Pull Request
-on:
+on:  # yamllint disable-line rule:truthy
   pull_request:
     branches: [main]
+
 jobs:
   lint:
     name: Lint
@@ -13,7 +15,7 @@ jobs:
         id: setup-python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: '3.10'
       - name: Load cached Poetry installation
         id: cached-poetry
         uses: actions/cache@v3
@@ -32,7 +34,8 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.cache/pypoetry/
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          key: |
+            venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
       - name: Install Dependencies using Poetry
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --with dev
@@ -46,7 +49,8 @@ jobs:
         run: poetry run pylint regibox/ tests/
       - name: Lint with ruff
         run: poetry run ruff regibox/ tests/
-
+      - name: Lint with yamllint
+        run: poetry run yamllint .
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -57,7 +61,7 @@ jobs:
         id: setup-python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: '3.10'
       - name: Load cached Poetry installation
         id: cached-poetry
         uses: actions/cache@v3
@@ -76,11 +80,12 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.cache/pypoetry/virtualenvs
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          key: |
+            venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
       - name: Install Dependencies using Poetry
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --with dev
       - name: Test
-        run: |
+        run: |-
           poetry run coverage run --source=regibox/ -m pytest tests/
           poetry run coverage report -m

@@ -9,15 +9,20 @@ import requests
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
 from dotenv import find_dotenv, load_dotenv
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-TIMEZONE: pytz.BaseTzInfo = pytz.timezone("Europe/Lisbon")
-START: datetime.datetime = datetime.datetime.now(TIMEZONE)
-LOGGER: logging.Logger = logging.getLogger("REGIBOX")
+load_dotenv(dotenv_path=find_dotenv(usecwd=True))
+
 logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] [%(filename)s:%(lineno)d] - %(message)s",
     level=logging.INFO,
 )
-load_dotenv(dotenv_path=find_dotenv(usecwd=True))
+LOGGER: logging.Logger = logging.getLogger("REGIBOX")
+
+TIMEZONE: pytz.BaseTzInfo = pytz.timezone("Europe/Lisbon")
+START: datetime.datetime = datetime.datetime.now(TIMEZONE)
+
 DOMAIN: str = "https://www.regibox.pt/app/app_nova/"
 HEADERS: dict[str, str] = {
     "Accept": "text/html, */*; q=0.01",
@@ -41,6 +46,11 @@ HEADERS: dict[str, str] = {
     "sec-ch-ua-platform": '"macOS"',
 }
 
+SESSION: requests.Session = requests.Session()
+ADAPTER: HTTPAdapter = HTTPAdapter(max_retries=Retry(connect=10, backoff_factor=0.5))
+SESSION.mount("http://", ADAPTER)
+SESSION.mount("https://", ADAPTER)
+
 
 def get_enroll_params(timestamp: int) -> dict[str, str]:
     return {
@@ -54,7 +64,7 @@ def get_enroll_params(timestamp: int) -> dict[str, str]:
 
 def get_enroll_buttons(year: int, month: int, day: int) -> list[Tag]:
     timestamp: int = int(datetime.datetime(year, month, day, tzinfo=TIMEZONE).timestamp() * 1000)
-    res: requests.models.Response = requests.get(
+    res: requests.models.Response = SESSION.get(
         f"{DOMAIN}php/aulas/aulas.php",
         params=get_enroll_params(timestamp),
         headers=HEADERS,
@@ -117,7 +127,7 @@ def get_enroll_path(button: Tag) -> str:
 
 
 def submit_enroll(path: str) -> None:
-    res: requests.models.Response = requests.get(DOMAIN + path, headers=HEADERS, timeout=10)
+    res: requests.models.Response = SESSION.get(DOMAIN + path, headers=HEADERS, timeout=10)
     res.raise_for_status()
     LOGGER.debug(f"Enrolled in class with response: '{res.text}'")
     soup = BeautifulSoup(res.text, "html.parser")
