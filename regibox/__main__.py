@@ -3,7 +3,7 @@ import sys
 from regibox.regibox import LOGGER, main
 
 if __name__ == "__main__":
-    class_date, class_time, class_type = sys.argv[1:]
+    class_date, class_time, class_type = sys.argv[1:]  # pylint: disable=unbalanced-tuple-unpacking
     try:
         main(class_date, class_time, class_type)
     except RuntimeError as e:
