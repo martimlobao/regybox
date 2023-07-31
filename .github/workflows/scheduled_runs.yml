@@ -3,7 +3,7 @@ name: Trigger Regibox
 on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
   schedule:
-    - cron: 50 10 * * 6,0-3
+    - cron: 50 6 * * 6,0-3
 
 jobs:
   build:
@@ -43,9 +43,10 @@ jobs:
       - name: Get class date
         run: |
           echo "CLASS_DATE=$(date -d '+2 days' +%F)" >> $GITHUB_ENV
-          echo "CLASS_TIME='12:00'" >> $GITHUB_ENV
+          echo "CLASS_TIME='7:00'" >> $GITHUB_ENV
+          echo "CLASS_TYPE='WEEKEND WOD RATO'" >> $GITHUB_ENV
       - name: Regibox enroll
-        run: poetry run python -m regibox ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }}
+        run: poetry run python -m regibox ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
         env:
           COOKIE: ${{ secrets.COOKIE }}
       - name: Send mail
@@ -57,7 +58,8 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: >
-            Regibox Auto-enroll: ${{ job.status }} for ${{ env.CLASS_DATE }} at ${{ env.CLASS_TIME }}
+            Regibox Auto-enroll: ${{ job.status }} for ${{ env.CLASS_TYPE }} on ${{ env.CLASS_DATE }}
+            at ${{ env.CLASS_TIME }}
           body: >
             Job '${{ github.job }}' in worflow ${{ github.workflow }} of ${{ github.repository }} finished in a
             ${{ job.status }} state.
