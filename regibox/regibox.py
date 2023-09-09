@@ -88,6 +88,7 @@ def get_enroll_buttons(year: int, month: int, day: int) -> list[Tag]:
 
 
 def pick_button(buttons: list[Tag], class_time: str, class_type: str) -> Tag:
+    class_time = class_time.zfill(5)  # needs leading zeros
     available_classes = []
     for button in buttons:
         button_class: Tag | None = button.find_parent(
