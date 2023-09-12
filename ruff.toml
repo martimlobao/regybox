@@ -5,6 +5,8 @@ ignore = [
     "COM",  # out-blacks black
     "D",
     "EM",
+    "G001",
+    "G004",
     "TRY",
 ]
 fixable = ["ALL"]
