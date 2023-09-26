@@ -78,7 +78,7 @@ def get_enroll_buttons(year: int, month: int, day: int) -> list[Tag]:
             "\n\t".join([f"{button.decode()}" for button in buttons]),
         ),
     )
-    buttons = [button for button in buttons if button.text == "INSCREVER"]
+    buttons = [button for button in buttons if "buts_inscrever" in button["class"]]
     LOGGER.debug(
         "Found enrollment buttons:\n\t{}".format(
             "\n\t".join([f"{button.decode()}" for button in buttons]),
@@ -142,13 +142,13 @@ def submit_enroll(path: str) -> None:
 
 
 def main(
-    class_day: str | None = None, class_time: str = "12:00", class_type: str = "WOD RATO"
+    class_date: str | None = None, class_time: str = "12:00", class_type: str = "WOD RATO"
 ) -> None:
     LOGGER.info(f"Started at {START.isoformat()}")
-    if not class_day:
+    if not class_date:
         date: datetime.datetime = datetime.datetime.now(TIMEZONE) + datetime.timedelta(days=2)
     else:
-        date = datetime.datetime.strptime(class_day, "%Y-%m-%d").replace(tzinfo=TIMEZONE)
+        date = datetime.datetime.strptime(class_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE)
     wait: int = 3  # 3 seconds between calls
     timeout: int = 600  # try for 10 minutes
     while (datetime.datetime.now(TIMEZONE) - START).total_seconds() < timeout:
@@ -157,7 +157,7 @@ def main(
             button: Tag = pick_button(buttons, class_time, class_type)
         except RuntimeError:
             LOGGER.info(
-                f"No button found for {class_type} at {date.date().isoformat()} on"
+                f"No button found for {class_type} on {date.date().isoformat()} at"
                 f" {class_time}, retrying in {wait} seconds."
             )
             time.sleep(wait)
@@ -165,7 +165,7 @@ def main(
             break
     else:
         raise RuntimeError(
-            f"Timed out waiting for class {class_type} at {date.date().isoformat()} on"
+            f"Timed out waiting for class {class_type} on {date.date().isoformat()} at"
             f" {class_time}, terminating."
         )
     path: str = get_enroll_path(button)
