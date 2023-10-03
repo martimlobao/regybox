@@ -35,9 +35,59 @@ jobs:
     # only for holidays that are not on weekends
     if: needs.weekday.outputs.WEEKDAY == 'true'
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+      - name: Set up python
+        id: setup-python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Load cached Poetry installation
+        id: cached-poetry
+        uses: actions/cache@v3
+        with:
+          path: ~/.local
+          key: poetry
+      - name: Install Poetry
+        if: steps.cached-poetry.outputs.cache-hit != 'true'
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pypoetry/
+          key: |
+            venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+      - name: Install Dependencies using Poetry
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --with dev
       - name: Get class date
         run: |
           echo "CLASS_DATE=$(date -d '+2 days' +%F)" >> $GITHUB_ENV
           echo "CLASS_TIME='09:00'" >> $GITHUB_ENV
           echo "CLASS_TYPE='WEEKEND WOD RATO'" >> $GITHUB_ENV
-          echo "${{ needs.weekday.outputs.WEEKDAY }}"
+      - name: Regibox enroll
+        run: poetry run python -m regibox ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
+        env:
+          COOKIE: ${{ secrets.COOKIE }}
+      - name: Send mail
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: >
+            Regibox Auto-enroll: ${{ job.status }} for ${{ env.CLASS_TYPE }} on ${{ env.CLASS_DATE }}
+            at ${{ env.CLASS_TIME }}
+          body: >
+            Job '${{ github.job }}' in worflow ${{ github.workflow }} of ${{ github.repository }} finished in a
+            ${{ job.status }} state.
+            See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
+          to: m@rtimlobao.com
+          from: Regibox Auto-enroll
