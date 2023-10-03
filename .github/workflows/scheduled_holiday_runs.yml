@@ -6,21 +6,34 @@ on:  # yamllint disable-line rule:truthy
     # Dia de Ano Novo
     # Sexta-Feira Santa
     # Páscoa
-    - cron: 50 8 */23 4 6,0-3  # 25 de Abril
-    - cron: 50 8 */29 4 6,0-3  # Dia do Trabalhador
+    - cron: 50 8 23 4 *  # 25 de Abril
+    - cron: 50 8 29 4 *  # Dia do Trabalhador
     # Corpo de Deus
     # Assunção de Nossa Senhora
-    - cron: 50 8 */8 6 6,0-3  # Dia de Portugal
-    - cron: 50 8 */3 10 6,0-3  # Implantação da República
-    - cron: 50 8 */30 10 6,0-3  # Dia de Todos os Santos
-    - cron: 50 8 */29 11 6,0-3  # Restauração da Independência
-    - cron: 50 8 */6 12 6,0-3  # Dia da Imaculada Conceição
+    - cron: 50 8 8 6 *  # Dia de Portugal
+    - cron: 50 8 3 10 *  # Implantação da República
+    - cron: 50 8 30 10 *  # Dia de Todos os Santos
+    - cron: 50 8 29 11 *  # Restauração da Independência
+    - cron: 50 8 6 12 *  # Dia da Imaculada Conceição
     # Natal
 
 jobs:
+  weekday:
+    name: Check weekday
+    runs-on: ubuntu-latest
+    outputs:
+      weekday: ${{ steps.set.outputs.weekday }}
+    steps:
+      - id: set
+        run: |
+          echo "WEEKDAY=$([[ "$(date -d '+2 days' +%u)" -lt 6 ]] && echo "true" || echo "false")" >> "$GITHUB_OUTPUT"
   build:
     name: Trigger Regibox run
     runs-on: ubuntu-latest
+    needs:
+      - weekday
+    # only for holidays that are not on weekends
+    if: needs.weekday.outputs == 'true'
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
