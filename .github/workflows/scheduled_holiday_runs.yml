@@ -83,7 +83,7 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: >
-            Regibox Auto-enroll: ${{ job.status }} for ${{ env.CLASS_TYPE }} on ${{ env.CLASS_DATE }}
+            Regibox HOLIDAY Auto-enroll: ${{ job.status }} for ${{ env.CLASS_TYPE }} on ${{ env.CLASS_DATE }}
             at ${{ env.CLASS_TIME }}
           body: >
             Job '${{ github.job }}' in worflow ${{ github.workflow }} of ${{ github.repository }} finished in a
