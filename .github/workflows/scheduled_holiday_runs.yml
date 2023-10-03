@@ -26,7 +26,7 @@ jobs:
     steps:
       - id: set
         run: |
-          echo "WEEKDAY=$([[ "$(date -d '+2 days' +%u)" -lt 6 ]] && echo "true" || echo "false")"
+          WEEKDAY=$([[ "$(date -d '+2 days' +%u)" -lt 6 ]] && echo "true" || echo "false")
           echo "$WEEKDAY"
           echo "$WEEKDAY" >> "$GITHUB_OUTPUT"
   build:
