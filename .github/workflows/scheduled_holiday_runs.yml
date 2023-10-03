@@ -35,7 +35,7 @@ jobs:
     needs:
       - weekday
     # only for holidays that are not on weekends
-    if: needs.weekday.outputs == 'true'
+    if: needs.weekday.outputs.WEEKDAY == 'true'
     steps:
       - name: Get class date
         run: |
