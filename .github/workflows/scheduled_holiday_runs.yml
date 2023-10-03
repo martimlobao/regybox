@@ -88,6 +88,7 @@ jobs:
           body: >
             Job '${{ github.job }}' in worflow ${{ github.workflow }} of ${{ github.repository }} finished in a
             ${{ job.status }} state.
+
             See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
           to: m@rtimlobao.com
           from: Regibox Auto-enroll
