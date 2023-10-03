@@ -26,7 +26,9 @@ jobs:
     steps:
       - id: set
         run: |
-          echo "WEEKDAY=$([[ "$(date -d '+2 days' +%u)" -lt 6 ]] && echo "true" || echo "false")" >> "$GITHUB_OUTPUT"
+          echo "WEEKDAY=$([[ "$(date -d '+2 days' +%u)" -lt 6 ]] && echo "true" || echo "false")"
+          echo "$WEEKDAY"
+          echo "$WEEKDAY" >> "$GITHUB_OUTPUT"
   build:
     name: Trigger Regibox run
     runs-on: ubuntu-latest
