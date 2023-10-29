@@ -70,7 +70,7 @@ jobs:
       - name: Get class date
         run: |
           echo "CLASS_DATE=$(date -d '+2 days' +%F)" >> $GITHUB_ENV
-          echo "CLASS_TIME='09:00'" >> $GITHUB_ENV
+          echo "CLASS_TIME='10:00'" >> $GITHUB_ENV
           echo "CLASS_TYPE='WEEKEND WOD RATO'" >> $GITHUB_ENV
       - name: Regibox enroll
         run: poetry run python -m regibox ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
