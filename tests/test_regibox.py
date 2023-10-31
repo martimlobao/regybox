@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from regibox import __package__ as main_package
 from regibox import __version__
+from regibox.regibox import WaitTime
 
 if TYPE_CHECKING:
     import io
@@ -18,3 +19,8 @@ def test_version() -> None:
     assert __version__ == project_meta["tool"]["poetry"]["version"]
     # run `poetry install` if this is failing locally
     assert __version__ == importlib.metadata.version(main_package)
+
+
+def test_range() -> None:
+    assert WaitTime.inf_sec < WaitTime.sup_sec
+    assert WaitTime.slow > WaitTime.fast
