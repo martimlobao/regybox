@@ -6,7 +6,7 @@ authors = ["Martim Lobao <m@rtimlobao.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.12"
 beautifulsoup4 = "^4.12.2"
 python-dotenv = "^1.0.0"
 pytz = "^2023.3"
@@ -38,10 +38,10 @@ known_first_party = ["regibox"]
 line_length = 99
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 
 [tool.pyupgrade]
-py311plus = true
+py312plus = true
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
