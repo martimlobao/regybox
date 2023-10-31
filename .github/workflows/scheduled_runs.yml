@@ -3,7 +3,7 @@ name: Trigger Regibox
 on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
   schedule:
-    - cron: 20 6 * * 6,0-3
+    - cron: 15 6 * * 6,0-3
 
 jobs:
   build:

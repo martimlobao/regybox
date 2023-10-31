@@ -19,7 +19,7 @@ coverage = "^7.2.7"
 ipython = "^8.14.0"
 isort = { extras = ["colors"], version = "^5.12.0" }
 mypy = "^1.4.0"
-pylint = "^2.17.4"
+pylint = "^3.0.2"
 pytest = "^7.4.0"
 pyupgrade = "^3.9.0"
 ruff = "^0"

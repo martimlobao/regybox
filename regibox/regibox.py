@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import time
+from dataclasses import dataclass
 
 import pytz
 import requests
@@ -50,6 +51,18 @@ SESSION: requests.Session = requests.Session()
 ADAPTER: HTTPAdapter = HTTPAdapter(max_retries=Retry(connect=10, backoff_factor=0.5))
 SESSION.mount("http://", ADAPTER)
 SESSION.mount("https://", ADAPTER)
+
+
+@dataclass
+class WaitTime:
+    inf_sec: int = 5
+    sup_sec: int = 50
+    slow: int = 9
+    fast: int = 1
+
+    @classmethod
+    def get(cls, now_seconds: int) -> int:
+        return cls.slow if cls.inf_sec < now_seconds < cls.sup_sec else cls.fast
 
 
 def get_enroll_params(timestamp: int) -> dict[str, str]:
@@ -149,13 +162,14 @@ def main(
         date: datetime.datetime = datetime.datetime.now(TIMEZONE) + datetime.timedelta(days=2)
     else:
         date = datetime.datetime.strptime(class_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE)
-    wait: int = 3  # 3 seconds between calls
-    timeout: int = 600  # try for 10 minutes
+    timeout: int = 900  # try for 15 minutes
     while (datetime.datetime.now(TIMEZONE) - START).total_seconds() < timeout:
         buttons: list[Tag] = get_enroll_buttons(date.year, date.month, date.day)
         try:
             button: Tag = pick_button(buttons, class_time, class_type)
         except RuntimeError:
+            # seconds between calls
+            wait: int = WaitTime.get(datetime.datetime.now(TIMEZONE).second)
             LOGGER.info(
                 f"No button found for {class_type} on {date.date().isoformat()} at"
                 f" {class_time}, retrying in {wait} seconds."
