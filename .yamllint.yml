@@ -1,8 +1,6 @@
 ---
 extends: default
 
-ignore-from-file: .gitignore
-
 rules:
   line-length:
     max: 120

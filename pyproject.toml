@@ -6,7 +6,7 @@ authors = ["Martim Lobao <m@rtimlobao.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.11"
 beautifulsoup4 = "^4.12.2"
 python-dotenv = "^1.0.0"
 pytz = "^2023.3"
@@ -14,13 +14,16 @@ requests = "^2.31.0"
 urllib3 = "^2.0.6"
 
 [tool.poetry.group.dev.dependencies]
+autoflake = "^2.2.1"
 black = "^23.3.0"
 coverage = "^7.2.7"
+docformatter = "^1.7.5"
 ipython = "^8.14.0"
 isort = { extras = ["colors"], version = "^5.12.0" }
 mypy = "^1.4.0"
 pylint = "^3.0.2"
 pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
 pyupgrade = "^3.9.0"
 ruff = "^0"
 types-beautifulsoup4 = "^4.12.0.5"
@@ -37,11 +40,8 @@ color_output = true
 known_first_party = ["regibox"]
 line_length = 99
 
-[tool.mypy]
-python_version = "3.12"
-
 [tool.pyupgrade]
-py312plus = true
+py311plus = true
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

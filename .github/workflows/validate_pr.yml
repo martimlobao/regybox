@@ -4,9 +4,6 @@ on:  # yamllint disable-line rule:truthy
   pull_request:
     branches: [main]
 
-env:
-  COOKIE: chocolate_chips
-
 jobs:
   lint:
     name: Lint
@@ -18,7 +15,7 @@ jobs:
         id: setup-python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
+          python-version: '3.11'
       - name: Load cached Poetry installation
         id: cached-poetry
         uses: actions/cache@v3
@@ -68,7 +65,7 @@ jobs:
         id: setup-python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
+          python-version: '3.11'
       - name: Load cached Poetry installation
         id: cached-poetry
         uses: actions/cache@v3

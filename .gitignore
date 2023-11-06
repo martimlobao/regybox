@@ -1,6 +1,11 @@
 # macOS files
 .DS_Store
 
+# Pants workspace files
+/.pants.*
+/dist/
+/.pids
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
