@@ -16,80 +16,37 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      - name: Load cached Poetry installation
-        id: cached-poetry
-        uses: actions/cache@v3
+      - name: Set up pants
+        uses: pantsbuild/actions/init-pants@v5-scie-pants
         with:
-          path: ~/.local
-          key: poetry
-      - name: Install Poetry
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pypoetry/
-          key: |
-            venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
-      - name: Install Dependencies using Poetry
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --with dev
-      - name: Poetry check
-        run: poetry check
-      - name: Lint with black
-        run: poetry run black --preview --check regibox/ tests/
-      - name: Lint with isort
-        run: poetry run isort --check-only regibox/ tests/
-      - name: Lint with mypy
-        run: poetry run mypy regibox/ tests/
-      - name: Lint with pylint
-        run: poetry run pylint regibox/ tests/
-      - name: Lint with ruff
-        run: poetry run ruff regibox/ tests/
-      - name: Lint with yamllint
-        run: poetry run yamllint -s .
-      - name: Lint with pyupgrade
-        run: poetry run pyupgrade **/*.py
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v3
-      - name: Set up python
-        id: setup-python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      - name: Load cached Poetry installation
-        id: cached-poetry
-        uses: actions/cache@v3
-        with:
-          path: ~/.local
-          key: poetry
-      - name: Install Poetry
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pypoetry/virtualenvs
-          key: |
-            venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
-      - name: Install Dependencies using Poetry
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --with dev
+          # v0 makes it easy to bust the cache if needed
+          # just increase the integer to start with a fresh cache
+          gha-cache-key: v0
+          # The Python backend uses named_caches for Pip/PEX state,
+          # so it is appropriate to invalidate on lockfile changes.
+          named-caches-hash: ${{ hashFiles('python-default.lock') }}
+          # If you're not using a fine-grained remote caching service (see https://www.pantsbuild.org/docs/remote-caching),
+          # then you may also want to preserve the local Pants cache (lmdb_store). However this must invalidate for
+          # changes to any file that can affect the build, so may not be practical in larger repos.
+          # A remote cache service integrates with Pants's fine-grained invalidation and avoids these problems.
+          cache-lmdb-store: 'true'  # defaults to 'false'
+          # Note that named_caches and lmdb_store falls back to partial restore keys which
+          # may give a useful partial result that will save time over completely clean state,
+          # but will cause the cache entry to grow without bound over time.
+          # See https://pants.readme.io/docs/using-pants-in-ci for tips on how to periodically clean it up.
+          # Alternatively you change gha-cache-key to ignore old caches.
+      - name: Check BUILD files
+        run: |
+          pants tailor --check update-build-files --check ::
+      - name: Lint and typecheck
+        run: |
+          pants lint check ::
       - name: Test
-        run: |-
-          poetry run coverage run --source=regibox/ -m pytest tests/
-          poetry run coverage report -m
+        run: |
+          pants test ::
+      - name: Upload pants log
+        uses: actions/upload-artifact@v3
+        with:
+          name: pants-log
+          path: .pants.d/pants.log
+        if: always()  # We want the log even on failures.
