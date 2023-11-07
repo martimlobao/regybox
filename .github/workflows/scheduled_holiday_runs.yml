@@ -55,7 +55,7 @@ jobs:
           echo "CLASS_TIME='10:00'" >> $GITHUB_ENV
           echo "CLASS_TYPE='WEEKEND WOD RATO'" >> $GITHUB_ENV
       - name: Regibox enroll
-        run: poetry run python -m regibox ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
+        run: pants run regibox:main -- ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
         env:
           COOKIE: ${{ secrets.COOKIE }}
       - name: Send mail
