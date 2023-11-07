@@ -17,6 +17,11 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+      - name: Cache Pants Setup
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pants/setup
+          key: ${{ runner.os }}-pants-setup-${{ hashFiles('pants.toml') }}
       - name: Set up pants
         uses: pantsbuild/actions/init-pants@v5-scie-pants
         with:
