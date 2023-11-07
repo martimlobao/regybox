@@ -40,6 +40,9 @@ enabled = true
 [test]
 use_coverage = true
 
+[coverage-py]
+filter = ["regibox"]
+
 [autoflake]
 install_from_resolve = "python-default"
 requirements = [
