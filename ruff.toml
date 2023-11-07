@@ -1,4 +1,4 @@
-target-version = "py312"
+target-version = "py311"
 line-length = 99
 select = ["ALL"]
 ignore = [
@@ -13,8 +13,8 @@ ignore = [
 fixable = ["ALL"]
 
 [per-file-ignores]
-"*_test.py" = ["S101"]
-"test_*.py" = ["S101"]
+"*_test.py" = ["INP001", "S101"]
+"test_*.py" = ["INP001", "S101"]
 
 [pydocstyle]
 convention = "google"

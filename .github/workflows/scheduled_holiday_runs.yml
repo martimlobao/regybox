@@ -43,37 +43,19 @@ jobs:
         id: setup-python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
-      - name: Load cached Poetry installation
-        id: cached-poetry
-        uses: actions/cache@v3
+          python-version: '3.11'
+      - name: Set up pants
+        uses: pantsbuild/actions/init-pants@v5-scie-pants
         with:
-          path: ~/.local
-          key: poetry
-      - name: Install Poetry
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pypoetry/
-          key: |
-            venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
-      - name: Install Dependencies using Poetry
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --with dev
+          gha-cache-key: v0
+          named-caches-hash: ${{ hashFiles('3rdparty/python/default.lock') }}
       - name: Get class date
         run: |
           echo "CLASS_DATE=$(date -d '+2 days' +%F)" >> $GITHUB_ENV
           echo "CLASS_TIME='10:00'" >> $GITHUB_ENV
           echo "CLASS_TYPE='WEEKEND WOD RATO'" >> $GITHUB_ENV
       - name: Regibox enroll
-        run: poetry run python -m regibox ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
+        run: pants run regibox:main -- ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
         env:
           COOKIE: ${{ secrets.COOKIE }}
       - name: Send mail

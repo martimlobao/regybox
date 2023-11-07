@@ -1,0 +1,105 @@
+[GLOBAL]
+pants_version = "2.17.0"
+colors = true
+
+backend_packages = [
+  # order is relevant here, since we want to minimize the need for lint and fmt reruns
+  "pants.backend.python.lint.pyupgrade",
+  "pants.backend.python.lint.autoflake",
+  "pants.backend.python.lint.docformatter",
+  "pants.backend.python.lint.isort",
+  "pants.backend.python.lint.black",
+  "pants.backend.python.lint.pylint",
+  "pants.backend.python.typecheck.mypy",
+  "pants.backend.build_files.fmt.black",
+  "pants.backend.experimental.python.lint.ruff",
+  "pants.backend.experimental.tools.yamllint",
+  "pants.backend.python",
+  "pants.backend.shell.lint.shellcheck",
+  "pants.backend.shell.lint.shfmt",
+  "pants.backend.shell",
+]
+
+[python]
+interpreter_constraints = [">=3.11,<3.12"]
+enable_resolves = true
+default_resolve = "python-default"
+
+[python.resolves]
+python-default = "3rdparty/python/default.lock"
+
+[python-infer]
+use_rust_parser = true
+
+[repl]
+shell = "ipython"
+
+[anonymous-telemetry]
+enabled = true
+
+[test]
+use_coverage = true
+
+[coverage-py]
+filter = ["regibox"]
+
+[autoflake]
+install_from_resolve = "python-default"
+requirements = [
+  "//:root#autoflake",
+]
+
+[black]
+install_from_resolve = "python-default"
+requirements = [
+  "//:root#black",
+]
+interpreter_constraints = [ "CPython>=3.11,<3.12" ]
+config = "pyproject.toml"
+
+[docformatter]
+install_from_resolve = "python-default"
+requirements = [
+  "//:root#docformatter",
+]
+
+[isort]
+install_from_resolve = "python-default"
+requirements = [
+  "//:root#isort",
+]
+config = "pyproject.toml"
+
+[mypy]
+install_from_resolve = "python-default"
+requirements = [
+  "//:root#mypy",
+]
+
+[pylint]
+install_from_resolve = "python-default"
+requirements = [
+  "//:root#pylint",
+]
+config = ".pylintrc"
+
+[pytest]
+install_from_resolve = "python-default"
+requirements = [
+  "//:root#pytest",
+  "//:root#pytest-cov",
+]
+
+[pyupgrade]
+install_from_resolve = "python-default"
+requirements = [
+  "//:root#pyupgrade",
+]
+args = ["--py311-plus"]
+
+[yamllint]
+install_from_resolve = "python-default"
+requirements = [
+  "//:root#yamllint",
+]
+config_file_name = ".yamllint"

@@ -4,9 +4,6 @@ on:  # yamllint disable-line rule:truthy
   pull_request:
     branches: [main]
 
-env:
-  COOKIE: chocolate_chips
-
 jobs:
   lint:
     name: Lint
@@ -18,46 +15,24 @@ jobs:
         id: setup-python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
-      - name: Load cached Poetry installation
-        id: cached-poetry
-        uses: actions/cache@v3
+          python-version: '3.11'
+      - name: Set up pants
+        uses: pantsbuild/actions/init-pants@v5-scie-pants
         with:
-          path: ~/.local
-          key: poetry
-      - name: Install Poetry
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        uses: snok/install-poetry@v1
+          gha-cache-key: v0
+          named-caches-hash: ${{ hashFiles('3rdparty/python/default.lock') }}
+      - name: Check BUILD files
+        run: |
+          pants tailor --check update-build-files --check ::
+      - name: Lint and typecheck
+        run: |
+          pants lint check ::
+      - name: Upload pants log
+        uses: actions/upload-artifact@v3
         with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pypoetry/
-          key: |
-            venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
-      - name: Install Dependencies using Poetry
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --with dev
-      - name: Poetry check
-        run: poetry check
-      - name: Lint with black
-        run: poetry run black --preview --check regibox/ tests/
-      - name: Lint with isort
-        run: poetry run isort --check-only regibox/ tests/
-      - name: Lint with mypy
-        run: poetry run mypy regibox/ tests/
-      - name: Lint with pylint
-        run: poetry run pylint regibox/ tests/
-      - name: Lint with ruff
-        run: poetry run ruff regibox/ tests/
-      - name: Lint with yamllint
-        run: poetry run yamllint -s .
-      - name: Lint with pyupgrade
-        run: poetry run pyupgrade **/*.py
+          name: pants-log-lint
+          path: .pants.d/pants.log
+        if: always()  # We want the log even on failures.
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -68,31 +43,17 @@ jobs:
         id: setup-python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
-      - name: Load cached Poetry installation
-        id: cached-poetry
-        uses: actions/cache@v3
+          python-version: '3.11'
+      - name: Set up pants
+        uses: pantsbuild/actions/init-pants@v5-scie-pants
         with:
-          path: ~/.local
-          key: poetry
-      - name: Install Poetry
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pypoetry/virtualenvs
-          key: |
-            venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
-      - name: Install Dependencies using Poetry
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --with dev
+          named-caches-hash: ${{ hashFiles('python-default.lock') }}
       - name: Test
-        run: |-
-          poetry run coverage run --source=regibox/ -m pytest tests/
-          poetry run coverage report -m
+        run: |
+          pants test ::
+      - name: Upload pants log
+        uses: actions/upload-artifact@v3
+        with:
+          name: pants-log-test
+          path: .pants.d/pants.log
+        if: always()  # We want the log even on failures.
