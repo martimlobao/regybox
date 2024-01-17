@@ -2,6 +2,7 @@ target-version = "py311"
 line-length = 99
 select = ["ALL"]
 ignore = [
+    "ANN101",  # missing-type-self not needed
     "ANN102",  # missing-type-cls not needed
     "COM",  # out-blacks black
     "D",

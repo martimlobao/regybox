@@ -89,27 +89,21 @@ class Class:
 
     def __init__(self, tag: Tag) -> None:
         self._tag = tag
-        name: Tag | NavigableString | None = tag.find(
+        name: Tag | NavigableString | None = self._tag.find(
             "div", attrs={"align": "left", "class": "col-50"}
         )
-        location: Tag | NavigableString | None = tag.find(
+        location: Tag | NavigableString | None = self._tag.find(
             "div", attrs={"align": "right", "class": "col-50"}
         )
-        date: int = int(tag.attrs["id"].removeprefix("feed_time_slot"))
-        time_: Tag | NavigableString | None = tag.find(
+        date: int = int(self._tag.attrs["id"].removeprefix("feed_time_slot"))
+        time_: Tag | NavigableString | None = self._tag.find(
             "div", attrs={"align": "left", "class": "col"}
         )
-        capacity: Tag | NavigableString | None = tag.find(
+        capacity: Tag | NavigableString | None = self._tag.find(
             "div", attrs={"align": "center", "class": "col"}
         )
-        states: list[Tag | NavigableString] = tag.find_all(
-            "div", attrs={"align": "right", "class": "col"}
-        )
-        if name is None or location is None or time_ is None or capacity is None or not states:
+        if name is None or location is None or time_ is None or capacity is None:
             raise ValueError("Unable to parse class HTML")
-        state: Tag | NavigableString | None = states[-1]
-        if not isinstance(state, Tag):
-            raise ValueError(f"Unexpected type for state: {state}")
 
         self.name = name.text.strip()
         self.location = location.text.strip()
@@ -119,7 +113,12 @@ class Class:
         self.cur_capacity, self.max_capacity = int(cap_parts[0]), int(cap_parts[-1])
         self.is_full = self.cur_capacity >= self.max_capacity
 
-        button: Tag | NavigableString | None = tag.find("button")
+        self._init_button()
+        self._init_state()
+        self._init_timer()
+
+    def _init_button(self) -> None:
+        button: Tag | NavigableString | None = self._tag.find("button")
         self.is_open = bool(button)
 
         if isinstance(button, NavigableString):
@@ -135,6 +134,16 @@ class Class:
         else:
             raise ValueError(f"Unexpected properties in button object: {button.attrs['class']}")
 
+    def _init_state(self) -> None:
+        states: list[Tag | NavigableString] = self._tag.find_all(
+            "div", attrs={"align": "right", "class": "col"}
+        )
+        if not states:
+            raise ValueError("Unable to parse class HTML")
+        state: Tag | NavigableString | None = states[-1]
+        if not isinstance(state, Tag):
+            raise ValueError(f"Unexpected type for state: {state}")
+
         if state.find("span", attrs={"class": "erro_color"}):
             self.is_blocked = True  # enroll window expired
         elif state := state.find("div", attrs={"style": "padding-top:7px;"}):
@@ -146,7 +155,8 @@ class Class:
                 self.is_blocked = True  # already enrolled in a class today
         # if state has no child div, there is a timer
 
-        timer: Tag | NavigableString | None = tag.find("input", attrs={"class": "timers"})
+    def _init_timer(self) -> None:
+        timer: Tag | NavigableString | None = self._tag.find("input", attrs={"class": "timers"})
         if isinstance(timer, Tag):
             if not self.is_enrolled:  # timer disappears once you're enrolled
                 self.time_to_start = str(datetime.timedelta(seconds=int(timer.attrs["value"])))
