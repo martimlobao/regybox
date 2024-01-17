@@ -26,7 +26,6 @@ TIMEZONE: pytz.BaseTzInfo = pytz.timezone("Europe/Lisbon")
 START: datetime.datetime = datetime.datetime.now(TIMEZONE)
 
 USER: str = os.environ["REGIBOX_USER"]
-# DOMAIN: str = "https://www.regibox.pt/app/app_nova/index.php"
 DOMAIN: str = "https://www.regibox.pt/app/app_nova/"
 HEADERS: dict[str, str] = {
     "Accept": "text/html, */*; q=0.01",
@@ -66,6 +65,7 @@ class WaitTime:
     def get(cls, now_seconds: int) -> int:
         return cls.slow if cls.inf_sec < now_seconds < cls.sup_sec else cls.fast
 
+
 @dataclass
 class Class:
     _tag: Tag = field(init=False, repr=False)
@@ -80,14 +80,12 @@ class Class:
     is_full: bool
     is_enrolled: bool
     is_over: bool = False
-    is_in_session: bool = False
     is_blocked: bool = False
     is_waitlisted: bool = False
-    time_to_start: int | None = None
-    time_to_enroll: int | None = None
+    time_to_start: str | None = None
+    time_to_enroll: str | None = None
     enroll_url: str | None = field(init=True, repr=False, default=None)
     unenroll_url: str | None = field(init=True, repr=False, default=None)
-
 
     def __init__(self, tag: Tag) -> None:
         self._tag = tag
@@ -97,7 +95,7 @@ class Class:
         location: Tag | NavigableString | None = tag.find(
             "div", attrs={"align": "right", "class": "col-50"}
         )
-        date: int = int(re.search(r"\d+$", tag.attrs["id"]).group())
+        date: int = int(tag.attrs["id"].removeprefix("feed_time_slot"))
         time_: Tag | NavigableString | None = tag.find(
             "div", attrs={"align": "left", "class": "col"}
         )
@@ -107,9 +105,11 @@ class Class:
         states: list[Tag | NavigableString] = tag.find_all(
             "div", attrs={"align": "right", "class": "col"}
         )
-        if None in [name, location, time_, capacity] or not states:
+        if name is None or location is None or time_ is None or capacity is None or not states:
             raise ValueError("Unable to parse class HTML")
-        state: Tag | NavigableString = states[-1]
+        state: Tag | NavigableString | None = states[-1]
+        if not isinstance(state, Tag):
+            raise ValueError(f"Unexpected type for state: {state}")
 
         self.name = name.text.strip()
         self.location = location.text.strip()
@@ -122,37 +122,36 @@ class Class:
         button: Tag | NavigableString | None = tag.find("button")
         self.is_open = bool(button)
 
-        if self.is_open:
-            if "color-red" in button.attrs["class"]:
-                self.is_enrolled = True
-                self.unenroll_url = self._get_button_url(button)
-            elif all(attr in button.attrs["class"] for attr in ["buts_inscrever", "color-green"]):
-                self.is_enrolled = False
-                self.enroll_url = self._get_button_url(button)
-            else:
-                raise ValueError(f"Unexpected properties in button object: {button['class']}")
-        else:
+        if isinstance(button, NavigableString):
+            raise ValueError(f"Unexpected button format: {button}")
+        if button is None:
             self.is_enrolled = False
+        elif "color-red" in button.attrs["class"]:
+            self.is_enrolled = True
+            self.unenroll_url = self._get_button_url(button)
+        elif all(attr in button.attrs["class"] for attr in ["buts_inscrever", "color-green"]):
+            self.is_enrolled = False
+            self.enroll_url = self._get_button_url(button)
+        else:
+            raise ValueError(f"Unexpected properties in button object: {button.attrs['class']}")
 
-        if state := state.find("div", attrs={"style": "padding-top:7px;"}):
-
-            if "letra_10" in state.attrs.get("class", []):
-                self.is_blocked = True  # already enrolled in a class today
-            elif "ok_color" in state.attrs.get("class", []):
-                assert self.is_enrolled
-            elif "erro_color" in state.attrs.get("class", []):
-                self.is_blocked = True  # enroll window expired
-            else:
+        if state.find("span", attrs={"class": "erro_color"}):
+            self.is_blocked = True  # enroll window expired
+        elif state := state.find("div", attrs={"style": "padding-top:7px;"}):
+            if not isinstance(state, Tag):
+                raise ValueError(f"Unexpected type for state: {state}")
+            if "class" not in state.attrs:
                 self.is_over = True
+            elif "letra_10" in state.attrs["class"]:
+                self.is_blocked = True  # already enrolled in a class today
         # if state has no child div, there is a timer
 
         timer: Tag | NavigableString | None = tag.find("input", attrs={"class": "timers"})
-        if timer is not None:
+        if isinstance(timer, Tag):
             if not self.is_enrolled:  # timer disappears once you're enrolled
                 self.time_to_start = str(datetime.timedelta(seconds=int(timer.attrs["value"])))
             if not self.is_open:
                 self.time_to_enroll = str(datetime.timedelta(seconds=int(timer.attrs["value"])))
-
 
     @staticmethod
     def _get_button_url(button: Tag) -> str:
@@ -165,20 +164,9 @@ class Class:
             raise RuntimeError(f"Expecting one url in button, found {len(button_urls)}: {onclick}")
         return urljoin(DOMAIN, button_urls[0])
 
-    # def _get_enroll_path(self) -> str:
-    #     if self.enroll_button is None:
-    #         raise RuntimeError("Unable to find enroll button")
-
-    #     onclick: str = self.enroll_button.attrs["onclick"]
-    #     LOGGER.debug(f"Found button onclick action: '{onclick}")
-    #     button_urls: list[str] = [
-    #         part for part in onclick.split("'") if part.startswith("php/aulas/marca_aulas.php")
-    #     ]
-    #     if len(button_urls) != 1:
-    #         raise RuntimeError(f"Expecting one page in button, found {len(button_urls)}: {onclick}")
-    #     return button_urls[0]
-
     def enroll(self) -> str:
+        if self.enroll_url is None:
+            raise ValueError("Enroll URL is not set")
         if self.is_enrolled:
             raise RuntimeError("Already enrolled in class")
         if not self.is_open:
@@ -202,6 +190,8 @@ class Class:
         return responses[0]
 
     def unenroll(self) -> str:
+        if self.unenroll_url is None:
+            raise ValueError("Unenroll URL is not set")
         if not self.is_enrolled:
             raise RuntimeError("Not enrolled in class")
 
@@ -247,7 +237,9 @@ def set_session(session: requests.Session, user: str = USER) -> requests.Session
     return session
 
 
-def get_classes(year: int, month: int, day: int, *, session: requests.Session, user: str = USER) -> list[Class]:
+def get_classes(
+    year: int, month: int, day: int, *, session: requests.Session, user: str = USER
+) -> list[Class]:
     timestamp: int = int(datetime.datetime(year, month, day, tzinfo=TIMEZONE).timestamp() * 1000)
     res: requests.models.Response = session.get(
         urljoin(DOMAIN, "php/aulas/aulas.php"),
@@ -259,58 +251,6 @@ def get_classes(year: int, month: int, day: int, *, session: requests.Session, u
     soup: BeautifulSoup = BeautifulSoup(res.text, "html.parser")
     return [Class(tag) for tag in soup.find_all("div", attrs={"class": "filtro0"})]
 
-# def get_enroll_buttons(year: int, month: int, day: int) -> list[Tag]:
-#     timestamp: int = int(datetime.datetime(year, month, day, tzinfo=TIMEZONE).timestamp() * 1000)
-#     res: requests.models.Response = SESSION.get(
-#         f"{DOMAIN}php/aulas/aulas.php",
-#         params=get_enroll_params(timestamp),
-#         headers=HEADERS,
-#         timeout=10,
-#     )
-#     res.raise_for_status()
-#     soup: BeautifulSoup = BeautifulSoup(res.text, "html.parser")
-#     buttons: list[Tag] = soup.find_all("button")
-#     LOGGER.debug(
-#         "Found all buttons:\n\t{}".format(
-#             "\n\t".join([f"{button.decode()}" for button in buttons]),
-#         ),
-#     )
-#     buttons = [button for button in buttons if "buts_inscrever" in button["class"]]
-#     LOGGER.debug(
-#         "Found enrollment buttons:\n\t{}".format(
-#             "\n\t".join([f"{button.decode()}" for button in buttons]),
-#         ),
-#     )
-#     return buttons
-
-
-# def pick_button(buttons: list[Tag], class_time: str, class_type: str) -> Tag:
-#     class_time = class_time.zfill(5)  # needs leading zeros
-#     available_classes = []
-#     for button in buttons:
-#         button_class: Tag | None = button.find_parent(
-#             "div", attrs={"class": "card2 round_rect_all_5"}
-#         )
-#         if button_class is None:
-#             continue
-
-#         button_time: Tag | NavigableString | None = button_class.find(
-#             "div", attrs={"align": "left", "class": "col"}
-#         )
-#         button_type: Tag | NavigableString | None = button_class.find(
-#             "div", attrs={"align": "left", "class": "col-50"}
-#         )
-#         if button_time is None or button_type is None:
-#             continue
-
-#         available_classes.append(f"{button_type.text.strip()} @ {button_time.text}")
-#         if button_time.text.startswith(class_time) and button_type.text.strip() == class_type:
-#             LOGGER.info(f"Found button for '{button_type.text.strip()}' @ {button_time.text}")
-#             return button
-#     raise RuntimeError(
-#         f"Unable to find enroll button for class '{class_type}' at {class_time}. Available"
-#         f" classes are: {available_classes}"
-#     )
 
 def pick_class(classes: list[Class], class_time: str, class_type: str) -> Class:
     for class_ in classes:
@@ -318,32 +258,6 @@ def pick_class(classes: list[Class], class_time: str, class_type: str) -> Class:
             continue
         return class_
     raise RuntimeError(f"Unable to find enroll button for class '{class_type}' at {class_time}.")
-
-
-
-# def get_enroll_path(button: Tag) -> str:
-#     onclick: str = button.attrs["onclick"]
-#     LOGGER.debug(f"Found button onclick action: '{onclick}")
-#     button_urls: list[str] = [
-#         part for part in onclick.split("'") if part.startswith("php/aulas/marca_aulas.php")
-#     ]
-#     if len(button_urls) != 1:
-#         raise RuntimeError(f"Expecting one page in button, found {len(button_urls)}: {onclick}")
-#     return button_urls[0]
-
-
-# def submit_enroll(path: str) -> None:
-#     res: requests.models.Response = SESSION.get(DOMAIN + path, headers=HEADERS, timeout=10)
-#     res.raise_for_status()
-#     LOGGER.debug(f"Enrolled in class with response: '{res.text}'")
-#     soup = BeautifulSoup(res.text, "html.parser")
-#     responses: list[str] = re.findall(
-#         r"parent\.msg_toast_icon\s\(\"(.+)\",",
-#         soup.find_all("script")[-1].text,
-#     )
-#     if len(responses) != 1:
-#         raise RuntimeError(f"Couldn't parse response for enrollment: {res.text}")
-#     LOGGER.info(responses[0])
 
 
 def main(
