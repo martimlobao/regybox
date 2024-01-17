@@ -57,7 +57,8 @@ jobs:
       - name: Regibox enroll
         run: pants run regibox:main -- ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
         env:
-          COOKIE: ${{ secrets.COOKIE }}
+          PHPSESSID: ${{ secrets.PHPSESSID }}
+          REGIBOX_USER: ${{ secrets.REGIBOX_USER }}
       - name: Send mail
         if: always()
         uses: dawidd6/action-send-mail@v3
