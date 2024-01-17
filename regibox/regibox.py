@@ -54,16 +54,31 @@ SESSION.mount("http://", ADAPTER)
 SESSION.mount("https://", ADAPTER)
 
 
-@dataclass
-class WaitTime:
-    inf_sec: int = 5
-    sup_sec: int = 50
-    slow: int = 9
-    fast: int = 1
+def get_session_params(user: str = USER) -> dict[str, str]:
+    return {
+        "z": user,
+        "y": f"*{user}",
+        "ignore": "regibox.pt/app/app",
+    }
 
-    @classmethod
-    def get(cls, now_seconds: int) -> int:
-        return cls.slow if cls.inf_sec < now_seconds < cls.sup_sec else cls.fast
+
+def set_session(session: requests.Session, user: str = USER) -> requests.Session:
+    session.get(
+        urljoin(DOMAIN, "set_session.php"),
+        headers=HEADERS,
+        params=get_session_params(user),
+    ).raise_for_status()
+    return session
+
+
+def get_enroll_params(timestamp: int, user: str = USER) -> dict[str, str]:
+    return {
+        "valor1": str(timestamp),
+        "type": "",
+        "source": "mes",
+        "scroll": "s",
+        "z": user,
+    }
 
 
 @dataclass
@@ -88,6 +103,34 @@ class Class:
     unenroll_url: str | None = field(init=True, repr=False, default=None)
 
     def __init__(self, tag: Tag) -> None:
+        """Initializes a Class object.
+
+        Args:
+            tag: The HTML tag representing the class.
+
+        Raises:
+            ValueError: If unable to parse the class HTML.
+
+        Attributes:
+            name: The name of the class.
+            location: The location of the class.
+            date: The date of the class in ISO format.
+            start: The start time of the class in HH:MM format.
+            end: The end time of the class in HH:MM format.
+            max_capacity: The maximum capacity of the class.
+            cur_capacity: The current capacity of the class.
+            is_open: Indicates if the class is open for enrollment.
+            is_full: Indicates if the class is full.
+            is_enrolled: Indicates if the user is enrolled in the class.
+            is_over: Indicates if the class is over.
+            is_blocked: Indicates if the user is blocked from enrolling in the
+                class.
+            is_waitlisted: Indicates if the user is on the class waitlist.
+            time_to_start: The time remaining until the class starts.
+            time_to_enroll: The time remaining until enrollment closes.
+            enroll_url: The URL to enroll in the class.
+            unenroll_url: The URL to unenroll from the class.
+        """
         self._tag = tag
         name: Tag | NavigableString | None = self._tag.find(
             "div", attrs={"align": "left", "class": "col-50"}
@@ -220,33 +263,6 @@ class Class:
         return responses[0]
 
 
-def get_enroll_params(timestamp: int, user: str = USER) -> dict[str, str]:
-    return {
-        "valor1": str(timestamp),
-        "type": "",
-        "source": "mes",
-        "scroll": "s",
-        "z": user,
-    }
-
-
-def get_session_params(user: str = USER) -> dict[str, str]:
-    return {
-        "z": user,
-        "y": f"*{user}",
-        "ignore": "regibox.pt/app/app",
-    }
-
-
-def set_session(session: requests.Session, user: str = USER) -> requests.Session:
-    session.get(
-        urljoin(DOMAIN, "set_session.php"),
-        headers=HEADERS,
-        params=get_session_params(user),
-    ).raise_for_status()
-    return session
-
-
 def get_classes(
     year: int, month: int, day: int, *, session: requests.Session, user: str = USER
 ) -> list[Class]:
@@ -268,6 +284,18 @@ def pick_class(classes: list[Class], class_time: str, class_type: str) -> Class:
             continue
         return class_
     raise RuntimeError(f"Unable to find enroll button for class '{class_type}' at {class_time}.")
+
+
+@dataclass
+class WaitTime:
+    inf_sec: int = 5
+    sup_sec: int = 50
+    slow: int = 9
+    fast: int = 1
+
+    @classmethod
+    def get(cls, now_seconds: int) -> int:
+        return cls.slow if cls.inf_sec < now_seconds < cls.sup_sec else cls.fast
 
 
 def main(
