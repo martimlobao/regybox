@@ -22,7 +22,7 @@ class WaitTime:
 
 
 def main(
-    class_date: str | None = None, class_time: str = "12:00", class_type: str = "WOD RATO"
+    class_date: str | None = None, class_time: str = "06:30", class_type: str = "WOD RATO"
 ) -> None:
     class_time = class_time.zfill(5)  # needs leading zeros
     LOGGER.info(f"Started at {START.isoformat()}")
