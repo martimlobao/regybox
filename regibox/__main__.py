@@ -1,6 +1,7 @@
 import sys
 
-from regibox.regibox import LOGGER, main
+from regibox.common import LOGGER
+from regibox.regibox import main
 
 if __name__ == "__main__":
     class_date, class_time, class_type = sys.argv[1:]  # pylint: disable=unbalanced-tuple-unpacking

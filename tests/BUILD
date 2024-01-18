@@ -2,5 +2,8 @@ python_tests(
     dependencies=[
         "//:pyproject-toml",
     ],
-    extra_env_vars=["COOKIE=chocolate_chips"],
+    extra_env_vars=[
+        "PHPSESSID=42",
+        "REGIBOX_USER=1337",
+    ],
 )

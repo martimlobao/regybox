@@ -2,8 +2,8 @@
 name: Trigger Regibox
 on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
-  schedule:
-    - cron: 15 6 * * 6,0-3
+  schedule:  # 60 hours in advance for morning classes
+    - cron: 15 18 * * 5-6,0-2
 
 jobs:
   build:
@@ -24,13 +24,14 @@ jobs:
           named-caches-hash: ${{ hashFiles('3rdparty/python/default.lock') }}
       - name: Get class date
         run: |
-          echo "CLASS_DATE=$(date -d '+2 days' +%F)" >> $GITHUB_ENV
+          echo "CLASS_DATE=$(date -d '+3 days' +%F)" >> $GITHUB_ENV
           echo "CLASS_TIME='06:30'" >> $GITHUB_ENV
           echo "CLASS_TYPE='WOD RATO'" >> $GITHUB_ENV
       - name: Regibox enroll
         run: pants run regibox:main -- ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
         env:
-          COOKIE: ${{ secrets.COOKIE }}
+          PHPSESSID: ${{ secrets.PHPSESSID }}
+          REGIBOX_USER: ${{ secrets.REGIBOX_USER }}
       - name: Send mail
         if: always()
         uses: dawidd6/action-send-mail@v3
