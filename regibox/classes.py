@@ -19,12 +19,6 @@ class Class:
     including its name, location, date, start and end times, capacity,
     enrollment status, and various flags indicating the class state.
 
-    Args:
-        tag: The HTML tag representing the class.
-
-    Raises:
-        ValueError: If unable to parse the class HTML.
-
     Attributes:
         name: The name of the class.
         location: The location of the class.
