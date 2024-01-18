@@ -2,7 +2,7 @@
 name: Trigger Regibox Holidays
 on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
-  schedule:
+  schedule:  # 48 hours in advance
     # Dia de Ano Novo
     # Sexta-Feira Santa
     # Páscoa
