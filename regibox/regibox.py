@@ -21,7 +21,7 @@ class WaitTime:
 
 
 def main(
-    class_date: str | None = None, class_time: str = "06:30", class_type: str = "WOD Rato"
+    *, class_date: str | None = None, class_time: str = "06:30", class_type: str = "WOD Rato"
 ) -> None:
     class_time = class_time.zfill(5)  # needs leading zeros
     LOGGER.info(f"Started at {START.isoformat()}")
@@ -33,7 +33,9 @@ def main(
 
     while (datetime.datetime.now(TIMEZONE) - START).total_seconds() < timeout:
         classes: list[Class] = get_classes(date.year, date.month, date.day)
-        class_: Class = pick_class(classes, class_time, class_type)
+        class_: Class = pick_class(
+            classes, class_time=class_time, class_type=class_type, class_date=class_date
+        )
         if class_.is_open:
             break
 
