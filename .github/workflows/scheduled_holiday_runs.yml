@@ -53,7 +53,7 @@ jobs:
         run: |
           echo "CLASS_DATE=$(date -d '+2 days' +%F)" >> $GITHUB_ENV
           echo "CLASS_TIME='10:00'" >> $GITHUB_ENV
-          echo "CLASS_TYPE='WEEKEND WOD RATO'" >> $GITHUB_ENV
+          echo "CLASS_TYPE='Weekend WOD Rato'" >> $GITHUB_ENV
       - name: Regibox enroll
         run: pants run regibox:main -- ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
         env:

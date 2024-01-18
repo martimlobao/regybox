@@ -207,9 +207,9 @@ def get_classes(year: int, month: int, day: int) -> list[Class]:
 
 def pick_class(classes: list[Class], class_time: str, class_type: str) -> Class:
     for class_ in classes:
-        if class_.start != class_time or class_.name != class_type:
+        if class_.start != class_time or class_.name.upper() != class_type.upper():
             continue
         return class_
     raise ClassNotFoundError(
-        f"Unable to find enroll button for class '{class_type}' at {class_time}."
+        f"Unable to find class '{class_type}' at {class_time} on {class_.date}."
     )
