@@ -34,7 +34,10 @@ def main(
     while (datetime.datetime.now(TIMEZONE) - START).total_seconds() < timeout:
         classes: list[Class] = get_classes(date.year, date.month, date.day)
         class_: Class = pick_class(
-            classes, class_time=class_time, class_type=class_type, class_date=class_date
+            classes,
+            class_time=class_time,
+            class_type=class_type,
+            class_date=date.date().isoformat(),
         )
         if class_.is_open:
             break
