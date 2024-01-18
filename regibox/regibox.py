@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from regibox.classes import Class, get_classes, pick_class
 from regibox.common import LOGGER, TIMEZONE
-from regibox.exceptions import ClassNotFoundError
 
 START: datetime.datetime = datetime.datetime.now(TIMEZONE)
 
@@ -22,7 +21,7 @@ class WaitTime:
 
 
 def main(
-    class_date: str | None = None, class_time: str = "06:30", class_type: str = "WOD RATO"
+    *, class_date: str | None = None, class_time: str = "06:30", class_type: str = "WOD Rato"
 ) -> None:
     class_time = class_time.zfill(5)  # needs leading zeros
     LOGGER.info(f"Started at {START.isoformat()}")
@@ -34,18 +33,21 @@ def main(
 
     while (datetime.datetime.now(TIMEZONE) - START).total_seconds() < timeout:
         classes: list[Class] = get_classes(date.year, date.month, date.day)
-        try:
-            class_: Class = pick_class(classes, class_time, class_type)
-        except ClassNotFoundError:
-            # seconds between calls
-            wait: int = WaitTime.get(datetime.datetime.now(TIMEZONE).second)
-            LOGGER.info(
-                f"No button found for {class_type} on {date.date().isoformat()} at"
-                f" {class_time}, retrying in {wait} seconds."
-            )
-            time.sleep(wait)
-        else:
+        class_: Class = pick_class(
+            classes,
+            class_time=class_time,
+            class_type=class_type,
+            class_date=date.date().isoformat(),
+        )
+        if class_.is_open:
             break
+
+        wait: int = WaitTime.get(datetime.datetime.now(TIMEZONE).second)  # seconds between calls
+        LOGGER.info(
+            f"Waiting for {class_type} on {date.date().isoformat()} at {class_time} to be"
+            f" available, ETA in {class_.time_to_enroll}. Retrying in {wait} seconds."
+        )
+        time.sleep(wait)
     else:
         raise RuntimeError(
             f"Timed out waiting for class {class_type} on {date.date().isoformat()} at"
