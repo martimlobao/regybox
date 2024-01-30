@@ -18,7 +18,7 @@ autoflake = "^2.2.1"
 black = "^24.1.1"
 coverage = "^7.4.1"
 docformatter = "^1.7.5"
-hypothesis = "^6.97.2"
+hypothesis = "^6.97.3"
 ipython = "^8.20.0"
 isort = { extras = ["colors"], version = "^5.13.2" }
 mypy = "^1.8.0"

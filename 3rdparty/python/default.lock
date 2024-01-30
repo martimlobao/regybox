@@ -14,7 +14,7 @@
 //     "black<25.0.0,>=24.1.1",
 //     "coverage<8.0.0,>=7.4.1",
 //     "docformatter<2.0.0,>=1.7.5",
-//     "hypothesis<7.0.0,>=6.97.2",
+//     "hypothesis<7.0.0,>=6.97.3",
 //     "ipython<9.0.0,>=8.20.0",
 //     "isort[colors]<6.0.0,>=5.13.2",
 //     "mypy<2.0.0,>=1.8.0",
@@ -514,13 +514,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "7cf6d7a7b5acc898269478d62e4d25f373e8df6b4900b0447b39d44f12385352",
-              "url": "https://files.pythonhosted.org/packages/d2/9f/5e95ec8eec17a8956aa07befb07bd38c4fe600b0852e886521b8a14edccf/hypothesis-6.97.2-py3-none-any.whl"
+              "hash": "6256d768ec866426bfce6ed78418c6e3e43119a0dbece2e0229a1ae5929ae53d",
+              "url": "https://files.pythonhosted.org/packages/2f/e2/4ce985933e48fa2140a56b8be097eb57baa1aae15824ae21df06000e8c8a/hypothesis-6.97.3-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "17d2752532e59518586d3e13585f31869bc4b24105a96f30374b7a0524100505",
-              "url": "https://files.pythonhosted.org/packages/87/a6/6bc9b4ae21e02b2a6fbfb1f70af522c1a001384cedd8a0eff9f7c2ec21b0/hypothesis-6.97.2.tar.gz"
+              "hash": "00216ddadaee17ba73451e262f973970a97d34fd75ec34ef57510147264c34d1",
+              "url": "https://files.pythonhosted.org/packages/05/46/c565f1999c6b4087cd0f0e7c538d9aabe291863dfb2c50f84a00fcbafe3d/hypothesis-6.97.3.tar.gz"
             }
           ],
           "project_name": "hypothesis",
@@ -561,7 +561,7 @@
             "tzdata>=2023.4; sys_platform == \"win32\" and extra == \"zoneinfo\""
           ],
           "requires_python": ">=3.8",
-          "version": "6.97.2"
+          "version": "6.97.3"
         },
         {
           "artifacts": [
@@ -618,7 +618,7 @@
             "black; extra == \"black\"",
             "colorama; sys_platform == \"win32\"",
             "curio; extra == \"all\"",
-            "curio; extra == \"test_extra\"",
+            "curio; extra == \"test-extra\"",
             "decorator",
             "docrepr; extra == \"all\"",
             "docrepr; extra == \"doc\"",
@@ -634,7 +634,7 @@
             "ipywidgets; extra == \"notebook\"",
             "jedi>=0.16",
             "matplotlib!=3.2.0; extra == \"all\"",
-            "matplotlib!=3.2.0; extra == \"test_extra\"",
+            "matplotlib!=3.2.0; extra == \"test-extra\"",
             "matplotlib-inline",
             "matplotlib; extra == \"all\"",
             "matplotlib; extra == \"doc\"",
@@ -642,28 +642,28 @@
             "nbconvert; extra == \"nbconvert\"",
             "nbformat; extra == \"all\"",
             "nbformat; extra == \"nbformat\"",
-            "nbformat; extra == \"test_extra\"",
+            "nbformat; extra == \"test-extra\"",
             "notebook; extra == \"all\"",
             "notebook; extra == \"notebook\"",
             "numpy>=1.23; extra == \"all\"",
-            "numpy>=1.23; extra == \"test_extra\"",
+            "numpy>=1.23; extra == \"test-extra\"",
             "pandas; extra == \"all\"",
-            "pandas; extra == \"test_extra\"",
+            "pandas; extra == \"test-extra\"",
             "pexpect>4.3; sys_platform != \"win32\"",
             "pickleshare; extra == \"all\"",
             "pickleshare; extra == \"doc\"",
             "pickleshare; extra == \"test\"",
-            "pickleshare; extra == \"test_extra\"",
+            "pickleshare; extra == \"test-extra\"",
             "prompt-toolkit<3.1.0,>=3.0.41",
             "pygments>=2.4.0",
             "pytest-asyncio<0.22; extra == \"all\"",
             "pytest-asyncio<0.22; extra == \"doc\"",
             "pytest-asyncio<0.22; extra == \"test\"",
-            "pytest-asyncio<0.22; extra == \"test_extra\"",
+            "pytest-asyncio<0.22; extra == \"test-extra\"",
             "pytest; extra == \"all\"",
             "pytest; extra == \"doc\"",
             "pytest; extra == \"test\"",
-            "pytest; extra == \"test_extra\"",
+            "pytest; extra == \"test-extra\"",
             "qtconsole; extra == \"all\"",
             "qtconsole; extra == \"qtconsole\"",
             "setuptools>=18.5; extra == \"all\"",
@@ -678,10 +678,10 @@
             "testpath; extra == \"all\"",
             "testpath; extra == \"doc\"",
             "testpath; extra == \"test\"",
-            "testpath; extra == \"test_extra\"",
+            "testpath; extra == \"test-extra\"",
             "traitlets>=5",
             "trio; extra == \"all\"",
-            "trio; extra == \"test_extra\"",
+            "trio; extra == \"test-extra\"",
             "typing-extensions; extra == \"all\"",
             "typing-extensions; extra == \"doc\"",
             "typing-extensions; python_version < \"3.10\""
@@ -1302,7 +1302,7 @@
           "requires_dists": [
             "PySocks!=1.5.7,>=1.5.6; extra == \"socks\"",
             "certifi>=2017.4.17",
-            "chardet<6,>=3.0.2; extra == \"use_chardet_on_py3\"",
+            "chardet<6,>=3.0.2; extra == \"use-chardet-on-py3\"",
             "charset-normalizer<4,>=2",
             "idna<4,>=2.5",
             "urllib3<3,>=1.21.1"
@@ -1644,24 +1644,25 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "55901e917a5896a349ff771be919f8bd99aff50b79fe58fec595eb37bbc56bb3",
-              "url": "https://files.pythonhosted.org/packages/96/94/c31f58c7a7f470d5665935262ebd7455c7e4c7782eb525658d3dbf4b9403/urllib3-2.1.0-py3-none-any.whl"
+              "hash": "ce3711610ddce217e6d113a2732fafad960a03fd0318c91faa79481e35c11224",
+              "url": "https://files.pythonhosted.org/packages/88/75/311454fd3317aefe18415f04568edc20218453b709c63c58b9292c71be17/urllib3-2.2.0-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "df7aa8afb0148fa78488e7899b2c59b5f4ffcfa82e6c54ccb9dd37c1d7b52d54",
-              "url": "https://files.pythonhosted.org/packages/36/dd/a6b232f449e1bc71802a5b7950dc3675d32c6dbc2a1bd6d71f065551adb6/urllib3-2.1.0.tar.gz"
+              "hash": "051d961ad0c62a94e50ecf1af379c3aba230c66c710493493560c0c223c49f20",
+              "url": "https://files.pythonhosted.org/packages/e2/cc/abf6746cc90bc52df4ba730f301b89b3b844d6dc133cb89a01cfe2511eb9/urllib3-2.2.0.tar.gz"
             }
           ],
           "project_name": "urllib3",
           "requires_dists": [
             "brotli>=1.0.9; platform_python_implementation == \"CPython\" and extra == \"brotli\"",
             "brotlicffi>=0.8.0; platform_python_implementation != \"CPython\" and extra == \"brotli\"",
+            "h2<5,>=4; extra == \"h2\"",
             "pysocks!=1.5.7,<2.0,>=1.5.6; extra == \"socks\"",
             "zstandard>=0.18.0; extra == \"zstd\""
           ],
           "requires_python": ">=3.8",
-          "version": "2.1.0"
+          "version": "2.2.0"
         },
         {
           "artifacts": [
@@ -1714,7 +1715,7 @@
     }
   ],
   "path_mappings": {},
-  "pex_version": "2.1.137",
+  "pex_version": "2.1.148",
   "pip_version": "23.1.2",
   "prefer_older_binary": false,
   "requirements": [
@@ -1723,7 +1724,7 @@
     "black<25.0.0,>=24.1.1",
     "coverage<8.0.0,>=7.4.1",
     "docformatter<2.0.0,>=1.7.5",
-    "hypothesis<7.0.0,>=6.97.2",
+    "hypothesis<7.0.0,>=6.97.3",
     "ipython<9.0.0,>=8.20.0",
     "isort[colors]<6.0.0,>=5.13.2",
     "mypy<2.0.0,>=1.8.0",
