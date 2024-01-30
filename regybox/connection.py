@@ -1,4 +1,5 @@
 import os
+import re
 from urllib.parse import urljoin
 
 import requests
@@ -6,6 +7,7 @@ from dotenv import find_dotenv, load_dotenv
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from regybox.exceptions import RegyboxConnectionError
 from regybox.utils.singleton import Singleton
 
 load_dotenv(dotenv_path=find_dotenv(usecwd=True))
@@ -77,6 +79,8 @@ def get_url_html(url: str, *, params: dict | None = None) -> str:
         url, headers=HEADERS, params=params, timeout=10
     )
     res.raise_for_status()
+    if re.findall(r"app/app_nova/login.php", res.text):
+        raise RegyboxConnectionError("Unable to log in")
     return res.text
 
 
