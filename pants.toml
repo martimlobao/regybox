@@ -41,7 +41,7 @@ enabled = true
 use_coverage = true
 
 [coverage-py]
-filter = ["regibox"]
+filter = ["regybox"]
 
 [autoflake]
 install_from_resolve = "python-default"

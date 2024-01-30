@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "regibox"
+name = "regybox"
 version = "1.0.1"
-description = "Automatically enroll in Regibox Crossfit classes"
+description = "Automatically enroll in Regybox Crossfit classes"
 authors = ["Martim Lobao <m@rtimlobao.com>"]
 license = "MIT"
 
@@ -39,7 +39,7 @@ preview = true
 [tool.isort]
 profile = "black"
 color_output = true
-known_first_party = ["regibox"]
+known_first_party = ["regybox"]
 line_length = 99
 
 [tool.pyupgrade]

@@ -1,5 +1,5 @@
 ---
-name: Trigger Regibox
+name: Trigger Regybox
 on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
   schedule:  # 60 hours in advance for morning classes
@@ -7,7 +7,7 @@ on:  # yamllint disable-line rule:truthy
 
 jobs:
   build:
-    name: Trigger Regibox run
+    name: Trigger Regybox run
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -27,8 +27,8 @@ jobs:
           echo "CLASS_DATE=$(date -d '+3 days' +%F)" >> $GITHUB_ENV
           echo "CLASS_TIME='06:30'" >> $GITHUB_ENV
           echo "CLASS_TYPE='WOD Rato'" >> $GITHUB_ENV
-      - name: Regibox enroll
-        run: pants run regibox:main -- ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
+      - name: Regybox enroll
+        run: pants run regybox:main -- ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
         env:
           PHPSESSID: ${{ secrets.PHPSESSID }}
           REGIBOX_USER: ${{ secrets.REGIBOX_USER }}
@@ -41,7 +41,7 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: >
-            Regibox Auto-enroll: ${{ job.status }} for ${{ env.CLASS_TYPE }} on ${{ env.CLASS_DATE }}
+            Regybox Auto-enroll: ${{ job.status }} for ${{ env.CLASS_TYPE }} on ${{ env.CLASS_DATE }}
             at ${{ env.CLASS_TIME }}
           body: >
             Job '${{ github.job }}' in worflow ${{ github.workflow }} of ${{ github.repository }} finished in a
@@ -49,4 +49,4 @@ jobs:
 
             See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
           to: m@rtimlobao.com
-          from: Regibox Auto-enroll
+          from: Regybox Auto-enroll

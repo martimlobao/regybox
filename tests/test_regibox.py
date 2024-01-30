@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, Any
 from hypothesis import given
 from hypothesis.strategies import integers
 
-from regibox import __version__
-from regibox.regibox import LONG_WAIT, MED_WAIT, SHORT_WAIT, snooze
+from regybox import __version__
+from regybox.regybox import LONG_WAIT, MED_WAIT, SHORT_WAIT, snooze
 
 if TYPE_CHECKING:
     import io

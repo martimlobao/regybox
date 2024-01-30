@@ -6,9 +6,9 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
 
-from regibox.common import LOGGER, TIMEZONE
-from regibox.connection import DOMAIN, get_classes_html, get_url_html
-from regibox.exceptions import ClassNotFoundError
+from regybox.common import LOGGER, TIMEZONE
+from regybox.connection import DOMAIN, get_classes_html, get_url_html
+from regybox.exceptions import ClassNotFoundError
 
 
 @dataclass
