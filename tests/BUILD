@@ -4,6 +4,6 @@ python_tests(
     ],
     extra_env_vars=[
         "PHPSESSID=42",
-        "REGIBOX_USER=1337",
+        "REGYBOX_USER=1337",
     ],
 )

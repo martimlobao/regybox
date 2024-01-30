@@ -58,7 +58,7 @@ jobs:
         run: pants run regybox:main -- ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
         env:
           PHPSESSID: ${{ secrets.PHPSESSID }}
-          REGIBOX_USER: ${{ secrets.REGIBOX_USER }}
+          REGYBOX_USER: ${{ secrets.REGYBOX_USER }}
       - name: Send mail
         if: always()
         uses: dawidd6/action-send-mail@v3
