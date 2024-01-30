@@ -1,0 +1,35 @@
+---
+name: Dependabot Pants Lockfile Update
+on:  # yamllint disable-line rule:truthy
+  pull_request_target:
+    types: [opened, synchronize]
+    paths:
+      - poetry.lock
+
+jobs:
+  run-script:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up python
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Set up pants
+        uses: pantsbuild/actions/init-pants@v6-scie-pants
+        with:
+          gha-cache-key: v0
+          named-caches-hash: ${{ hashFiles('3rdparty/python/default.lock') }}
+      - name: Run custom script
+        run: |
+          pants generate-lockfiles ::
+      - name: Commit and push changes
+        run: |
+          git config --global user.name 'dependabot[bot]'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .
+          git commit -m "Update Pants Lockfiles"
+          git push
