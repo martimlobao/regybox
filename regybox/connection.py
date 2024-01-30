@@ -10,7 +10,7 @@ from regybox.utils.singleton import Singleton
 
 load_dotenv(dotenv_path=find_dotenv(usecwd=True))
 
-USER: str = os.environ["REGIBOX_USER"]
+USER: str = os.environ["REGYBOX_USER"]
 DOMAIN: str = "https://www.regybox.pt/app/app_nova/"
 HEADERS: dict[str, str] = {
     "Accept": "text/html, */*; q=0.01",
