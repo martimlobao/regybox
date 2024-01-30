@@ -6,7 +6,7 @@ from dotenv import find_dotenv, load_dotenv
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from regibox.singleton import Singleton
+from regibox.utils.singleton import Singleton
 
 load_dotenv(dotenv_path=find_dotenv(usecwd=True))
 
