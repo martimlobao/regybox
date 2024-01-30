@@ -34,8 +34,8 @@ class Class:
         is_blocked: Indicates if the user is blocked from enrolling in the
             class.
         is_waitlisted: Indicates if the user is on the class waitlist.
-        time_to_start: The time remaining until the class starts.
-        time_to_enroll: The time remaining until enrollment closes.
+        time_to_start: The number of seconds remaining until the class starts.
+        time_to_enroll: The number of seconds remaining until enrollment closes.
         enroll_url: The URL to enroll in the class.
         unenroll_url: The URL to unenroll from the class.
     """
@@ -54,8 +54,8 @@ class Class:
     is_over: bool = False
     is_blocked: bool = False
     is_waitlisted: bool = False
-    time_to_start: str | None = None
-    time_to_enroll: str | None = None
+    time_to_start: int | None = None
+    time_to_enroll: int | None = None
     enroll_url: str | None = field(init=True, repr=False, default=None)
     unenroll_url: str | None = field(init=True, repr=False, default=None)
 
@@ -139,9 +139,9 @@ class Class:
         timer: Tag | NavigableString | None = self._tag.find("input", attrs={"class": "timers"})
         if isinstance(timer, Tag):
             if not self.is_enrolled:  # timer disappears once you're enrolled
-                self.time_to_start = str(datetime.timedelta(seconds=int(timer.attrs["value"])))
+                self.time_to_start = int(timer.attrs["value"])
             if not self.is_open:
-                self.time_to_enroll = str(datetime.timedelta(seconds=int(timer.attrs["value"])))
+                self.time_to_enroll = int(timer.attrs["value"])
 
     @staticmethod
     def _get_button_url(button: Tag) -> str:
@@ -165,7 +165,7 @@ class Class:
             raise RuntimeError("Class is full")
 
         res_html: str = get_url_html(self.enroll_url)
-        LOGGER.info(f"Enrolled at {self.enroll_url} with response: '{res_html}'")
+        LOGGER.debug(f"Enrolled at {self.enroll_url} with response: '{res_html}'")
         self.is_enrolled = True
         # set is_waitlisted here
         soup = BeautifulSoup(res_html, "html.parser")
@@ -175,7 +175,7 @@ class Class:
         )
         if len(responses) != 1:
             raise RuntimeError(f"Couldn't parse response for enrollment: {res_html}")
-        LOGGER.info(responses[0])
+        LOGGER.info(f"Enrolled with response '{responses[0]}'")
         return responses[0]
 
     def unenroll(self) -> str:

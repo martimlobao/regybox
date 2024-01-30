@@ -1,5 +1,5 @@
 [GLOBAL]
-pants_version = "2.18.2"
+pants_version = "2.19.0"
 colors = true
 
 backend_packages = [
@@ -56,6 +56,7 @@ requirements = [
 ]
 interpreter_constraints = [ "CPython>=3.11,<3.12" ]
 config = "pyproject.toml"
+args = ["--preview"]
 
 [docformatter]
 install_from_resolve = "python-default"
