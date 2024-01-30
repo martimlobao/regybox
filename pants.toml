@@ -1,6 +1,7 @@
 [GLOBAL]
 pants_version = "2.19.0"
 colors = true
+pants_ignore = []
 
 backend_packages = [
   # order is relevant here, since we want to minimize the need for lint and fmt reruns
@@ -102,5 +103,7 @@ args = ["--py311-plus"]
 install_from_resolve = "python-default"
 requirements = [
   "//:root#yamllint",
+  "//:yamls",
 ]
 config_file_name = ".yamllint"
+args = ["--strict"]
