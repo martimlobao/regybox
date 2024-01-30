@@ -8,11 +8,15 @@ on:  # yamllint disable-line rule:truthy
       - poetry.lock
 
 jobs:
-  run-script:
+  update-lockfiles:
+    name: Update Pants Lockfiles
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up python
         id: setup-python
         uses: actions/setup-python@v5
@@ -23,13 +27,13 @@ jobs:
         with:
           gha-cache-key: v0
           named-caches-hash: ${{ hashFiles('3rdparty/python/default.lock') }}
-      - name: Run custom script
+      - name: Generate lockfiles
         run: |
           pants generate-lockfiles ::
       - name: Commit and push changes
         run: |
           git config --global user.name 'dependabot[bot]'
           git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .
-          git commit -m "Update Pants Lockfiles"
-          git push
+          git add 3rdparty
+          git commit -m "[automatic] update pants lockfiles"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
