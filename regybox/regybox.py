@@ -1,9 +1,9 @@
 import datetime
 import time
 
-from regibox.classes import Class, get_classes, pick_class
-from regibox.common import LOGGER, TIMEZONE
-from regibox.utils.time import secs_to_str
+from regybox.classes import Class, get_classes, pick_class
+from regybox.common import LOGGER, TIMEZONE
+from regybox.utils.time import secs_to_str
 
 START: datetime.datetime = datetime.datetime.now(TIMEZONE)
 SHORT_WAIT: int = 1

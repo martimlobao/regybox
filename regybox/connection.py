@@ -6,19 +6,19 @@ from dotenv import find_dotenv, load_dotenv
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from regibox.utils.singleton import Singleton
+from regybox.utils.singleton import Singleton
 
 load_dotenv(dotenv_path=find_dotenv(usecwd=True))
 
 USER: str = os.environ["REGIBOX_USER"]
-DOMAIN: str = "https://www.regibox.pt/app/app_nova/"
+DOMAIN: str = "https://www.regybox.pt/app/app_nova/"
 HEADERS: dict[str, str] = {
     "Accept": "text/html, */*; q=0.01",
     "Accept-Encoding": "gzip, deflate, br",
     "Accept-Language": "en-US,en;q=0.9",
     "Cookie": f'PHPSESSID={os.environ["PHPSESSID"]}; regybox_boxes=%2A{USER}; regybox_user={USER}',
     "DNT": "1",
-    "Host": "www.regibox.pt",
+    "Host": "www.regybox.pt",
     "Referer": DOMAIN,
     "Sec-Fetch-Dest": "empty",
     "Sec-Fetch-Mode": "cors",
@@ -34,7 +34,7 @@ HEADERS: dict[str, str] = {
 }
 
 
-class RegiboxSession(requests.Session, metaclass=Singleton):
+class RegyboxSession(requests.Session, metaclass=Singleton):
     def __init__(self, *, user: str = USER) -> None:
         super().__init__()
         adapter: HTTPAdapter = HTTPAdapter(max_retries=Retry(connect=10, backoff_factor=0.5))
@@ -54,7 +54,7 @@ class RegiboxSession(requests.Session, metaclass=Singleton):
         return {
             "z": user,
             "y": f"*{user}",
-            "ignore": "regibox.pt/app/app",
+            "ignore": "regybox.pt/app/app",
         }
 
 
@@ -73,7 +73,7 @@ def get_url_html(url: str, *, params: dict | None = None) -> str:
     """
     if not params:
         params = {}
-    res: requests.models.Response = RegiboxSession().get(
+    res: requests.models.Response = RegyboxSession().get(
         url, headers=HEADERS, params=params, timeout=10
     )
     res.raise_for_status()
