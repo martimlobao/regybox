@@ -102,5 +102,7 @@ args = ["--py311-plus"]
 install_from_resolve = "python-default"
 requirements = [
   "//:root#yamllint",
+  "//:yamls",
 ]
 config_file_name = ".yamllint"
+args = ["--strict"]
