@@ -2,7 +2,7 @@
 name: Dependabot Pants Lockfile Update
 on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize]
     paths:
       - poetry.lock
@@ -10,13 +10,13 @@ on:  # yamllint disable-line rule:truthy
 jobs:
   update-lockfiles:
     name: Update Pants Lockfiles
+    if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up python
         id: setup-python
         uses: actions/setup-python@v5
