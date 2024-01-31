@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Set up pants
-        uses: pantsbuild/actions/init-pants@v6-scie-pants
+        uses: pantsbuild/actions/init-pants@v7-scie-pants
         with:
           gha-cache-key: v0
           named-caches-hash: ${{ hashFiles('3rdparty/python/default.lock') }}
