@@ -1,7 +1,7 @@
 ---
 name: Dependabot Pants Lockfile Update
 on:  # yamllint disable-line rule:truthy
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize]
     paths:
       - poetry.lock
@@ -16,6 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up python
         id: setup-python
         uses: actions/setup-python@v5
@@ -24,7 +25,7 @@ jobs:
       - name: Set up pants
         uses: pantsbuild/actions/init-pants@v7
         with:
-          gha-cache-key: v0
+          gha-cache-key: ${{ runner.os }}-pants-init-${{ hashFiles('pants.toml') }}
           named-caches-hash: ${{ hashFiles('3rdparty/python/default.lock') }}
       - name: Generate lockfiles
         run: |
