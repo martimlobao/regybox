@@ -9,21 +9,17 @@
 //     "CPython<3.12,>=3.11"
 //   ],
 //   "generated_with_requirements": [
-//     "autoflake>=2.2.1",
 //     "beautifulsoup4<5.0.0,>=4.12.3",
 //     "black>=24.1.1",
 //     "coverage>=7.4.1",
-//     "docformatter>=1.7.5",
 //     "hypothesis>=6.97.3",
 //     "ipython>=8.20.0",
-//     "isort[colors]>=5.13.2",
 //     "mypy>=1.8.0",
 //     "pylint>=3.0.3",
 //     "pytest-cov>=4.1.0",
 //     "pytest>=8.0.0",
 //     "python-dotenv<2.0.0,>=1.0.1",
 //     "pytz<2025.0.0,>=2024.1",
-//     "pyupgrade>=3.15.0",
 //     "requests<3.0.0,>=2.31.0",
 //     "ruff>=0",
 //     "types-beautifulsoup4>=4.12.0.5",
@@ -134,27 +130,6 @@
           ],
           "requires_python": ">=3.7",
           "version": "23.2.0"
-        },
-        {
-          "artifacts": [
-            {
-              "algorithm": "sha256",
-              "hash": "265cde0a43c1f44ecfb4f30d95b0437796759d07be7706a2f70e4719234c0f79",
-              "url": "https://files.pythonhosted.org/packages/9e/a5/8471753bc95672fb16d9cd1cb82ba460c66721378dd8cc8629d86c148a09/autoflake-2.2.1-py3-none-any.whl"
-            },
-            {
-              "algorithm": "sha256",
-              "hash": "62b7b6449a692c3c9b0c916919bbc21648da7281e8506bcf8d3f8280e431ebc1",
-              "url": "https://files.pythonhosted.org/packages/72/c4/286706d3d731022fbb8d734f90ecf9119507393a68bfb0314b08e9913f33/autoflake-2.2.1.tar.gz"
-            }
-          ],
-          "project_name": "autoflake",
-          "requires_dists": [
-            "pyflakes>=3.0.0",
-            "tomli>=2.0.1; python_version < \"3.11\""
-          ],
-          "requires_python": ">=3.8",
-          "version": "2.2.1"
         },
         {
           "artifacts": [
@@ -354,24 +329,6 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6",
-              "url": "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl"
-            },
-            {
-              "algorithm": "sha256",
-              "hash": "08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44",
-              "url": "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz"
-            }
-          ],
-          "project_name": "colorama",
-          "requires_dists": [],
-          "requires_python": "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7",
-          "version": "0.4.6"
-        },
-        {
-          "artifacts": [
-            {
-              "algorithm": "sha256",
               "hash": "7ac8f8eb153724f84885a1374999b7e45734bf93a87d8df1e7ce2146860edef6",
               "url": "https://files.pythonhosted.org/packages/8e/d5/af7155aa1a6d8496c4436b45c9330dc7b26d962a154054359e2cf6055ed6/coverage-7.4.1-cp311-cp311-musllinux_1_1_x86_64.whl"
             },
@@ -466,28 +423,6 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "a24f5545ed1f30af00d106f5d85dc2fce4959295687c24c8f39f5263afaf9186",
-              "url": "https://files.pythonhosted.org/packages/8b/95/568a2fca29df365b82012b09b64964a05f4f20ac83c2137b262f3fa3188f/docformatter-1.7.5-py3-none-any.whl"
-            },
-            {
-              "algorithm": "sha256",
-              "hash": "ffed3da0daffa2e77f80ccba4f0e50bfa2755e1c10e130102571c890a61b246e",
-              "url": "https://files.pythonhosted.org/packages/f4/44/aba2c40cf796121b35835ea8c00bc5d93f2f70730eca53b36b8bbbfaefe1/docformatter-1.7.5.tar.gz"
-            }
-          ],
-          "project_name": "docformatter",
-          "requires_dists": [
-            "charset_normalizer<4.0.0,>=3.0.0",
-            "tomli<3.0.0,>=2.0.0; python_version < \"3.11\" and extra == \"tomli\"",
-            "untokenize<0.2.0,>=0.1.1"
-          ],
-          "requires_python": "<4.0,>=3.7",
-          "version": "1.7.5"
-        },
-        {
-          "artifacts": [
-            {
-              "algorithm": "sha256",
               "hash": "eac49ca94516ccc753f9fb5ce82603156e590b27525a8bc32cce8ae302eb61bc",
               "url": "https://files.pythonhosted.org/packages/80/03/6ea8b1b2a5ab40a7a60dc464d3daa7aa546e0a74d74a9f8ff551ea7905db/executing-2.0.1-py2.py3-none-any.whl"
             },
@@ -514,13 +449,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "13fd80af383508f5a4707e0148120437d962d6a3ed8f5554b4daea5777a34fc6",
-              "url": "https://files.pythonhosted.org/packages/a7/d8/497e4a7ad25fb9427acf62fc3a4b2eb4d50cab9f78ab82771edf6deb6260/hypothesis-6.98.3-py3-none-any.whl"
+              "hash": "8417d1df13e7ba0eb6cba0917e0aa6c8b0b6b35a4e7fb78db6ab84dfbeb8c8fe",
+              "url": "https://files.pythonhosted.org/packages/80/de/25f552f55197f2bd9dafa3d0110d399f3dc595a817d00353b9b4a9d92925/hypothesis-6.98.4-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "1844d92ca65a42185e1d78956400455e644f88264e1611ebdc8d6aa71b402773",
-              "url": "https://files.pythonhosted.org/packages/f6/5e/bc884ac73cb4cfa4f82de140f308d71852fa291e66261ab2c8591f0dc844/hypothesis-6.98.3.tar.gz"
+              "hash": "785f47ddac183c7ffef9463b5ab7f2e4433ca9b2b1171e52eeb3f8c5b1f09fa2",
+              "url": "https://files.pythonhosted.org/packages/3e/0e/42747932efee412fa1ba7a005e0ff918d9450da03e8c022d90b9f41ade15/hypothesis-6.98.4.tar.gz"
             }
           ],
           "project_name": "hypothesis",
@@ -561,7 +496,7 @@
             "tzdata>=2023.4; (sys_platform == \"win32\" or sys_platform == \"emscripten\") and extra == \"zoneinfo\""
           ],
           "requires_python": ">=3.8",
-          "version": "6.98.3"
+          "version": "6.98.4"
         },
         {
           "artifacts": [
@@ -1056,24 +991,6 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "84b5be138a2dfbb40689ca07e2152deb896a65c3a3e24c251c5c62489568074a",
-              "url": "https://files.pythonhosted.org/packages/d4/d7/f1b7db88d8e4417c5d47adad627a93547f44bdc9028372dbd2313f34a855/pyflakes-3.2.0-py2.py3-none-any.whl"
-            },
-            {
-              "algorithm": "sha256",
-              "hash": "1c61603ff154621fb2a9172037d84dca3500def8c8b630657d1701f026f8af3f",
-              "url": "https://files.pythonhosted.org/packages/57/f9/669d8c9c86613c9d568757c7f5824bd3197d7b1c6c27553bc5618a27cce2/pyflakes-3.2.0.tar.gz"
-            }
-          ],
-          "project_name": "pyflakes",
-          "requires_dists": [],
-          "requires_python": ">=3.8",
-          "version": "3.2.0"
-        },
-        {
-          "artifacts": [
-            {
-              "algorithm": "sha256",
               "hash": "b27c2826c47d0f3219f29554824c30c5e8945175d888647acd804ddd04af846c",
               "url": "https://files.pythonhosted.org/packages/97/9c/372fef8377a6e340b1704768d20daaded98bf13282b5327beb2e2fe2c7ef/pygments-2.17.2-py3-none-any.whl"
             },
@@ -1221,26 +1138,6 @@
           "requires_dists": [],
           "requires_python": null,
           "version": "2024.1"
-        },
-        {
-          "artifacts": [
-            {
-              "algorithm": "sha256",
-              "hash": "8dc8ebfaed43566e2c65994162795017c7db11f531558a74bc8aa077907bc305",
-              "url": "https://files.pythonhosted.org/packages/fc/70/884486403d78b58b4048863d34d15c59b48ce093dea80646df436ef00314/pyupgrade-3.15.0-py2.py3-none-any.whl"
-            },
-            {
-              "algorithm": "sha256",
-              "hash": "a7fde381060d7c224f55aef7a30fae5ac93bbc428367d27e70a603bc2acd4f00",
-              "url": "https://files.pythonhosted.org/packages/8b/57/045e361bb62e0b8e15e35408088a8fef5198bc0ddabb06d57e1e7a6e9e6d/pyupgrade-3.15.0.tar.gz"
-            }
-          ],
-          "project_name": "pyupgrade",
-          "requires_dists": [
-            "tokenize-rt>=5.2.0"
-          ],
-          "requires_python": ">=3.8.1",
-          "version": "3.15.0"
         },
         {
           "artifacts": [
@@ -1473,24 +1370,6 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "b79d41a65cfec71285433511b50271b05da3584a1da144a0752e9c621a285289",
-              "url": "https://files.pythonhosted.org/packages/8d/35/78f03aa48cfebd13646707f64477bc7eacf1081edcdcd1b4d57cb1b5d0a8/tokenize_rt-5.2.0-py2.py3-none-any.whl"
-            },
-            {
-              "algorithm": "sha256",
-              "hash": "9fe80f8a5c1edad2d3ede0f37481cc0cc1538a2f442c9c2f9e4feacd2792d054",
-              "url": "https://files.pythonhosted.org/packages/23/9c/1405c291295e26f94475bd76ba581e216b62389be28b031a98e370f981bb/tokenize_rt-5.2.0.tar.gz"
-            }
-          ],
-          "project_name": "tokenize-rt",
-          "requires_dists": [],
-          "requires_python": ">=3.8",
-          "version": "5.2.0"
-        },
-        {
-          "artifacts": [
-            {
-              "algorithm": "sha256",
               "hash": "b0a645a9156dc7cb5d3a1f0d4bab66db287fcb8e0430bdd4664a095ea16414ba",
               "url": "https://files.pythonhosted.org/packages/6e/43/159750d32481f16e34cc60090b53bc0a14314ad0c1f67a9bb64f3f3a0551/tomlkit-0.12.3-py3-none-any.whl"
             },
@@ -1631,19 +1510,6 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "3865dbbbb8efb4bb5eaa72f1be7f3e0be00ea8b7f125c69cbd1f5fda926f37a2",
-              "url": "https://files.pythonhosted.org/packages/f7/46/e7cea8159199096e1df52da20a57a6665da80c37fb8aeb848a3e47442c32/untokenize-0.1.1.tar.gz"
-            }
-          ],
-          "project_name": "untokenize",
-          "requires_dists": [],
-          "requires_python": null,
-          "version": "0.1.1"
-        },
-        {
-          "artifacts": [
-            {
-              "algorithm": "sha256",
               "hash": "ce3711610ddce217e6d113a2732fafad960a03fd0318c91faa79481e35c11224",
               "url": "https://files.pythonhosted.org/packages/88/75/311454fd3317aefe18415f04568edc20218453b709c63c58b9292c71be17/urllib3-2.2.0-py3-none-any.whl"
             },
@@ -1719,21 +1585,17 @@
   "pip_version": "23.1.2",
   "prefer_older_binary": false,
   "requirements": [
-    "autoflake>=2.2.1",
     "beautifulsoup4<5.0.0,>=4.12.3",
     "black>=24.1.1",
     "coverage>=7.4.1",
-    "docformatter>=1.7.5",
     "hypothesis>=6.97.3",
     "ipython>=8.20.0",
-    "isort[colors]>=5.13.2",
     "mypy>=1.8.0",
     "pylint>=3.0.3",
     "pytest-cov>=4.1.0",
     "pytest>=8.0.0",
     "python-dotenv<2.0.0,>=1.0.1",
     "pytz<2025.0.0,>=2024.1",
-    "pyupgrade>=3.15.0",
     "requests<3.0.0,>=2.31.0",
     "ruff>=0",
     "types-beautifulsoup4>=4.12.0.5",

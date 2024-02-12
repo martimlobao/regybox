@@ -102,7 +102,7 @@ class Class:
         self.is_open = bool(button)
 
         if isinstance(button, NavigableString):
-            raise ValueError(f"Unexpected button format: {button}")
+            raise TypeError(f"Unexpected button format: {button}")
         if button is None:
             self.is_enrolled = False
         elif "color-red" in button.attrs["class"]:
@@ -122,7 +122,7 @@ class Class:
             raise ValueError("Unable to parse class HTML")
         state: Tag | NavigableString | None = states[-1]
         if not isinstance(state, Tag):
-            raise ValueError(f"Unexpected type for state: {state}")
+            raise TypeError(f"Unexpected type for state: {state}")
 
         if state.find("span", attrs={"class": "erro_color"}):
             self.is_blocked = True  # enroll window expired
