@@ -12,6 +12,7 @@ class RegyboxLoginError(RegyboxBaseError):
     def __init__(self) -> None:
         super().__init__("Unable to log in")
 
+
 class UnparseableError(RegyboxBaseError):
     """Exception raised when an error occurs during parsing of a web page."""
 
