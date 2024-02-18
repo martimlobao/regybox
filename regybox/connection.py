@@ -1,24 +1,22 @@
-import os
 import re
 from urllib.parse import urljoin
 
 import requests
-from dotenv import find_dotenv, load_dotenv
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from regybox.exceptions import RegyboxConnectionError
+from regybox.common import PHPSESSID, REGYBOX_USER
+from regybox.exceptions import RegyboxLoginError
 from regybox.utils.singleton import Singleton
 
-load_dotenv(dotenv_path=find_dotenv(usecwd=True))
-
-USER: str = os.environ["REGYBOX_USER"]
 DOMAIN: str = "https://www.regybox.pt/app/app_nova/"
 HEADERS: dict[str, str] = {
     "Accept": "text/html, */*; q=0.01",
     "Accept-Encoding": "gzip, deflate, br",
     "Accept-Language": "en-US,en;q=0.9",
-    "Cookie": f'PHPSESSID={os.environ["PHPSESSID"]}; regybox_boxes=%2A{USER}; regybox_user={USER}',
+    "Cookie": (
+        f"PHPSESSID={PHPSESSID}; regybox_boxes=%2A{REGYBOX_USER}; regybox_user={REGYBOX_USER}"
+    ),
     "DNT": "1",
     "Host": "www.regybox.pt",
     "Referer": DOMAIN,
@@ -37,7 +35,7 @@ HEADERS: dict[str, str] = {
 
 
 class RegyboxSession(requests.Session, metaclass=Singleton):
-    def __init__(self, *, user: str = USER) -> None:
+    def __init__(self, *, user: str = REGYBOX_USER) -> None:
         super().__init__()
         adapter: HTTPAdapter = HTTPAdapter(max_retries=Retry(connect=10, backoff_factor=0.5))
         self.mount("http://", adapter)
@@ -80,7 +78,7 @@ def get_url_html(url: str, *, params: dict | None = None) -> str:
     )
     res.raise_for_status()
     if re.findall(r"app/app_nova/login.php", res.text):
-        raise RegyboxConnectionError("Unable to log in")
+        raise RegyboxLoginError
     return res.text
 
 
@@ -103,7 +101,7 @@ def get_classes_params(timestamp: int, *, user: str) -> dict[str, str]:
     }
 
 
-def get_classes_html(timestamp: int, user: str = USER) -> str:
+def get_classes_html(timestamp: int, user: str = REGYBOX_USER) -> str:
     """Retrieve the HTML content of the classes page.
 
     Args:

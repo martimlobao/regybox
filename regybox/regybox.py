@@ -1,8 +1,10 @@
 import datetime
 import time
 
+from regybox.calendar import check_cal
 from regybox.classes import Class, get_classes, pick_class
-from regybox.common import LOGGER, TIMEZONE
+from regybox.common import CLASS_TIME, CLASS_TYPE, LOGGER, TIMEZONE
+from regybox.exceptions import ClassNotOpenError, RegyboxTimeoutError
 from regybox.utils.time import secs_to_str
 
 START: datetime.datetime = datetime.datetime.now(TIMEZONE)
@@ -20,7 +22,11 @@ def snooze(time_left: int) -> int:
 
 
 def main(
-    *, class_date: str | None = None, class_time: str = "06:30", class_type: str = "WOD Rato"
+    *,
+    class_date: str | None = None,
+    class_time: str = CLASS_TIME,
+    class_type: str = CLASS_TYPE,
+    check_calendar: bool = True,
 ) -> None:
     class_time = class_time.zfill(5)  # needs leading zeros
     LOGGER.info(f"Started at {START.isoformat()}")
@@ -28,8 +34,11 @@ def main(
         date: datetime.datetime = datetime.datetime.now(TIMEZONE) + datetime.timedelta(days=2)
     else:
         date = datetime.datetime.strptime(class_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE)
-    timeout: int = 900  # try for 15 minutes
 
+    if check_calendar:
+        check_cal(date)
+
+    timeout: int = 900  # try for 15 minutes
     while (datetime.datetime.now(TIMEZONE) - START).total_seconds() < timeout:
         classes: list[Class] = get_classes(date.year, date.month, date.day)
         class_: Class = pick_class(
@@ -42,14 +51,10 @@ def main(
             break
 
         if class_.time_to_enroll is None:
-            raise RuntimeError("Class is not available for enrollment")
+            raise ClassNotOpenError
 
         if class_.time_to_enroll > timeout:
-            raise RuntimeError(
-                f"Enrollment for {class_type} on {date.date().isoformat()} at {class_time} is in"
-                f" {secs_to_str(class_.time_to_enroll)}, which is more than maximum of"
-                f" {secs_to_str(timeout)}"
-            )
+            raise RegyboxTimeoutError(timeout, time_to_enroll=secs_to_str(class_.time_to_enroll))
 
         wait: int = snooze(class_.time_to_enroll)  # seconds between calls
         LOGGER.info(
@@ -58,9 +63,6 @@ def main(
         )
         time.sleep(wait)
     else:
-        raise RuntimeError(
-            f"Timed out waiting for class {class_type} on {date.date().isoformat()} at"
-            f" {class_time}, terminating."
-        )
+        raise RegyboxTimeoutError(timeout)
     class_.enroll()
     LOGGER.info(f"Runtime: {(datetime.datetime.now(TIMEZONE) - START).total_seconds():.3f}")

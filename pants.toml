@@ -6,6 +6,7 @@ pants_ignore = []
 backend_packages = [
   # order is relevant here, since we want to minimize the need for lint and fmt reruns
   "pants.backend.python.lint.pylint",
+  "pants.backend.python.lint.black",
   "pants.backend.python.typecheck.mypy",
   "pants.backend.build_files.fmt.black",
   "pants.backend.experimental.python.lint.ruff",

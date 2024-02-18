@@ -32,6 +32,7 @@ jobs:
         env:
           PHPSESSID: ${{ secrets.PHPSESSID }}
           REGYBOX_USER: ${{ secrets.REGYBOX_USER }}
+          CALENDAR_URL: ${{ secrets.CALENDAR_URL }}
       - name: Send mail
         if: always()
         uses: dawidd6/action-send-mail@v3
