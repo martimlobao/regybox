@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "regybox"
-version = "1.0.1"
+version = "1.1.0"
 description = "Automatically enroll in Regybox Crossfit classes"
 authors = ["Martim Lobao <m@rtimlobao.com>"]
 license = "MIT"
@@ -8,8 +8,9 @@ license = "MIT"
 [tool.poetry.dependencies]
 python = "^3.11"
 beautifulsoup4 = "^4.12.3"
+icalendar = "^5.0.11"
 python-dotenv = "^1.0.1"
-pytz = "^2024.1"
+recurring-ical-events = "^2.1.2"
 requests = "^2.31.0"
 urllib3 = "^2.2.0"
 

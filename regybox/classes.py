@@ -8,7 +8,13 @@ from bs4.element import NavigableString, Tag
 
 from regybox.common import LOGGER, TIMEZONE
 from regybox.connection import DOMAIN, get_classes_html, get_url_html
-from regybox.exceptions import ClassNotFoundError
+from regybox.exceptions import (
+    ClassAlreadyEnrolledError,
+    ClassIsFullError,
+    ClassNotFoundError,
+    ClassNotOpenError,
+    UnparseableError,
+)
 
 
 @dataclass
@@ -151,18 +157,20 @@ class Class:
             part for part in onclick.split("'") if part.startswith("php/aulas/")
         ]
         if len(button_urls) != 1:
-            raise RuntimeError(f"Expecting one url in button, found {len(button_urls)}: {onclick}")
+            raise UnparseableError(
+                f"Expecting one url in button, found {len(button_urls)}: {onclick}"
+            )
         return urljoin(DOMAIN, button_urls[0])
 
     def enroll(self) -> str:
         if self.enroll_url is None:
             raise ValueError("Enroll URL is not set")
         if self.is_enrolled:
-            raise RuntimeError("Already enrolled in class")
+            raise ClassAlreadyEnrolledError
         if not self.is_open:
-            raise RuntimeError("Class is not available")
+            raise ClassNotOpenError
         if self.is_full:
-            raise RuntimeError("Class is full")
+            raise ClassIsFullError
 
         res_html: str = get_url_html(self.enroll_url)
         LOGGER.debug(f"Enrolled at {self.enroll_url} with response: '{res_html}'")
@@ -174,7 +182,7 @@ class Class:
             soup.find_all("script")[-1].text,
         )
         if len(responses) != 1:
-            raise RuntimeError(f"Couldn't parse response for enrollment: {res_html}")
+            raise UnparseableError(f"Couldn't parse response for enrollment: {res_html}")
         LOGGER.info(f"Enrolled with response '{responses[0]}'")
         return responses[0]
 
@@ -193,7 +201,7 @@ class Class:
             soup.find_all("script")[-1].text,
         )
         if len(responses) != 1:
-            raise RuntimeError(f"Couldn't parse response for unenrollment: {res_html}")
+            raise UnparseableError(f"Couldn't parse response for unenrollment: {res_html}")
         LOGGER.info(responses[0])
         return responses[0]
 
@@ -216,6 +224,4 @@ def pick_class(
         ):
             continue
         return class_
-    raise ClassNotFoundError(
-        f"Unable to find class '{class_type}' at {class_time} on {class_date}."
-    )
+    raise ClassNotFoundError(class_type=class_type, class_time=class_time, class_date=class_date)
