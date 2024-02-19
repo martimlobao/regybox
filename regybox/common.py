@@ -1,4 +1,4 @@
-"""Provides common variables and configurations for the Regybox application.
+"""Provide common variables and configurations for the Regybox application.
 
 This module defines common variables and configurations used throughout the
 Regybox application. It also loads environment variables from a .env file.

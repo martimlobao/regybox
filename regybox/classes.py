@@ -1,9 +1,4 @@
-"""Provide classes and functions for interacting with CrossFit classes.
-
-Functions:
-    get_classes: Fetches all classes for a specific date.
-    pick_class: Picks a class based on criteria.
-"""
+"""Provide classes and functions for interacting with CrossFit classes."""
 
 import datetime
 import re
@@ -207,7 +202,7 @@ class Class:
         return responses[0]
 
     def unenroll(self) -> str:
-        """Unenroll the student from the Crossfit class.
+        """Unenroll the student from the CrossFit class.
 
         Raises:
             ValueError: If the unenroll URL is not set.

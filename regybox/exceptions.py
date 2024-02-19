@@ -1,4 +1,4 @@
-"""Defines custom exceptions used in the Regybox application.
+"""Define custom exceptions used in the Regybox application.
 
 Note:
     The RegyboxBaseError class serves as the base class for all Regybox-specific
