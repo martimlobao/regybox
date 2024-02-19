@@ -1,3 +1,10 @@
+"""Provide functionality for managing a connection to the Regybox website.
+
+This module defines the RegyboxSession class, which represents a session with
+the Regybox website. It also provides functions for retrieving HTML content from
+URLs and generating parameters for class retrieval requests.
+"""
+
 import re
 from urllib.parse import urljoin
 
@@ -35,6 +42,14 @@ HEADERS: dict[str, str] = {
 
 
 class RegyboxSession(requests.Session, metaclass=Singleton):
+    """A singleton class representing a session with the Regybox website.
+
+    This class extends the `requests.Session` class and implements a singleton
+    pattern to ensure that only one instance of the session is created. This is
+    needed since every request to the Regybox website requires a valid session
+    to have been set.
+    """
+
     def __init__(self, *, user: str = REGYBOX_USER) -> None:
         super().__init__()
         adapter: HTTPAdapter = HTTPAdapter(max_retries=Retry(connect=10, backoff_factor=0.5))
@@ -43,6 +58,14 @@ class RegyboxSession(requests.Session, metaclass=Singleton):
         self.set_session(user=user)  # only called once since this is a singleton
 
     def set_session(self, *, user: str) -> None:
+        """Set the session for the Regybox API.
+
+        Args:
+            user: The username for the Regybox session.
+
+        Returns:
+            None
+        """
         self.get(
             urljoin(DOMAIN, "set_session.php"),
             headers=HEADERS,
@@ -51,6 +74,14 @@ class RegyboxSession(requests.Session, metaclass=Singleton):
 
     @staticmethod
     def get_session_params(*, user: str) -> dict[str, str]:
+        """Fetch the session parameters for the Regybox API.
+
+        Args:
+            user: The username for the Regybox session.
+
+        Returns:
+            dict[str, str]: The session parameters for the request.
+        """
         return {
             "z": user,
             "y": f"*{user}",

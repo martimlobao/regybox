@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "regybox"
 version = "1.1.0"
-description = "Automatically enroll in Regybox Crossfit classes"
+description = "Automatically enroll in Regybox CrossFit classes"
 authors = ["Martim Lobao <m@rtimlobao.com>"]
 license = "MIT"
 
@@ -17,6 +17,7 @@ urllib3 = "^2.2.0"
 [tool.poetry.group.dev.dependencies]
 black = ">=24.1.1"
 coverage = ">=7.4.1"
+docformatter = ">=1.7.5"
 hypothesis = ">=6.97.3"
 ipython = ">=8.20.0"
 mypy = ">=1.8.0"
@@ -29,10 +30,16 @@ types-pytz = ">=2023.4.0.0"
 types-requests = ">=2.31.0.1"
 yamllint = ">=1.33.0"
 
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
 [tool.black]
 line_length = 99
 preview = true
 
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+[tool.docformatter]
+# recursive = true
+style = "google"
+wrap-descriptions = 80
+wrap-summaries = 80

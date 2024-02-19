@@ -1,3 +1,5 @@
+"""Unit tests for the Regybox application."""
+
 import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any

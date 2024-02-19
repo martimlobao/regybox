@@ -1,3 +1,10 @@
+"""Provide the main functionality for the Regybox application.
+
+This module defines the main function, which is responsible for executing the
+Regybox application. It retrieves the classes for a specified date, picks a
+class based on criteria, and enrolls in the class.
+"""
+
 import datetime
 import time
 
@@ -14,6 +21,14 @@ LONG_WAIT: int = 60
 
 
 def snooze(time_left: int) -> int:
+    """Helper function to determine the wait time between calls.
+
+    Args:
+        time_left: The time remaining in seconds.
+
+    Returns:
+        int: The duration to wait in seconds.
+    """
     if time_left <= MED_WAIT:
         return SHORT_WAIT
     if time_left <= LONG_WAIT:
@@ -28,6 +43,26 @@ def main(
     class_type: str = CLASS_TYPE,
     check_calendar: bool = True,
 ) -> None:
+    """Execute the main Regybox application.
+
+    Args:
+        class_date: The date of the class in the format 'YYYY-MM-DD'. If None,
+            the current date plus 2 days will be used. Defaults to None.
+        class_time: The time of the class in the format 'HH:MM'. Defaults to the
+            value of CLASS_TIME.
+        class_type: The type of class. Defaults to the value of CLASS_TYPE.
+        check_calendar: Flag indicating whether to check a personal calendar for
+            the existence of a planned class at the given date and time.
+            Defaults to True.
+
+    Raises:
+        ClassNotOpenError: If the class is not open for enrollment.
+        RegyboxTimeoutError: If the timeout is reached while waiting for the
+            class to be available.
+
+    Returns:
+        None
+    """
     class_time = class_time.zfill(5)  # needs leading zeros
     LOGGER.info(f"Started at {START.isoformat()}")
     if not class_date:
