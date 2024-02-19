@@ -39,7 +39,7 @@ line_length = 99
 preview = true
 
 [tool.docformatter]
-# recursive = true
+recursive = true
 style = "google"
 wrap-descriptions = 80
 wrap-summaries = 80
