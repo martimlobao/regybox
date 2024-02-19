@@ -1,3 +1,23 @@
+"""The main entry point for the Regybox application.
+
+This script is responsible for executing the Regybox application with the
+provided command-line arguments. It imports the necessary modules, initializes
+the logger, and calls the main function to enroll in a class with the specified
+class date, class time, and class type.
+
+Args:
+    class_date (str): The date of the class.
+    class_time (str): The time of the class.
+    class_type (str): The type of the class.
+
+Raises:
+    RegyboxBaseError: If an expected error occurs during the execution of the
+    main function.
+
+Returns:
+    None
+"""
+
 import sys
 
 from regybox.common import LOGGER

@@ -1,3 +1,5 @@
+"""Provide classes and functions for interacting with CrossFit classes."""
+
 import datetime
 import re
 from dataclasses import dataclass, field
@@ -19,7 +21,7 @@ from regybox.exceptions import (
 
 @dataclass
 class Class:
-    """Represents a class.
+    """Represent a CrossFit class with its attributes and behavior.
 
     This class encapsulates the attributes and behavior of a class,
     including its name, location, date, start and end times, capacity,
@@ -66,7 +68,7 @@ class Class:
     unenroll_url: str | None = field(init=True, repr=False, default=None)
 
     def __init__(self, tag: Tag) -> None:
-        """Initializes a Class object.
+        """Initialize a Class object.
 
         Args:
             tag: The HTML tag representing the class.
@@ -163,6 +165,19 @@ class Class:
         return urljoin(DOMAIN, button_urls[0])
 
     def enroll(self) -> str:
+        """Enroll the student in the CrossFit class.
+
+        Raises:
+            ValueError: If the enroll URL is not set.
+            ClassAlreadyEnrolledError: If the student is already enrolled in the
+                class.
+            ClassNotOpenError: If the class is not open for enrollment.
+            ClassIsFullError: If the class is already full.
+            UnparseableError: If the response for enrollment cannot be parsed.
+
+        Returns:
+            The response message after successful enrollment.
+        """
         if self.enroll_url is None:
             raise ValueError("Enroll URL is not set")
         if self.is_enrolled:
@@ -187,6 +202,16 @@ class Class:
         return responses[0]
 
     def unenroll(self) -> str:
+        """Unenroll the student from the CrossFit class.
+
+        Raises:
+            ValueError: If the unenroll URL is not set.
+            RuntimeError: If the student is not enrolled in the class.
+            UnparseableError: If the response for unenrollment cannot be parsed.
+
+        Returns:
+            The response message indicating successful unenrollment.
+        """
         if self.unenroll_url is None:
             raise ValueError("Unenroll URL is not set")
         if not self.is_enrolled:
@@ -207,6 +232,16 @@ class Class:
 
 
 def get_classes(year: int, month: int, day: int) -> list[Class]:
+    """Fetch all classes for a specific date.
+
+    Args:
+        year: The year of the date.
+        month: The month of the date.
+        day: The day of the date.
+
+    Returns:
+        A list of Class objects representing the classes for the specified date.
+    """
     timestamp: int = int(datetime.datetime(year, month, day, tzinfo=TIMEZONE).timestamp() * 1000)
     res_html = get_classes_html(timestamp)
     soup: BeautifulSoup = BeautifulSoup(res_html, "html.parser")
@@ -216,6 +251,21 @@ def get_classes(year: int, month: int, day: int) -> list[Class]:
 def pick_class(
     classes: list[Class], *, class_time: str, class_type: str, class_date: str
 ) -> Class:
+    """Pick a class from the given list based on the specified criteria.
+
+    Args:
+        classes: The list of classes to search from.
+        class_time: The desired class time.
+        class_type: The desired class type.
+        class_date: The desired class date.
+
+    Returns:
+        The selected class.
+
+    Raises:
+        ClassNotFoundError: If no class matching the specified criteria is
+            found.
+    """
     for class_ in classes:
         if (
             class_.start != class_time

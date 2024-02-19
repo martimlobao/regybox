@@ -6,6 +6,7 @@ pants_ignore = []
 backend_packages = [
   # order is relevant here, since we want to minimize the need for lint and fmt reruns
   "pants.backend.python.lint.pylint",
+  "pants.backend.python.lint.docformatter",
   "pants.backend.python.lint.black",
   "pants.backend.python.typecheck.mypy",
   "pants.backend.build_files.fmt.black",
@@ -48,6 +49,17 @@ requirements = [
 interpreter_constraints = [ "CPython>=3.11,<3.12" ]
 config = "pyproject.toml"
 args = ["--preview"]
+
+[docformatter]
+install_from_resolve = "python-default"
+requirements = [
+  "//:root#docformatter",
+]
+args = [  # redundant with pyproject.toml for some reason
+  '--style="google"',
+  "--wrap-summaries=80",
+  "--wrap-descriptions=80",
+]
 
 [mypy]
 install_from_resolve = "python-default"

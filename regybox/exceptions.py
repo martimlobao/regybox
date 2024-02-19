@@ -1,8 +1,16 @@
+"""Define custom exceptions used in the Regybox application.
+
+Note:
+    The RegyboxBaseError class serves as the base class for all Regybox-specific
+    exceptions. The other exception classes inherit from RegyboxBaseError and
+    provide specific error messages.
+"""
+
+
 class RegyboxBaseError(Exception):
     """Base exception class for Regybox errors.
 
-    This exception serves as the base class for all Regybox-specific
-    exceptions.
+    This exception serves as the base class for all Regybox-specific exceptions.
     """
 
 
@@ -36,22 +44,22 @@ class UnplannedClassError(RegyboxBaseError):
 
     def __init__(self, class_isotime: str) -> None:
         super().__init__(
-            f"Crossfit class at {class_isotime} is not scheduled on personal calendar"
+            f"CrossFit class at {class_isotime} is not scheduled on personal calendar"
         )
 
 
 class ClassUnenrollableBaseError(RegyboxBaseError):
     """Exception raised when a class is unavailable for enrollment.
 
-    This exception is raised when it is not possible to enroll in Crossfit class for any reason.
+    This exception is raised when it is not possible to enroll in CrossFit class
+    for any reason.
     """
 
 
 class ClassNotFoundError(ClassUnenrollableBaseError):
     """Exception raised when a class is not found.
 
-    This exception is raised when a class cannot be found or does not
-    exist.
+    This exception is raised when a class cannot be found or does not exist.
     """
 
     def __init__(self, *, class_type: str, class_time: str, class_date: str) -> None:

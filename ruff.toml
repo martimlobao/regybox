@@ -9,10 +9,6 @@ ignore = [
     "ANN101",  # missing-type-self, deprecated
     "ANN102",  # missing-type-cls, deprecated
     "CPY001",  # missing-copyright-notice
-    "D100",  # undocumented-public-module
-    "D101",  # undocumented-public-class
-    "D102",  # undocumented-public-method
-    "D103",  # undocumented-public-function
     "D104",  # undocumented-public-package
     "D107",  # undocumented-public-init
     "EM101",  # raw-string-in-exception
@@ -39,9 +35,21 @@ ignore = [
 
 [lint.per-file-ignores]
 "tests/**/*.py" = [
+    "D100",  # undocumented-public-module
+    "D101",  # undocumented-public-class
+    "D102",  # undocumented-public-method
+    "D103",  # undocumented-public-function
+    "D104",  # undocumented-public-package
+    "D107",  # undocumented-public-init
     "INP001",  # implicit-namespace-package
     "S101",  # assert
 ]
 
 [lint.pydocstyle]
 convention = "google"
+
+[lint.pycodestyle]
+max-doc-length = 80
+
+[format]
+docstring-code-format = true
