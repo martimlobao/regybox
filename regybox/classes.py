@@ -170,6 +170,19 @@ class Class:
         return urljoin(DOMAIN, button_urls[0])
 
     def enroll(self) -> str:
+        """Enroll the student in the CrossFit class.
+
+        Raises:
+            ValueError: If the enroll URL is not set.
+            ClassAlreadyEnrolledError: If the student is already enrolled in the
+                class.
+            ClassNotOpenError: If the class is not open for enrollment.
+            ClassIsFullError: If the class is already full.
+            UnparseableError: If the response for enrollment cannot be parsed.
+
+        Returns:
+            The response message after successful enrollment.
+        """
         if self.enroll_url is None:
             raise ValueError("Enroll URL is not set")
         if self.is_enrolled:
@@ -194,6 +207,16 @@ class Class:
         return responses[0]
 
     def unenroll(self) -> str:
+        """Unenroll the student from the Crossfit class.
+
+        Raises:
+            ValueError: If the unenroll URL is not set.
+            RuntimeError: If the student is not enrolled in the class.
+            UnparseableError: If the response for unenrollment cannot be parsed.
+
+        Returns:
+            The response message indicating successful unenrollment.
+        """
         if self.unenroll_url is None:
             raise ValueError("Unenroll URL is not set")
         if not self.is_enrolled:
