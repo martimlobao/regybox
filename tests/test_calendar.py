@@ -1,7 +1,7 @@
 import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
-from zoneinfo import ZoneInfo
 
 from regybox.calendar import Calendar, check_cal
 from regybox.common import TIMEZONE
