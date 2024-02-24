@@ -10,7 +10,7 @@ import icalendar
 import recurring_ical_events
 import requests
 
-from regybox.common import CALENDAR_URL, EVENT_NAME, LOGGER
+from regybox.common import CALENDAR_URL, LOGGER
 from regybox.exceptions import UnplannedClassError
 from regybox.utils.singleton import Singleton
 
@@ -56,6 +56,8 @@ class Calendar(metaclass=Singleton):
                 continue
             if type(event["DTSTART"].dt) is datetime.date and type(when) is datetime.datetime:
                 continue
+            if event_name and not event.get("SUMMARY"):
+                continue
             if not event_name or event["SUMMARY"].lower() == event_name.lower():
                 LOGGER.debug(dict(event.sorted_items()))
                 return event
@@ -81,11 +83,12 @@ class Calendar(metaclass=Singleton):
         return events
 
 
-def check_cal(when: datetime.datetime | datetime.date, event_name: str = EVENT_NAME) -> bool:
+def check_cal(date: datetime.date, time: datetime.time, event_name: str | None = None) -> bool:
     """Check if a calendar event exists at the specified date and time.
 
     Args:
-        when: The date and time to check for the event.
+        date: The date to check for the event.
+        time: The time to check for the event.
         event_name: The name of the event to check. Defaults to EVENT_NAME.
 
     Returns:
@@ -95,6 +98,7 @@ def check_cal(when: datetime.datetime | datetime.date, event_name: str = EVENT_N
         UnplannedClassError: If the event does not exist at the specified date
         and time.
     """
+    when: datetime.datetime = datetime.datetime.combine(date, time)
     if not Calendar().find(when=when, event_name=event_name):
         raise UnplannedClassError(when.isoformat())
     return True

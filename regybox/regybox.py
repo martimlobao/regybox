@@ -10,7 +10,7 @@ import time
 
 from regybox.calendar import check_cal
 from regybox.classes import Class, get_classes, pick_class
-from regybox.common import CLASS_TIME, CLASS_TYPE, LOGGER, TIMEZONE
+from regybox.common import CLASS_TIME, CLASS_TYPE, EVENT_NAME, LOGGER, TIMEZONE
 from regybox.exceptions import ClassNotOpenError, RegyboxTimeoutError
 from regybox.utils.time import secs_to_str
 
@@ -66,12 +66,16 @@ def main(
     class_time = class_time.zfill(5)  # needs leading zeros
     LOGGER.info(f"Started at {START.isoformat()}")
     if not class_date:
-        date: datetime.datetime = datetime.datetime.now(TIMEZONE) + datetime.timedelta(days=2)
+        date: datetime.date = (datetime.datetime.now(TIMEZONE) + datetime.timedelta(days=2)).date()
     else:
-        date = datetime.datetime.strptime(class_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE)
+        date = (datetime.datetime.strptime(class_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE)).date()
 
     if check_calendar:
-        check_cal(date)
+        check_cal(
+            date=date,
+            time=datetime.datetime.strptime(class_time, "%H:%M").replace(tzinfo=TIMEZONE).timetz(),
+            event_name=EVENT_NAME,
+        )
 
     timeout: int = 900  # try for 15 minutes
     while (datetime.datetime.now(TIMEZONE) - START).total_seconds() < timeout:
@@ -80,7 +84,7 @@ def main(
             classes,
             class_time=class_time,
             class_type=class_type,
-            class_date=date.date().isoformat(),
+            class_date=date.isoformat(),
         )
         if class_.is_open:
             break
@@ -93,8 +97,8 @@ def main(
 
         wait: int = snooze(class_.time_to_enroll)  # seconds between calls
         LOGGER.info(
-            f"Waiting for {class_type} on {date.date().isoformat()} at {class_time} to be"
-            f" available, ETA in {secs_to_str(class_.time_to_enroll)}. Retrying in {wait} seconds."
+            f"Waiting for {class_type} on {date.isoformat()} at {class_time} to be available, ETA"
+            f" in {secs_to_str(class_.time_to_enroll)}. Retrying in {wait} seconds."
         )
         time.sleep(wait)
     else:

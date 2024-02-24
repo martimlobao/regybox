@@ -5,6 +5,6 @@ python_tests(
     extra_env_vars=[
         "PHPSESSID=42",
         "REGYBOX_USER=1337",
-        "CALENDAR_URL=https://raw.githubusercontent.com/collective/icalendar/master/src/icalendar/tests/calendars/example.ics",
+        "CALENDAR_URL=https://raw.githubusercontent.com/collective/icalendar/v5.0.11/src/icalendar/tests/calendars/timezone_rdate.ics",
     ],
 )
