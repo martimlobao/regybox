@@ -2,13 +2,13 @@
 
 [[package]]
 name = "astroid"
-version = "3.0.3"
+version = "3.1.0"
 description = "An abstract syntax tree for Python with inference support."
 optional = false
 python-versions = ">=3.8.0"
 files = [
-    {file = "astroid-3.0.3-py3-none-any.whl", hash = "sha256:92fcf218b89f449cdf9f7b39a269f8d5d617b27be68434912e11e79203963a17"},
-    {file = "astroid-3.0.3.tar.gz", hash = "sha256:4148645659b08b70d72460ed1921158027a9e53ae8b7234149b1400eddacbb93"},
+    {file = "astroid-3.1.0-py3-none-any.whl", hash = "sha256:951798f922990137ac090c53af473db7ab4e70c770e6d7fae0cec59f74411819"},
+    {file = "astroid-3.1.0.tar.gz", hash = "sha256:ac248253bfa4bd924a0de213707e7ebeeb3138abeb48d798784ead1e56d419d4"},
 ]
 
 [[package]]
@@ -372,13 +372,13 @@ tests = ["asttokens (>=2.1.0)", "coverage", "coverage-enable-subprocess", "ipyth
 
 [[package]]
 name = "hypothesis"
-version = "6.98.8"
+version = "6.98.12"
 description = "A library for property-based testing"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "hypothesis-6.98.8-py3-none-any.whl", hash = "sha256:82d13cc46311c4a8de49a8a8613f4e6afbeabbc037e86d24ac16e2f15a0d676d"},
-    {file = "hypothesis-6.98.8.tar.gz", hash = "sha256:35bcb6e497967e73d968fc4adedaf49ca5d85a22cc8065798716581f2205563a"},
+    {file = "hypothesis-6.98.12-py3-none-any.whl", hash = "sha256:ecb7326fe0101f42f42eb0b6d4886fec600b2b38c33c22ba99a58e0f6c93c651"},
+    {file = "hypothesis-6.98.12.tar.gz", hash = "sha256:584ef03a847464b0d14a63e53fcc3335a75b1f1eb3bcc770a03ff950ee4e279e"},
 ]
 
 [package.dependencies]
@@ -725,17 +725,17 @@ windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
 name = "pylint"
-version = "3.0.3"
+version = "3.1.0"
 description = "python code static checker"
 optional = false
 python-versions = ">=3.8.0"
 files = [
-    {file = "pylint-3.0.3-py3-none-any.whl", hash = "sha256:7a1585285aefc5165db81083c3e06363a27448f6b467b3b0f30dbd0ac1f73810"},
-    {file = "pylint-3.0.3.tar.gz", hash = "sha256:58c2398b0301e049609a8429789ec6edf3aabe9b6c5fec916acd18639c16de8b"},
+    {file = "pylint-3.1.0-py3-none-any.whl", hash = "sha256:507a5b60953874766d8a366e8e8c7af63e058b26345cfcb5f91f89d987fd6b74"},
+    {file = "pylint-3.1.0.tar.gz", hash = "sha256:6a69beb4a6f63debebaab0a3477ecd0f559aa726af4954fc948c51f7a2549e23"},
 ]
 
 [package.dependencies]
-astroid = ">=3.0.1,<=3.1.0-dev0"
+astroid = ">=3.1.0,<=3.2.0-dev0"
 colorama = {version = ">=0.4.5", markers = "sys_platform == \"win32\""}
 dill = [
     {version = ">=0.3.7", markers = "python_version >= \"3.12\""},
