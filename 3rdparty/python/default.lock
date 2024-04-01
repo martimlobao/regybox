@@ -21,7 +21,7 @@
 //     "pytest-cov>=4.1.0",
 //     "pytest>=8.0.0",
 //     "python-dotenv<2.0.0,>=1.0.1",
-//     "recurring-ical-events<3.0.0,>=2.1.3",
+//     "recurring-ical-events<3.0.0,>=2.2.0",
 //     "requests<3.0.0,>=2.31.0",
 //     "ruff>=0",
 //     "types-beautifulsoup4>=4.12.0.5",
@@ -473,13 +473,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "b538df1d22365df84f94c38fb2d9c41a222373594c2a910cc8f4ddc68240a62f",
-              "url": "https://files.pythonhosted.org/packages/f7/5c/02b1360a6fd4b31cdea03422af6873d0d5293ea0af3215656c580df76640/hypothesis-6.99.13-py3-none-any.whl"
+              "hash": "ceaeb7c051085dbec37f2fc4dca524b6304472ff1887fed53b3d84705507c10e",
+              "url": "https://files.pythonhosted.org/packages/9c/e8/e37c3be898a1c966c1799abc6feab0f4e87519b4e338c78d35eaa97ea314/hypothesis-6.100.0-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "e425e8a3f1912e44f62ff3e2768dca19c79f46d43ec70fa56e96e2d7194ccd2d",
-              "url": "https://files.pythonhosted.org/packages/66/c6/8896a3dbe1732b29f419d3442df9fe920cf912aa05e399bf460ddfc6fa5c/hypothesis-6.99.13.tar.gz"
+              "hash": "1841f6b5083844cd4b66965e44a17c0dc8fe8e9c6370c1f7b8d50647fcb2efd3",
+              "url": "https://files.pythonhosted.org/packages/fb/d9/65762008149d8d0d4cd11da2d112b025825f65034d39795016f084640c19/hypothesis-6.100.0.tar.gz"
             }
           ],
           "project_name": "hypothesis",
@@ -492,8 +492,8 @@
             "black>=19.10b0; extra == \"ghostwriter\"",
             "click>=7.0; extra == \"all\"",
             "click>=7.0; extra == \"cli\"",
-            "crosshair-tool>=0.0.53; extra == \"all\"",
-            "crosshair-tool>=0.0.53; extra == \"crosshair\"",
+            "crosshair-tool>=0.0.54; extra == \"all\"",
+            "crosshair-tool>=0.0.54; extra == \"crosshair\"",
             "django>=3.2; extra == \"all\"",
             "django>=3.2; extra == \"django\"",
             "dpcontracts>=0.4; extra == \"all\"",
@@ -524,7 +524,7 @@
             "tzdata>=2024.1; (sys_platform == \"win32\" or sys_platform == \"emscripten\") and extra == \"zoneinfo\""
           ],
           "requires_python": ">=3.8",
-          "version": "6.99.13"
+          "version": "6.100.0"
         },
         {
           "artifacts": [
@@ -588,13 +588,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "3c86f284c8f3d8f2b6c662f885c4889a91df7cd52056fd02b7d8d6195d7f56e9",
-              "url": "https://files.pythonhosted.org/packages/2f/4c/a960e920f0566d46084b7dd03888c1fec2a86e9f09dddae3bedfaab1d459/ipython-8.22.2-py3-none-any.whl"
+              "hash": "07232af52a5ba146dc3372c7bf52a0f890a23edf38d77caef8d53f9cdc2584c1",
+              "url": "https://files.pythonhosted.org/packages/8a/15/ea245239487bbd8d7203fe010ea48c7539e42bf1fde0592313241a3fba3a/ipython-8.23.0-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "2dcaad9049f9056f1fef63514f176c7d41f930daa78d05b82a176202818f2c14",
-              "url": "https://files.pythonhosted.org/packages/43/ac/82acd7bf004bc916f45cdb01622f3ef88199465ca6a7ba0bcf22db27226f/ipython-8.22.2.tar.gz"
+              "hash": "7468edaf4f6de3e1b912e57f66c241e6fd3c7099f2ec2136e239e142e800274d",
+              "url": "https://files.pythonhosted.org/packages/d7/2e/d578cafc51642bb0e4c626e29ca1d580c6a884f540049f744df405373f3a/ipython-8.23.0.tar.gz"
             }
           ],
           "project_name": "ipython",
@@ -609,7 +609,7 @@
             "ipykernel; extra == \"doc\"",
             "ipykernel; extra == \"kernel\"",
             "ipyparallel; extra == \"parallel\"",
-            "ipython[black,doc,kernel,nbconvert,nbformat,notebook,parallel,qtconsole,terminal]; extra == \"all\"",
+            "ipython[black,doc,kernel,matplotlib,nbconvert,nbformat,notebook,parallel,qtconsole]; extra == \"all\"",
             "ipython[test,test_extra]; extra == \"all\"",
             "ipython[test]; extra == \"doc\"",
             "ipython[test]; extra == \"test-extra\"",
@@ -618,6 +618,7 @@
             "matplotlib!=3.2.0; extra == \"test-extra\"",
             "matplotlib-inline",
             "matplotlib; extra == \"doc\"",
+            "matplotlib; extra == \"matplotlib\"",
             "nbconvert; extra == \"nbconvert\"",
             "nbformat; extra == \"nbformat\"",
             "nbformat; extra == \"test-extra\"",
@@ -641,10 +642,10 @@
             "traitlets>=5.13.0",
             "trio; extra == \"test-extra\"",
             "typing-extensions; extra == \"doc\"",
-            "typing-extensions; python_version < \"3.10\""
+            "typing-extensions; python_version < \"3.12\""
           ],
           "requires_python": ">=3.10",
-          "version": "8.22.2"
+          "version": "8.23.0"
         },
         {
           "artifacts": [
@@ -1226,13 +1227,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "b56797700bd63f4657c6dbcb51f2129cc53af44dbbde2dca2db412034a6e347b",
-              "url": "https://files.pythonhosted.org/packages/4c/3b/1abeaa1225dab52a6f59932cd2c267b58b150ff8ecb383f99feab857cb06/recurring_ical_events-2.1.3-py3-none-any.whl"
+              "hash": "4e0bfef7d3522a5154259167f0ecc205820ffb300d55e1e3b8178821e97e5535",
+              "url": "https://files.pythonhosted.org/packages/97/80/a463b1dc3ababed40340f44748c7cdcbcac36cb4e39f87dc8cbd43778cc3/recurring_ical_events-2.2.0-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "72c0be0f17d8293a4ccf4f42354022ed8d724ff93d2889b8c5f178d9c48a445d",
-              "url": "https://files.pythonhosted.org/packages/0d/88/a714d602c2219f5ac3af9909693af9ff82227f12a70f5ef1749b4f112b78/recurring_ical_events-2.1.3.tar.gz"
+              "hash": "405b4acc9173df3665bf2aa8eab78d78eef17d196008483ca9b082c73a7eb3bc",
+              "url": "https://files.pythonhosted.org/packages/8e/f9/bd0da1a9a17cb078c766d297ef107bd602c9acbe72eab2232e0051e536ed/recurring_ical_events-2.2.0.tar.gz"
             }
           ],
           "project_name": "recurring-ical-events",
@@ -1245,7 +1246,7 @@
             "x-wr-timezone>=0.0.5"
           ],
           "requires_python": null,
-          "version": "2.1.3"
+          "version": "2.2.0"
         },
         {
           "artifacts": [
@@ -1696,7 +1697,7 @@
     "pytest-cov>=4.1.0",
     "pytest>=8.0.0",
     "python-dotenv<2.0.0,>=1.0.1",
-    "recurring-ical-events<3.0.0,>=2.1.3",
+    "recurring-ical-events<3.0.0,>=2.2.0",
     "requests<3.0.0,>=2.31.0",
     "ruff>=0",
     "types-beautifulsoup4>=4.12.0.5",
