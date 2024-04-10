@@ -73,11 +73,11 @@ class ClassNotOpenError(ClassUnenrollableBaseError):
         super().__init__("Class is not open for enrollment")
 
 
-class ClassIsFullError(ClassUnenrollableBaseError):
-    """Exception raised when a class is full."""
+class ClassIsOverbookedError(ClassUnenrollableBaseError):
+    """Exception raised when a class is overbooked."""
 
     def __init__(self) -> None:
-        super().__init__("Class is full")
+        super().__init__("Class is overbooked")
 
 
 class ClassAlreadyEnrolledError(ClassUnenrollableBaseError):
