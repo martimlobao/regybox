@@ -12,7 +12,7 @@ from regybox.common import LOGGER, TIMEZONE
 from regybox.connection import DOMAIN, get_classes_html, get_url_html
 from regybox.exceptions import (
     ClassAlreadyEnrolledError,
-    ClassIsFullError,
+    ClassIsOverbookedError,
     ClassNotFoundError,
     ClassNotOpenError,
     UnparseableError,
@@ -36,7 +36,8 @@ class Class:
         max_capacity: The maximum capacity of the class.
         cur_capacity: The current capacity of the class.
         is_open: Indicates if the class is open for enrollment.
-        is_full: Indicates if the class is full.
+        is_overbooked: Indicates if the class is overbooked and cannot take any
+            more users.
         is_enrolled: Indicates if the user is enrolled in the class.
         is_over: Indicates if the class is over.
         is_blocked: Indicates if the user is blocked from enrolling in the
@@ -57,7 +58,7 @@ class Class:
     max_capacity: int
     cur_capacity: int
     is_open: bool
-    is_full: bool
+    is_overbooked: bool
     is_enrolled: bool
     is_over: bool = False
     is_blocked: bool = False
@@ -99,7 +100,7 @@ class Class:
         self.start, *_, self.end = time_.text.split()
         cap_parts: list[str] = capacity.text.split()
         self.cur_capacity, self.max_capacity = int(cap_parts[0]), int(cap_parts[-1])
-        self.is_full = self.cur_capacity >= self.max_capacity
+        self.is_overbooked = bool(self._tag.find("span", attrs={"class": "erro_color"}))
 
         self._init_button()
         self._init_state()
@@ -172,25 +173,27 @@ class Class:
             ClassAlreadyEnrolledError: If the student is already enrolled in the
                 class.
             ClassNotOpenError: If the class is not open for enrollment.
-            ClassIsFullError: If the class is already full.
+            ClassIsOverbookedError: If the class is already overbooked.
             UnparseableError: If the response for enrollment cannot be parsed.
 
         Returns:
             The response message after successful enrollment.
         """
-        if self.enroll_url is None:
-            raise ValueError("Enroll URL is not set")
         if self.is_enrolled:
             raise ClassAlreadyEnrolledError
+        if self.enroll_url is None:
+            raise ValueError("Enroll URL is not set")
         if not self.is_open:
             raise ClassNotOpenError
-        if self.is_full:
-            raise ClassIsFullError
+        if self.is_overbooked:
+            raise ClassIsOverbookedError
 
         res_html: str = get_url_html(self.enroll_url)
         LOGGER.debug(f"Enrolled at {self.enroll_url} with response: '{res_html}'")
         self.is_enrolled = True
-        # set is_waitlisted here
+        # current capacity might have changed since fetching the class, so 
+        # is_waitlisted might be inaccurate in some edge cases
+        self.is_waitlisted = self.cur_capacity >= self.max_capacity
         soup = BeautifulSoup(res_html, "html.parser")
         responses: list[str] = re.findall(
             r"parent\.msg_toast_icon\s\(\"(.+)\",",

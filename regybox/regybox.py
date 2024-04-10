@@ -103,5 +103,8 @@ def main(
         time.sleep(wait)
     else:
         raise RegyboxTimeoutError(timeout)
-    class_.enroll()
+    try:
+        class_.enroll()
+    except ClassAlreadyEnrolledError:
+        LOGGER.info("Already enrolled in class")
     LOGGER.info(f"Runtime: {(datetime.datetime.now(TIMEZONE) - START).total_seconds():.3f}")
