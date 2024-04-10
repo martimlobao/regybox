@@ -191,7 +191,7 @@ class Class:
         res_html: str = get_url_html(self.enroll_url)
         LOGGER.debug(f"Enrolled at {self.enroll_url} with response: '{res_html}'")
         self.is_enrolled = True
-        # current capacity might have changed since fetching the class, so 
+        # current capacity might have changed since fetching the class, so
         # is_waitlisted might be inaccurate in some edge cases
         self.is_waitlisted = self.cur_capacity >= self.max_capacity
         soup = BeautifulSoup(res_html, "html.parser")
