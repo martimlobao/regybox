@@ -3,9 +3,9 @@ update:
 	poetry update
 	pants update-build-files ::
 	pants generate-lockfiles ::
-	pants
-	pants list :: > /dev/null
-	pants filedeps :: > /dev/null
+	$(pants 2>/dev/null)
+	$(pants list :: 2>/dev/null)
+	$(pants filedeps :: 2>/dev/null)
 
 .PHONY: check
 check:
