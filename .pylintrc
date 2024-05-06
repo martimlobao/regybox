@@ -1,6 +1,6 @@
 [MASTER]
 
-py-version=3.11
+py-version=3.12
 
 # Pickle collected data for later comparisons.
 persistent=yes
