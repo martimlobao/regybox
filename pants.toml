@@ -19,7 +19,7 @@ backend_packages = [
 ]
 
 [python]
-interpreter_constraints = [">=3.11,<3.12"]
+interpreter_constraints = [">=3.12,<3.13"]
 enable_resolves = true
 default_resolve = "python-default"
 
@@ -39,6 +39,7 @@ enabled = true
 use_coverage = true
 
 [coverage-py]
+install_from_resolve = "python-default"
 filter = ["regybox"]
 
 [black]
@@ -46,7 +47,7 @@ install_from_resolve = "python-default"
 requirements = [
   "//:root#black",
 ]
-interpreter_constraints = [ "CPython>=3.11,<3.12" ]
+interpreter_constraints = [ "CPython>=3.12,<3.13" ]
 config = "pyproject.toml"
 args = ["--preview"]
 
