@@ -10,7 +10,7 @@ backend_packages = [
   "pants.backend.python.lint.black",
   "pants.backend.python.typecheck.mypy",
   "pants.backend.build_files.fmt.black",
-  "pants.backend.experimental.python.lint.ruff",
+  "pants.backend.experimental.python.lint.ruff.check",
   "pants.backend.experimental.tools.yamllint",
   "pants.backend.python",
   "pants.backend.shell.lint.shellcheck",
@@ -62,6 +62,12 @@ args = [  # redundant with pyproject.toml for some reason
   "--wrap-descriptions=80",
 ]
 
+[ipython]
+install_from_resolve = "python-default"
+requirements = [
+  "//:root#ipython",
+]
+
 [mypy]
 install_from_resolve = "python-default"
 requirements = [
@@ -93,6 +99,7 @@ install_from_resolve = "python-default"
 requirements = [
   "//:root#yamllint",
   "//:yamls",
+  "//:yamllint-config",
 ]
 config_file_name = ".yamllint"
 args = ["--strict"]

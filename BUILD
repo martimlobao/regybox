@@ -8,6 +8,11 @@ resources(
 )
 
 resources(
+    name="yamllint-config",
+    sources=[".yamllint.yml"],
+)
+
+resources(
     name="yamls",
     sources=["**/*.yml"],
 )
