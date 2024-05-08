@@ -11,11 +11,11 @@ from bs4.element import NavigableString, Tag
 from regybox.common import LOGGER, TIMEZONE
 from regybox.connection import DOMAIN, get_classes_html, get_url_html
 from regybox.exceptions import (
-    ClassAlreadyEnrolledError,
     ClassIsOverbookedError,
     ClassNotFoundError,
     ClassNotOpenError,
     UnparseableError,
+    UserAlreadyEnrolledError,
 )
 
 
@@ -36,13 +36,15 @@ class Class:
         max_capacity: The maximum capacity of the class.
         cur_capacity: The current capacity of the class.
         is_open: Indicates if the class is open for enrollment.
-        is_overbooked: Indicates if the class is overbooked and cannot take any
-            more users.
-        is_enrolled: Indicates if the user is enrolled in the class.
+        is_full: Indicates if the class has no remaining capacity, though it
+            but may still be accepting users on the waitlist.
+        is_overbooked: Indicates if the class and its waitlist cannot accept
+            any more users.
         is_over: Indicates if the class is over.
-        is_blocked: Indicates if the user is blocked from enrolling in the
+        user_is_blocked: Indicates if the user is blocked from enrolling in the
             class.
-        is_waitlisted: Indicates if the user is on the class waitlist.
+        user_is_enrolled: Indicates if the user is enrolled in the class.
+        user_is_waitlisted: Indicates if the user is on the class waitlist.
         time_to_start: The number of seconds remaining until the class starts.
         time_to_enroll: The number of seconds remaining until enrollment closes.
         enroll_url: The URL to enroll in the class.
@@ -57,12 +59,13 @@ class Class:
     end: str
     max_capacity: int
     cur_capacity: int
-    is_open: bool
-    is_overbooked: bool
-    is_enrolled: bool
+    is_open: bool = False
+    is_full: bool = False
+    is_overbooked: bool = False
     is_over: bool = False
-    is_blocked: bool = False
-    is_waitlisted: bool = False
+    user_is_blocked: bool = False
+    user_is_enrolled: bool = False
+    user_is_waitlisted: bool = False
     time_to_start: int | None = None
     time_to_enroll: int | None = None
     enroll_url: str | None = field(init=True, repr=False, default=None)
@@ -75,7 +78,7 @@ class Class:
             tag: The HTML tag representing the class.
 
         Raises:
-            ValueError: If unable to parse the class HTML.
+            UnparseableError: If unable to parse the class HTML.
         """
         self._tag = tag
         name: Tag | NavigableString | None = self._tag.find(
@@ -84,7 +87,10 @@ class Class:
         location: Tag | NavigableString | None = self._tag.find(
             "div", attrs={"align": "right", "class": "col-50"}
         )
-        date: int = int(self._tag.attrs["id"].removeprefix("feed_time_slot"))
+        try:
+            date: int = int(self._tag.attrs["id"].removeprefix("feed_time_slot"))
+        except KeyError as e:
+            raise UnparseableError from e
         time_: Tag | NavigableString | None = self._tag.find(
             "div", attrs={"align": "left", "class": "col"}
         )
@@ -92,7 +98,7 @@ class Class:
             "div", attrs={"align": "center", "class": "col"}
         )
         if name is None or location is None or time_ is None or capacity is None:
-            raise ValueError("Unable to parse class HTML")
+            raise UnparseableError
 
         self.name = name.text.strip()
         self.location = location.text.strip()
@@ -100,57 +106,91 @@ class Class:
         self.start, *_, self.end = time_.text.split()
         cap_parts: list[str] = capacity.text.split()
         self.cur_capacity, self.max_capacity = int(cap_parts[0]), int(cap_parts[-1])
+        self.is_full = self.cur_capacity >= self.max_capacity
         self.is_overbooked = bool(self._tag.find("span", attrs={"class": "erro_color"}))
+        self.user_is_waitlisted = bool(
+            self._tag.find("div", attrs={"class": "preloader color-orange"})
+        )
 
         self._init_button()
         self._init_state()
         self._init_timer()
 
     def _init_button(self) -> None:
+        """Sets class attributes mainly using button state.
+
+        This method sets the following attributes:
+            * is_open
+            * user_is_enrolled
+            * unenroll_url
+            * enroll_url
+        """
         button: Tag | NavigableString | None = self._tag.find("button")
         self.is_open = bool(button)
+        if self._tag.find("div", attrs={"class": "letra_10", "style": "padding-top:7px;"}):
+            # edge case when class is open but user is already enrolled in
+            # another class
+            self.is_open = True
 
         if isinstance(button, NavigableString):
             raise TypeError(f"Unexpected button format: {button}")
         if button is None:
-            self.is_enrolled = False
+            self.user_is_enrolled = False
         elif "color-red" in button.attrs["class"]:
-            self.is_enrolled = True
+            self.user_is_enrolled = True
             self.unenroll_url = self._get_button_url(button)
         elif all(attr in button.attrs["class"] for attr in ["buts_inscrever", "color-green"]):
-            self.is_enrolled = False
+            self.user_is_enrolled = False
             self.enroll_url = self._get_button_url(button)
         else:
             raise ValueError(f"Unexpected properties in button object: {button.attrs['class']}")
 
     def _init_state(self) -> None:
+        """Sets class attributes mainly using class descriptors.
+
+        This method sets the following attributes:
+            * is_over
+            * user_is_blocked
+        """
         states: list[Tag | NavigableString] = self._tag.find_all(
             "div", attrs={"align": "right", "class": "col"}
         )
         if not states:
-            raise ValueError("Unable to parse class HTML")
+            raise ValueError
         state: Tag | NavigableString | None = states[-1]
         if not isinstance(state, Tag):
             raise TypeError(f"Unexpected type for state: {state}")
 
+        if not self.is_open and not self.user_is_enrolled:
+            self.user_is_blocked = True
+
         if state.find("span", attrs={"class": "erro_color"}):
-            self.is_blocked = True  # enroll window expired
+            self.user_is_blocked = True  # enroll window expired
         elif state := state.find("div", attrs={"style": "padding-top:7px;"}):
             if not isinstance(state, Tag):
                 raise ValueError(f"Unexpected type for state: {state}")
-            if "class" not in state.attrs:
+            if self.user_is_waitlisted:
+                # explicit logic because next check fails for waitlisted classes
+                self.is_over = False
+            elif "class" not in state.attrs:
                 self.is_over = True
             elif "letra_10" in state.attrs["class"]:
-                self.is_blocked = True  # already enrolled in a class today
+                self.user_is_blocked = True  # already enrolled in a class today
         # if state has no child div, there is a timer
 
     def _init_timer(self) -> None:
+        """Sets class attributes using timers.
+
+        This method sets the following attributes:
+            * time_to_start
+            * time_to_enroll
+        """
         timer: Tag | NavigableString | None = self._tag.find("input", attrs={"class": "timers"})
         if isinstance(timer, Tag):
-            if not self.is_enrolled:  # timer disappears once you're enrolled
-                self.time_to_start = int(timer.attrs["value"])
             if not self.is_open:
                 self.time_to_enroll = int(timer.attrs["value"])
+            elif not self.user_is_enrolled:  # timer disappears once you're enrolled
+                self.time_to_start = int(timer.attrs["value"])
 
     @staticmethod
     def _get_button_url(button: Tag) -> str:
@@ -170,7 +210,7 @@ class Class:
 
         Raises:
             ValueError: If the enroll URL is not set.
-            ClassAlreadyEnrolledError: If the student is already enrolled in the
+            UserAlreadyEnrolledError: If the user is already enrolled in the
                 class.
             ClassNotOpenError: If the class is not open for enrollment.
             ClassIsOverbookedError: If the class is already overbooked.
@@ -179,8 +219,8 @@ class Class:
         Returns:
             The response message after successful enrollment.
         """
-        if self.is_enrolled:
-            raise ClassAlreadyEnrolledError
+        if self.user_is_enrolled:
+            raise UserAlreadyEnrolledError
         if self.enroll_url is None:
             raise ValueError("Enroll URL is not set")
         if not self.is_open:
@@ -190,11 +230,14 @@ class Class:
 
         res_html: str = get_url_html(self.enroll_url)
         LOGGER.debug(f"Enrolled at {self.enroll_url} with response: '{res_html}'")
-        self.is_enrolled = True
-        # current capacity might have changed since fetching the class, so
-        # is_waitlisted might be inaccurate in some edge cases
-        self.is_waitlisted = self.cur_capacity >= self.max_capacity
+        self.user_is_enrolled = True
         soup = BeautifulSoup(res_html, "html.parser")
+        self.user_is_waitlisted = bool(
+            re.findall(
+                r"parent.popup\('php\/popups\/lista_espera\.php'",
+                soup.find_all("script")[0].text,
+            )
+        )
         responses: list[str] = re.findall(
             r"parent\.msg_toast_icon\s\(\"(.+)\",",
             soup.find_all("script")[-1].text,
@@ -217,12 +260,12 @@ class Class:
         """
         if self.unenroll_url is None:
             raise ValueError("Unenroll URL is not set")
-        if not self.is_enrolled:
+        if not self.user_is_enrolled:
             raise RuntimeError("Not enrolled in class")
 
         res_html: str = get_url_html(self.unenroll_url)
         LOGGER.info(f"Unenrolled at {self.unenroll_url} with response: '{res_html}'")
-        self.is_enrolled = False
+        self.user_is_enrolled = False
         soup = BeautifulSoup(res_html, "html.parser")
         responses: list[str] = re.findall(
             r"parent\.msg_toast_icon\s\(\"(.+)\",",

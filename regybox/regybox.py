@@ -11,7 +11,7 @@ import time
 from regybox.calendar import check_cal
 from regybox.classes import Class, get_classes, pick_class
 from regybox.common import CLASS_TIME, CLASS_TYPE, EVENT_NAME, LOGGER, TIMEZONE
-from regybox.exceptions import ClassAlreadyEnrolledError, ClassNotOpenError, RegyboxTimeoutError
+from regybox.exceptions import ClassNotOpenError, RegyboxTimeoutError, UserAlreadyEnrolledError
 from regybox.utils.time import secs_to_str
 
 START: datetime.datetime = datetime.datetime.now(TIMEZONE)
@@ -105,6 +105,6 @@ def main(
         raise RegyboxTimeoutError(timeout)
     try:
         class_.enroll()
-    except ClassAlreadyEnrolledError:
+    except UserAlreadyEnrolledError:
         LOGGER.info("Already enrolled in class")
     LOGGER.info(f"Runtime: {(datetime.datetime.now(TIMEZONE) - START).total_seconds():.3f}")

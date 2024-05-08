@@ -24,6 +24,9 @@ class RegyboxLoginError(RegyboxBaseError):
 class UnparseableError(RegyboxBaseError):
     """Exception raised when an error occurs during parsing of a web page."""
 
+    def __init__(self, message: str = "") -> None:
+        super().__init__(message or "Unable to parse HTML")
+
 
 class RegyboxTimeoutError(RegyboxBaseError):
     """Exception raised when an enrollment timeout occurs."""
@@ -80,8 +83,8 @@ class ClassIsOverbookedError(ClassUnenrollableBaseError):
         super().__init__("Class is overbooked")
 
 
-class ClassAlreadyEnrolledError(ClassUnenrollableBaseError):
+class UserAlreadyEnrolledError(ClassUnenrollableBaseError):
     """Exception raised when a user is already enrolled in a class."""
 
     def __init__(self) -> None:
-        super().__init__("Already enrolled in class")
+        super().__init__("User already enrolled in class")

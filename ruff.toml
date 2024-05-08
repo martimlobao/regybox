@@ -33,6 +33,9 @@ ignore = [
     "W191",  # tab-indentation
 ]
 
+[lint.isort]
+known-first-party = ["regybox"]
+
 [lint.per-file-ignores]
 "tests/**/*.py" = [
     "D100",  # undocumented-public-module
