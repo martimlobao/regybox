@@ -27,6 +27,8 @@ default_resolve = "python-default"
 python-default = "3rdparty/python/default.lock"
 
 [python-infer]
+init_files = "always"
+unowned_dependency_behavior = "error"
 use_rust_parser = true
 
 [repl]
@@ -101,5 +103,5 @@ requirements = [
   "//:yamls",
   "//:yamllint-config",
 ]
-config_file_name = ".yamllint"
+config_file_name = ".yamllint.yml"
 args = ["--strict"]

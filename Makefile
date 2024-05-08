@@ -1,6 +1,7 @@
 .PHONY: update
 update:
 	poetry update
+	pants tailor ::
 	pants update-build-files ::
 	pants generate-lockfiles ::
 	$(pants 2>/dev/null)
@@ -9,9 +10,9 @@ update:
 
 .PHONY: check
 check:
+	pants lint check ::
 	poetry check
 	pants tailor --check update-build-files --check ::
-	pants lint check ::
 
 .PHONY: fix
 fix:
