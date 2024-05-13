@@ -134,7 +134,14 @@ class Class:
 
         if isinstance(button, NavigableString):
             raise TypeError(f"Unexpected button format: {button}")
-        if button is None:
+        if (
+            self._tag.find(
+                "div", attrs={"align": "right", "class": "ok_color", "style": "padding-top:1px;"}
+            )
+            is not None
+        ):
+            self.user_is_enrolled = True
+        elif button is None:
             self.user_is_enrolled = False
         elif "color-red" in button.attrs["class"]:
             self.user_is_enrolled = True
