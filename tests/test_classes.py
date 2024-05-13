@@ -86,8 +86,18 @@ def test_in_progress() -> None:
 
 
 def test_unenroll_closed() -> None:
-    with pytest.raises(FileNotFoundError):
-        extract_class("unenroll_closed.html")
+    class_: Class = extract_class("unenroll_closed.html")
+    assert class_.is_open is False
+    # class_.is_full may be True or False
+    # class_.is_overbooked may be True or False
+    assert class_.is_over is False
+    assert class_.user_is_blocked is False
+    assert class_.user_is_enrolled is True
+    # class_.user_is_waitlisted may be True or False
+    assert class_.time_to_start is None  # timer to start disappears when user is enrolled
+    assert class_.time_to_enroll is None
+    assert class_.enroll_url is None
+    assert class_.unenroll_url is None
 
 
 def test_closed_starting_soon() -> None:
