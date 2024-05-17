@@ -52,5 +52,5 @@ jobs:
             ${{ job.status }} state.
 
             See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
-          to: m@rtimlobao.com
+          to: ${{ secrets.EMAIL_TO }}
           from: Regybox Auto-enroll
