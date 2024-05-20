@@ -50,13 +50,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "951798f922990137ac090c53af473db7ab4e70c770e6d7fae0cec59f74411819",
-              "url": "https://files.pythonhosted.org/packages/ed/1c/ee18acf9070f77253954b7d71b4c0cf8f5969fb23067d8f1a8793573ba00/astroid-3.1.0-py3-none-any.whl"
+              "hash": "e8a0083b4bb28fcffb6207a3bfc9e5d0a68be951dd7e336d5dcf639c682388c0",
+              "url": "https://files.pythonhosted.org/packages/c7/81/f49fae71340af02a6014278517c36449bdd8e8b792f4ef7397f3b054f460/astroid-3.2.2-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "ac248253bfa4bd924a0de213707e7ebeeb3138abeb48d798784ead1e56d419d4",
-              "url": "https://files.pythonhosted.org/packages/a9/b9/f11533eed9b65606fb02f1b0994d8ed0903358bc55a6b9759e42f1134725/astroid-3.1.0.tar.gz"
+              "hash": "8ead48e31b92b2e217b6c9733a21afafe479d52d6e164dd25fb1a770c7c3cf94",
+              "url": "https://files.pythonhosted.org/packages/27/8f/79adb88627d194824decf7b9f4dde9e059b251a7b76809c99f4803be258e/astroid-3.2.2.tar.gz"
             }
           ],
           "project_name": "astroid",
@@ -64,7 +64,7 @@
             "typing-extensions>=4.0.0; python_version < \"3.11\""
           ],
           "requires_python": ">=3.8.0",
-          "version": "3.1.0"
+          "version": "3.2.2"
         },
         {
           "artifacts": [
@@ -478,13 +478,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "3aeeda59bc7878aa2ad066f71925ab9296a148f7fb7d5395a47795035283dec2",
-              "url": "https://files.pythonhosted.org/packages/7e/11/9c98dccddf575970d3ffbd373b741dbab3c69f4e89c900415ae249bdf108/hypothesis-6.101.0-py3-none-any.whl"
+              "hash": "013df31b04a4daede13756f497e60e451963d86f426395a79f99c5d692919bbd",
+              "url": "https://files.pythonhosted.org/packages/a4/fb/f0c4736f7e458436569c87e3d9319f3a5bae1e0db70bf42af21e9886aed4/hypothesis-6.102.4-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "b43242fc2b672b26c81688876976c1c2cc44116050ca12f60eb2671b75eacd45",
-              "url": "https://files.pythonhosted.org/packages/c1/43/dadc55453554ed4400dfbce987158e3a909dda8a025a81b7a8afcc5b133d/hypothesis-6.101.0.tar.gz"
+              "hash": "59b4d144346d5cffb482cc1bafbd21b13ff31608e8c4b3e4630339aee3e87763",
+              "url": "https://files.pythonhosted.org/packages/f9/fa/8fd95a642e1309d9aad9c48cc38aff7493d6be5de8deaa348edfedcb2734/hypothesis-6.102.4.tar.gz"
             }
           ],
           "project_name": "hypothesis",
@@ -529,7 +529,7 @@
             "tzdata>=2024.1; (sys_platform == \"win32\" or sys_platform == \"emscripten\") and extra == \"zoneinfo\""
           ],
           "requires_python": ">=3.8",
-          "version": "6.101.0"
+          "version": "6.102.4"
         },
         {
           "artifacts": [
@@ -911,13 +911,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "17d5a1161b3fd67b390023cb2d3b026bbd40abde6fdb052dfbd3a29c3ba22ee1",
-              "url": "https://files.pythonhosted.org/packages/b0/15/1691fa5aaddc0c4ea4901c26f6137c29d5f6673596fe960a0340e8c308e1/platformdirs-4.2.1-py3-none-any.whl"
+              "hash": "2d7a1657e36a80ea911db832a8a6ece5ee53d8de21edd5cc5879af6530b1bfee",
+              "url": "https://files.pythonhosted.org/packages/68/13/2aa1f0e1364feb2c9ef45302f387ac0bd81484e9c9a4c5688a322fbdfd08/platformdirs-4.2.2-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "031cd18d4ec63ec53e82dceaac0417d218a6863f7745dfcc9efe7793b7039bdf",
-              "url": "https://files.pythonhosted.org/packages/b2/e4/2856bf61e54d7e3a03dd00d0c1b5fa86e6081e8f262eb91befbe64d20937/platformdirs-4.2.1.tar.gz"
+              "hash": "38b7b51f512eed9e84a22788b4bce1de17c0adb134d6becb09836e37d8654cd3",
+              "url": "https://files.pythonhosted.org/packages/f5/52/0763d1d976d5c262df53ddda8d8d4719eedf9594d046f117c25a27261a19/platformdirs-4.2.2.tar.gz"
             }
           ],
           "project_name": "platformdirs",
@@ -934,7 +934,7 @@
             "sphinx>=7.2.6; extra == \"docs\""
           ],
           "requires_python": ">=3.8",
-          "version": "4.2.1"
+          "version": "4.2.2"
         },
         {
           "artifacts": [
@@ -1041,18 +1041,18 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "862eddf25dab42704c5f06d3688b8bc19ef4c99ad8a836b6ff260a3b2fbafee1",
-              "url": "https://files.pythonhosted.org/packages/4b/ce/99e2b80a0c6e699eb216979a70fb3c5aa59dde533778f7f77fc47b7c93bd/pylint-3.1.1-py3-none-any.whl"
+              "hash": "3f8788ab20bb8383e06dd2233e50f8e08949cfd9574804564803441a4946eab4",
+              "url": "https://files.pythonhosted.org/packages/bd/23/7a546224d2931cda031ee3cddc9e723650ad8e491d7c64efbab97e43e16d/pylint-3.2.2-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "c7c2652bf8099c7fb7a63bc6af5c5f8f7b9d7b392fa1d320cb020e222aff28c2",
-              "url": "https://files.pythonhosted.org/packages/23/ef/99c1531ad5454a560a9ff17789320e68d8d7aaceaa8222b293e3fa7488e8/pylint-3.1.1.tar.gz"
+              "hash": "d068ca1dfd735fb92a07d33cb8f288adc0f6bc1287a139ca2425366f7cbe38f8",
+              "url": "https://files.pythonhosted.org/packages/0c/4c/b561478a1ccb91e9b02965cb999d2281894d43e68c0bf3777d023af15f11/pylint-3.2.2.tar.gz"
             }
           ],
           "project_name": "pylint",
           "requires_dists": [
-            "astroid<=3.2.0-dev0,>=3.1.0",
+            "astroid<=3.3.0-dev0,>=3.2.2",
             "colorama>=0.4.5; sys_platform == \"win32\"",
             "dill>=0.2; python_version < \"3.11\"",
             "dill>=0.3.6; python_version >= \"3.11\"",
@@ -1067,19 +1067,19 @@
             "typing-extensions>=3.10.0; python_version < \"3.10\""
           ],
           "requires_python": ">=3.8.0",
-          "version": "3.1.1"
+          "version": "3.2.2"
         },
         {
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "1733f0620f6cda4095bbf0d9ff8022486e91892245bb9e7d5542c018f612f233",
-              "url": "https://files.pythonhosted.org/packages/c4/43/6b1debd95ecdf001bc46789a933f658da3f9738c65f32db3f4e8f2a4ca97/pytest-8.2.0-py3-none-any.whl"
+              "hash": "faccc5d332b8c3719f40283d0d44aa5cf101cec36f88cde9ed8f2bc0538612b1",
+              "url": "https://files.pythonhosted.org/packages/b4/c1/27a1274b73712232328cb5115030057b7dec377f36a518c83f2e01d4f305/pytest-8.2.1-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "d507d4482197eac0ba2bae2e9babf0672eb333017bcedaa5fb1a3d42c1174b3f",
-              "url": "https://files.pythonhosted.org/packages/09/9d/78b3785134306efe9329f40815af45b9215068d6ae4747ec0bc91ff1f4aa/pytest-8.2.0.tar.gz"
+              "hash": "5046e5b46d8e4cac199c373041f26be56fdb81eb4e67dc11d4e10811fc3408fd",
+              "url": "https://files.pythonhosted.org/packages/cf/4e/0ceea141f0e5d09de4053c5338c62615ae2bd9bd3f013813f5ec62e3cf97/pytest-8.2.1.tar.gz"
             }
           ],
           "project_name": "pytest",
@@ -1100,7 +1100,7 @@
             "xmlschema; extra == \"dev\""
           ],
           "requires_python": ">=3.8",
-          "version": "8.2.0"
+          "version": "8.2.1"
         },
         {
           "artifacts": [
