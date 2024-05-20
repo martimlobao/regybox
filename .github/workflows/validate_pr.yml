@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Set up pants
-        uses: pantsbuild/actions/init-pants@v8
+        uses: pantsbuild/actions/init-pants@v9
         with:
           gha-cache-key: ${{ runner.os }}-pants-init-${{ hashFiles('pants.toml') }}
           named-caches-hash: ${{ hashFiles('3rdparty/python/default.lock') }}
@@ -45,7 +45,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Set up pants
-        uses: pantsbuild/actions/init-pants@v8
+        uses: pantsbuild/actions/init-pants@v9
         with:
           named-caches-hash: ${{ hashFiles('python-default.lock') }}
       - name: Test
