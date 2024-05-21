@@ -22,7 +22,7 @@
 //     "pytest>=8.0.0",
 //     "python-dotenv<2.0.0,>=1.0.1",
 //     "recurring-ical-events<3.0.0,>=2.2.1",
-//     "requests<3.0.0,>=2.31.0",
+//     "requests<3.0.0,>=2.32.0",
 //     "ruff>=0",
 //     "types-beautifulsoup4>=4.12.0.5",
 //     "types-pytz>=2023.4.0.0",
@@ -1253,13 +1253,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "58cd2187c01e70e6e26505bca751777aa9f2ee0b7f4300988b709f44e013003f",
-              "url": "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl"
+              "hash": "21ac9465cdf8c1650fe1ecde8a71669a93d4e6f147550483a2967d08396a56a5",
+              "url": "https://files.pythonhosted.org/packages/9c/a6/b9bf71eeb6dc835311b5c47a7c90df57b08061091161639611252257768d/requests-2.32.1-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "942c5a758f98d790eaed1a29cb6eefc7ffb0d1cf7af05c3d2791656dbd6ad1e1",
-              "url": "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6414b7a155ccd8f7f9d4380d62fd5b955065c3/requests-2.31.0.tar.gz"
+              "hash": "eb97e87e64c79e64e5b8ac75cee9dd1f97f49e289b083ee6be96268930725685",
+              "url": "https://files.pythonhosted.org/packages/d8/c1/f32fb7c02e7620928ef14756ff4840cae3b8ef1d62f7e596bc5413300a16/requests-2.32.1.tar.gz"
             }
           ],
           "project_name": "requests",
@@ -1271,8 +1271,8 @@
             "idna<4,>=2.5",
             "urllib3<3,>=1.21.1"
           ],
-          "requires_python": ">=3.7",
-          "version": "2.31.0"
+          "requires_python": ">=3.8",
+          "version": "2.32.1"
         },
         {
           "artifacts": [
@@ -1539,13 +1539,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "6216cdac377c6b9a040ac1c0404f7284bd13199c0e1bb235f4324627e8898cf5",
-              "url": "https://files.pythonhosted.org/packages/8b/ea/91b718b8c0b88e4f61cdd61357cc4a1f8767b32be691fb388299003a3ae3/types_requests-2.31.0.20240406-py3-none-any.whl"
+              "hash": "ab728ba43ffb073db31f21202ecb97db8753ded4a9dc49cb480d8a5350c5c421",
+              "url": "https://files.pythonhosted.org/packages/ff/03/2baab14e06460495b7549188ff27051f9514551485349ea2aa9ca3ac6030/types_requests-2.32.0.20240521-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "4428df33c5503945c74b3f42e82b181e86ec7b724620419a2966e2de604ce1a1",
-              "url": "https://files.pythonhosted.org/packages/b4/40/66afbb030f4a800c08a9312a0653a7aec06ce0bd633d83215eb0f83c0f46/types-requests-2.31.0.20240406.tar.gz"
+              "hash": "c5c4a0ae95aad51f1bf6dae9eed04a78f7f2575d4b171da37b622e08b93eb5d3",
+              "url": "https://files.pythonhosted.org/packages/3e/f0/9c132f1d6ef5bcb1b4a5d0ac746a161d251df84a9808e6abfc4164a04d41/types-requests-2.32.0.20240521.tar.gz"
             }
           ],
           "project_name": "types-requests",
@@ -1553,7 +1553,7 @@
             "urllib3>=2"
           ],
           "requires_python": ">=3.8",
-          "version": "2.31.0.20240406"
+          "version": "2.32.0.20240521"
         },
         {
           "artifacts": [
@@ -1701,7 +1701,7 @@
     "pytest>=8.0.0",
     "python-dotenv<2.0.0,>=1.0.1",
     "recurring-ical-events<3.0.0,>=2.2.1",
-    "requests<3.0.0,>=2.31.0",
+    "requests<3.0.0,>=2.32.0",
     "ruff>=0",
     "types-beautifulsoup4>=4.12.0.5",
     "types-pytz>=2023.4.0.0",
