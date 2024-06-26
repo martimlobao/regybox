@@ -11,7 +11,7 @@ beautifulsoup4 = "^4.12.3"
 icalendar = "^5.0.12"
 python-dotenv = "^1.0.1"
 recurring-ical-events = "^2.2.1"
-requests = "^2.32.2"
+requests = "^2.32.3"
 urllib3 = "^2.2.2"
 
 [tool.poetry.group.dev.dependencies]
