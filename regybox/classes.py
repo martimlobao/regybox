@@ -204,7 +204,7 @@ class Class:
         onclick: str = button.attrs["onclick"]
         LOGGER.debug(f"Found button onclick action: '{onclick}")
         button_urls: list[str] = [
-            part for part in onclick.split("'") if part.startswith("php/aulas/")
+            part for part in onclick.split("'") if ".php" in part
         ]
         if len(button_urls) != 1:
             raise UnparseableError(
@@ -284,6 +284,24 @@ class Class:
         return responses[0]
 
 
+def get_classes_tags(year: int, month: int, day: int) -> list[Tag]:
+    """Fetch all class tags for a specific date.
+
+    Args:
+        year: The year of the date.
+        month: The month of the date.
+        day: The day of the date.
+
+    Returns:
+        A list of Tag objects containing the HTML for the classes for
+        the specified date.
+    """
+    timestamp: int = int(datetime.datetime(year, month, day, tzinfo=TIMEZONE).timestamp() * 1000)
+    res_html = get_classes_html(timestamp)
+    soup: BeautifulSoup = BeautifulSoup(res_html, "html.parser")
+    return soup.find_all("div", attrs={"class": "filtro0"})
+
+
 def get_classes(year: int, month: int, day: int) -> list[Class]:
     """Fetch all classes for a specific date.
 
@@ -295,10 +313,7 @@ def get_classes(year: int, month: int, day: int) -> list[Class]:
     Returns:
         A list of Class objects representing the classes for the specified date.
     """
-    timestamp: int = int(datetime.datetime(year, month, day, tzinfo=TIMEZONE).timestamp() * 1000)
-    res_html = get_classes_html(timestamp)
-    soup: BeautifulSoup = BeautifulSoup(res_html, "html.parser")
-    return [Class(tag) for tag in soup.find_all("div", attrs={"class": "filtro0"})]
+    return [Class(tag) for tag in get_classes_tags(year, month, day)]
 
 
 def pick_class(
