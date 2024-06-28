@@ -132,8 +132,18 @@ def test_full() -> None:
 
 
 def test_overbooked() -> None:
-    with pytest.raises(FileNotFoundError):
-        extract_class("overbooked.html")
+    class_: Class = extract_class("overbooked.html")
+    assert class_.is_open is False
+    assert class_.is_full is True
+    assert class_.is_overbooked is True
+    assert class_.is_over is False
+    assert class_.user_is_blocked is True
+    assert class_.user_is_enrolled is False
+    assert class_.user_is_waitlisted is False
+    assert class_.time_to_start is None  # timer to start disappears when class is overbooked
+    assert class_.time_to_enroll is None
+    assert class_.enroll_url is None
+    assert class_.unenroll_url is None
 
 
 def test_registered_for_other() -> None:
