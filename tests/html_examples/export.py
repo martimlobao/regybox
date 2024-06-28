@@ -1,3 +1,5 @@
+"""Export class tags to HTML files for testing purposes."""
+
 from pathlib import Path
 
 from bs4.element import Tag

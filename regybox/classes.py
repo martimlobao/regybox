@@ -3,6 +3,7 @@
 import datetime
 import re
 from dataclasses import dataclass, field
+from functools import cache
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
@@ -203,9 +204,7 @@ class Class:
     def _get_button_url(button: Tag) -> str:
         onclick: str = button.attrs["onclick"]
         LOGGER.debug(f"Found button onclick action: '{onclick}")
-        button_urls: list[str] = [
-            part for part in onclick.split("'") if ".php" in part
-        ]
+        button_urls: list[str] = [part for part in onclick.split("'") if ".php" in part]
         if len(button_urls) != 1:
             raise UnparseableError(
                 f"Expecting one url in button, found {len(button_urls)}: {onclick}"
@@ -284,9 +283,7 @@ class Class:
         return responses[0]
 
 
-from functools import lru_cache
-
-@lru_cache(maxsize=None)
+@cache
 def get_classes_tags(year: int, month: int, day: int) -> list[Tag]:
     """Fetch all class tags for a specific date.
 
