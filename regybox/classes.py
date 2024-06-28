@@ -284,6 +284,9 @@ class Class:
         return responses[0]
 
 
+from functools import lru_cache
+
+@lru_cache(maxsize=None)
 def get_classes_tags(year: int, month: int, day: int) -> list[Tag]:
     """Fetch all class tags for a specific date.
 
