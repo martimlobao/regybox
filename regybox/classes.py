@@ -3,7 +3,6 @@
 import datetime
 import re
 from dataclasses import dataclass, field
-from functools import cache
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
@@ -283,7 +282,6 @@ class Class:
         return responses[0]
 
 
-@cache
 def get_classes_tags(year: int, month: int, day: int) -> list[Tag]:
     """Fetch all class tags for a specific date.
 
