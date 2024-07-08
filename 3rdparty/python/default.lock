@@ -14,7 +14,7 @@
 //     "coverage>=7.4.1",
 //     "docformatter>=1.7.5",
 //     "hypothesis>=6.97.3",
-//     "icalendar<6.0.0,>=5.0.12",
+//     "icalendar<6.0.0,>=5.0.13",
 //     "ipython>=8.20.0",
 //     "mypy>=1.8.0",
 //     "pylint>=3.0.3",
@@ -478,13 +478,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "383bb2d8b37d8090e82847d7cb1130b9ef04bf8c71addd099f7ee1f7139f00d8",
-              "url": "https://files.pythonhosted.org/packages/58/14/a4c621cb713f6053f37afa78ab3809f9d879182422071ca9d4af61c6d1d9/hypothesis-6.105.0-py3-none-any.whl"
+              "hash": "d8993472a7bccfc20172e02ba8636bb0067add92d1fa05e95a40bab02c1e8305",
+              "url": "https://files.pythonhosted.org/packages/e3/1d/109a3a3f7ee6b3cee39004314536a860d42bb959a3ca47e76303b18c78a2/hypothesis-6.105.1-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "45078be3168c06a0426afca6f139829b28dfea9d2ea79fa1bd498b9783b11c16",
-              "url": "https://files.pythonhosted.org/packages/75/42/3e69545debd218469f592d3e2dcb8173d1640a11057ca505d3d5ed979617/hypothesis-6.105.0.tar.gz"
+              "hash": "d4eedb42193da9507623f4fe27fd38f715ec19ad30ad7c30e3b25594c0b491dc",
+              "url": "https://files.pythonhosted.org/packages/fa/14/c2bc7f3ca21bbfbfe851eed92507bad37b9d05b66707d2407f342ba7f4f7/hypothesis-6.105.1.tar.gz"
             }
           ],
           "project_name": "hypothesis",
@@ -497,15 +497,15 @@
             "black>=19.10b0; extra == \"ghostwriter\"",
             "click>=7.0; extra == \"all\"",
             "click>=7.0; extra == \"cli\"",
-            "crosshair-tool>=0.0.58; extra == \"all\"",
-            "crosshair-tool>=0.0.58; extra == \"crosshair\"",
+            "crosshair-tool>=0.0.59; extra == \"all\"",
+            "crosshair-tool>=0.0.59; extra == \"crosshair\"",
             "django>=3.2; extra == \"all\"",
             "django>=3.2; extra == \"django\"",
             "dpcontracts>=0.4; extra == \"all\"",
             "dpcontracts>=0.4; extra == \"dpcontracts\"",
             "exceptiongroup>=1.0.0; python_version < \"3.11\"",
-            "hypothesis-crosshair>=0.0.6; extra == \"all\"",
-            "hypothesis-crosshair>=0.0.6; extra == \"crosshair\"",
+            "hypothesis-crosshair>=0.0.7; extra == \"all\"",
+            "hypothesis-crosshair>=0.0.7; extra == \"crosshair\"",
             "lark>=0.10.1; extra == \"all\"",
             "lark>=0.10.1; extra == \"lark\"",
             "libcst>=0.3.16; extra == \"all\"",
@@ -529,7 +529,7 @@
             "tzdata>=2024.1; (sys_platform == \"win32\" or sys_platform == \"emscripten\") and extra == \"zoneinfo\""
           ],
           "requires_python": ">=3.8",
-          "version": "6.105.0"
+          "version": "6.105.1"
         },
         {
           "artifacts": [
@@ -1717,7 +1717,7 @@
     "coverage>=7.4.1",
     "docformatter>=1.7.5",
     "hypothesis>=6.97.3",
-    "icalendar<6.0.0,>=5.0.12",
+    "icalendar<6.0.0,>=5.0.13",
     "ipython>=8.20.0",
     "mypy>=1.8.0",
     "pylint>=3.0.3",
