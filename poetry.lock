@@ -888,20 +888,20 @@ files = [
 
 [[package]]
 name = "recurring-ical-events"
-version = "2.2.1"
+version = "2.2.2"
 description = "A Python module which repeats ICalendar events by RRULE, RDATE and EXDATE."
 optional = false
 python-versions = "*"
 files = [
-    {file = "recurring_ical_events-2.2.1-py3-none-any.whl", hash = "sha256:9e8e0390e7cfe2e7425690e6b858eed635bf7560b44cb52260cd3466fec9cec5"},
-    {file = "recurring_ical_events-2.2.1.tar.gz", hash = "sha256:ecfb9d97c39df31248de6fbc3abd7e226c9721bd7a7db525d9c8f90ce81f15c0"},
+    {file = "recurring_ical_events-2.2.2-py3-none-any.whl", hash = "sha256:4d58cbab3dc45ad513d5e66fa3542adf46cbd1f8c08791feba7e14879a8af780"},
+    {file = "recurring_ical_events-2.2.2.tar.gz", hash = "sha256:ef8d2d278c5aa0f28102c20921edbe1926c9a6d91bf8297c633adef0111866d6"},
 ]
 
 [package.dependencies]
-icalendar = ">=5.0.9,<6.0.0"
-python-dateutil = ">=2.8.1"
-pytz = ">=2023.3"
-x-wr-timezone = ">=0.0.5,<1.0.0"
+icalendar = ">=5.0.0,<7.0.0"
+python-dateutil = ">=2.8.1,<3.0.0"
+tzdata = {version = "*", markers = "python_version >= \"3.7\""}
+x-wr-timezone = "==0.*"
 
 [[package]]
 name = "requests"
@@ -1090,6 +1090,17 @@ files = [
 ]
 
 [[package]]
+name = "tzdata"
+version = "2024.1"
+description = "Provider of IANA time zone data"
+optional = false
+python-versions = ">=2"
+files = [
+    {file = "tzdata-2024.1-py2.py3-none-any.whl", hash = "sha256:9068bc196136463f5245e51efda838afa15aaeca9903f49050dfa2679db4d252"},
+    {file = "tzdata-2024.1.tar.gz", hash = "sha256:2674120f8d891909751c38abcdfd386ac0a5a1127954fbc332af6b5ceae07efd"},
+]
+
+[[package]]
 name = "untokenize"
 version = "0.1.1"
 description = "Transforms tokens into original source code (while preserving whitespace)."
@@ -1163,4 +1174,4 @@ dev = ["doc8", "flake8", "flake8-import-order", "rstcheck[sphinx]", "sphinx"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "c7dea87cddfe3eb9700e210ecb0b3af27630031f45eb12043c1b0cffed3b95b9"
+content-hash = "ea930e81de06ce2abac33e55e8b34333de970981282c294eee10a5aadc8362c2"
