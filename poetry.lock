@@ -888,13 +888,13 @@ files = [
 
 [[package]]
 name = "recurring-ical-events"
-version = "2.2.2"
+version = "2.2.3"
 description = "A Python module which repeats ICalendar events by RRULE, RDATE and EXDATE."
 optional = false
 python-versions = "*"
 files = [
-    {file = "recurring_ical_events-2.2.2-py3-none-any.whl", hash = "sha256:4d58cbab3dc45ad513d5e66fa3542adf46cbd1f8c08791feba7e14879a8af780"},
-    {file = "recurring_ical_events-2.2.2.tar.gz", hash = "sha256:ef8d2d278c5aa0f28102c20921edbe1926c9a6d91bf8297c633adef0111866d6"},
+    {file = "recurring_ical_events-2.2.3-py3-none-any.whl", hash = "sha256:c1451960449ff656f07f32620c4f56fe352a5fef486e46d077eea9c608c300fb"},
+    {file = "recurring_ical_events-2.2.3.tar.gz", hash = "sha256:05548cf864447b099b6b7df240396e8f54e0ff47c93b77f719b799beadf1b98e"},
 ]
 
 [package.dependencies]
@@ -1175,4 +1175,4 @@ dev = ["doc8", "flake8", "flake8-import-order", "rstcheck[sphinx]", "sphinx"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "ea930e81de06ce2abac33e55e8b34333de970981282c294eee10a5aadc8362c2"
+content-hash = "03944395f8ac5895581a53132267278bbbf4748c0224c2dfa7d6890f77fda4ba"
