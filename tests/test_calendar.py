@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from regybox.calendar import Calendar, check_cal
+from regybox.cal import Calendar, check_cal
 from regybox.common import TIMEZONE
 from regybox.exceptions import UnplannedClassError
 

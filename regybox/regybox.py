@@ -8,11 +8,11 @@ class based on criteria, and enrolls in the class.
 import datetime
 import time
 
-from regybox.calendar import check_cal
+from regybox.cal import check_cal
 from regybox.classes import Class, get_classes, pick_class
 from regybox.common import CLASS_TIME, CLASS_TYPE, EVENT_NAME, LOGGER, TIMEZONE
 from regybox.exceptions import ClassNotOpenError, RegyboxTimeoutError, UserAlreadyEnrolledError
-from regybox.utils.time import secs_to_str
+from regybox.utils.times import secs_to_str
 
 START: datetime.datetime = datetime.datetime.now(TIMEZONE)
 SHORT_WAIT: int = 1
@@ -59,9 +59,6 @@ def main(
         ClassNotOpenError: If the class is not open for enrollment.
         RegyboxTimeoutError: If the timeout is reached while waiting for the
             class to be available.
-
-    Returns:
-        None
     """
     class_time = class_time.zfill(5)  # needs leading zeros
     LOGGER.info(f"Started at {START.isoformat()}")
