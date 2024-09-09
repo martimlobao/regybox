@@ -62,9 +62,6 @@ class RegyboxSession(requests.Session, metaclass=Singleton):
 
         Args:
             user: The username for the Regybox session.
-
-        Returns:
-            None
         """
         self.get(
             urljoin(DOMAIN, "set_session.php"),
@@ -100,7 +97,7 @@ def get_url_html(url: str, *, params: dict | None = None) -> str:
         The HTML content of the URL as a string.
 
     Raises:
-        requests.HTTPError: If the request to the URL fails.
+        RegyboxLoginError: If the request to the URL fails.
     """
     if not params:
         params = {}
