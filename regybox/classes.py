@@ -124,6 +124,10 @@ class Class:
             * user_is_enrolled
             * unenroll_url
             * enroll_url
+
+        Raises:
+            TypeError: If the button object is not of the expected type.
+            ValueError: If the button object has unexpected properties.
         """
         button: Tag | NavigableString | None = self._tag.find("button")
         self.is_open = bool(button)
@@ -158,6 +162,10 @@ class Class:
         This method sets the following attributes:
             * is_over
             * user_is_blocked
+
+        Raises:
+            ValueError: If the state object is not found.
+            TypeError: If the state object is not of the expected type.
         """
         states: list[Tag | NavigableString] = self._tag.find_all(
             "div", attrs={"align": "right", "class": "col"}
@@ -175,7 +183,7 @@ class Class:
             self.user_is_blocked = True  # enroll window expired
         elif state := state.find("div", attrs={"style": "padding-top:7px;"}):
             if not isinstance(state, Tag):
-                raise ValueError(f"Unexpected type for state: {state}")
+                raise TypeError(f"Unexpected type for state: {state}")
             if self.user_is_waitlisted:
                 # explicit logic because next check fails for waitlisted classes
                 self.is_over = False
