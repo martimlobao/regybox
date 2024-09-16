@@ -27,7 +27,7 @@
 //     "types-beautifulsoup4>=4.12.0.5",
 //     "types-pytz>=2023.4.0.0",
 //     "types-requests>=2.31.0.1",
-//     "urllib3<3.0.0,>=2.2.2",
+//     "urllib3<3.0.0,>=2.2.3",
 //     "yamllint>=1.33.0"
 //   ],
 //   "manylinux": "manylinux2014",
@@ -1764,7 +1764,7 @@
     "types-beautifulsoup4>=4.12.0.5",
     "types-pytz>=2023.4.0.0",
     "types-requests>=2.31.0.1",
-    "urllib3<3.0.0,>=2.2.2",
+    "urllib3<3.0.0,>=2.2.3",
     "yamllint>=1.33.0"
   ],
   "requires_python": [
