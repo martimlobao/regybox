@@ -424,18 +424,21 @@ zoneinfo = ["backports.zoneinfo (>=0.2.1)", "tzdata (>=2024.1)"]
 
 [[package]]
 name = "icalendar"
-version = "5.0.13"
+version = "6.0.0"
 description = "iCalendar parser/generator"
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8"
 files = [
-    {file = "icalendar-5.0.13-py3-none-any.whl", hash = "sha256:5ded5415e2e1edef5ab230024a75878a7a81d518a3b1ae4f34bf20b173c84dc2"},
-    {file = "icalendar-5.0.13.tar.gz", hash = "sha256:92799fde8cce0b61daa8383593836d1e19136e504fa1671f471f98be9b029706"},
+    {file = "icalendar-6.0.0-py3-none-any.whl", hash = "sha256:567e718551d800362db04ca09777295336e1803f6fc6bc0a7a5e258917fa8ed0"},
+    {file = "icalendar-6.0.0.tar.gz", hash = "sha256:7ddf60d343f3c1f716de9b62f6e80ffd95d03cab62464894a0539feab7b5c76e"},
 ]
 
 [package.dependencies]
 python-dateutil = "*"
-pytz = "*"
+tzdata = "*"
+
+[package.extras]
+test = ["coverage", "hypothesis", "pytest", "pytz"]
 
 [[package]]
 name = "idna"
@@ -1195,4 +1198,4 @@ dev = ["doc8", "flake8", "flake8-import-order", "rstcheck[sphinx]", "sphinx"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "ce432772d8224064692f6a961b5437a39e00c12513fb72a6b52c572001b6c7cb"
+content-hash = "cbaa18607b331e9434a6908cd3c95b7117575637f9890249000777395bad2007"
