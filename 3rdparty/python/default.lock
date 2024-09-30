@@ -14,7 +14,7 @@
 //     "coverage>=7.4.1",
 //     "docformatter>=1.7.5",
 //     "hypothesis>=6.97.3",
-//     "icalendar<6.0.0,>=5.0.13",
+//     "icalendar<7.0.0,>=6.0.0",
 //     "ipython>=8.20.0",
 //     "mypy>=1.8.0",
 //     "pylint>=3.0.3",
@@ -554,23 +554,27 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "5ded5415e2e1edef5ab230024a75878a7a81d518a3b1ae4f34bf20b173c84dc2",
-              "url": "https://files.pythonhosted.org/packages/a4/e1/371d172fa02319d5998b22bb61b524eb1be6216a549edd997fd7d00007d0/icalendar-5.0.13-py3-none-any.whl"
+              "hash": "567e718551d800362db04ca09777295336e1803f6fc6bc0a7a5e258917fa8ed0",
+              "url": "https://files.pythonhosted.org/packages/ee/29/13a5fe91bc60eb9e346e82d3ae58959e756b855c1ad5384343ed5d36828a/icalendar-6.0.0-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "92799fde8cce0b61daa8383593836d1e19136e504fa1671f471f98be9b029706",
-              "url": "https://files.pythonhosted.org/packages/3c/d8/ada43e4872aab3bfaf2cc2e09b2d2a5d83f771bfc58ba6a63904a5067db8/icalendar-5.0.13.tar.gz"
+              "hash": "7ddf60d343f3c1f716de9b62f6e80ffd95d03cab62464894a0539feab7b5c76e",
+              "url": "https://files.pythonhosted.org/packages/af/ce/127d44302810184b1680ba5e0ab588325cf427d1a5e8c8479dd2cec80e97/icalendar-6.0.0.tar.gz"
             }
           ],
           "project_name": "icalendar",
           "requires_dists": [
-            "backports.zoneinfo; python_version == \"3.7\" or python_version == \"3.8\"",
+            "backports-zoneinfo; python_version < \"3.9\"",
+            "coverage; extra == \"test\"",
+            "hypothesis; extra == \"test\"",
+            "pytest; extra == \"test\"",
             "python-dateutil",
-            "pytz"
+            "pytz; extra == \"test\"",
+            "tzdata"
           ],
-          "requires_python": ">=3.7",
-          "version": "5.0.13"
+          "requires_python": ">=3.8",
+          "version": "6.0.0"
         },
         {
           "artifacts": [
@@ -1751,7 +1755,7 @@
     "coverage>=7.4.1",
     "docformatter>=1.7.5",
     "hypothesis>=6.97.3",
-    "icalendar<6.0.0,>=5.0.13",
+    "icalendar<7.0.0,>=6.0.0",
     "ipython>=8.20.0",
     "mypy>=1.8.0",
     "pylint>=3.0.3",
