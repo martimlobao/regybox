@@ -21,7 +21,7 @@
 //     "pytest-cov>=4.1.0",
 //     "pytest>=8.0.0",
 //     "python-dotenv<2.0.0,>=1.0.1",
-//     "recurring-ical-events<3.0.0,>=2.2.3",
+//     "recurring-ical-events<4.0.0,>=3.3.2",
 //     "requests<3.0.0,>=2.32.3",
 //     "ruff>=0",
 //     "types-beautifulsoup4>=4.12.0.5",
@@ -1202,24 +1202,6 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "31c7c1817eb7fae7ca4b8c7ee50c72f93aa2dd863de768e1ef4245d426aa0725",
-              "url": "https://files.pythonhosted.org/packages/11/c3/005fcca25ce078d2cc29fd559379817424e94885510568bc1bc53d7d5846/pytz-2024.2-py2.py3-none-any.whl"
-            },
-            {
-              "algorithm": "sha256",
-              "hash": "2aa355083c50a0f93fa581709deac0c9ad65cca8a9e9beac660adcbd493c798a",
-              "url": "https://files.pythonhosted.org/packages/3a/31/3c70bf7603cc2dca0f19bdc53b4537a797747a58875b552c8c413d963a3f/pytz-2024.2.tar.gz"
-            }
-          ],
-          "project_name": "pytz",
-          "requires_dists": [],
-          "requires_python": null,
-          "version": "2024.2"
-        },
-        {
-          "artifacts": [
-            {
-              "algorithm": "sha256",
               "hash": "8b9c7197f7cb2738065c481a0461e50ad02f18c78cd75775628afb4d7137fb3b",
               "url": "https://files.pythonhosted.org/packages/c9/1f/4f998c900485e5c0ef43838363ba4a9723ac0ad73a9dc42068b12aaba4e4/PyYAML-6.0.2-cp312-cp312-musllinux_1_1_x86_64.whl"
             },
@@ -1268,13 +1250,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "c1451960449ff656f07f32620c4f56fe352a5fef486e46d077eea9c608c300fb",
-              "url": "https://files.pythonhosted.org/packages/b9/51/e51afd29264a7406183e8b35cb024d42aa29de1a38461d8c6c8c6309b26c/recurring_ical_events-2.2.3-py3-none-any.whl"
+              "hash": "c1f5a97d354571f431ae5dfd8cf15ec2bb13564c9214b3db3bf377793b8a1831",
+              "url": "https://files.pythonhosted.org/packages/64/60/1cc5532fd79d4c83d20083af9e8510d2a94c51e4197022c17a4d2113937c/recurring_ical_events-3.3.2-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "05548cf864447b099b6b7df240396e8f54e0ff47c93b77f719b799beadf1b98e",
-              "url": "https://files.pythonhosted.org/packages/67/88/7d685a187d0dbef3fdc4287c2f5d9460c26dccf7be8c4b0abf1e06239bce/recurring_ical_events-2.2.3.tar.gz"
+              "hash": "d3d6252af41a6f2dc39de45b8481030b6fca5d371da775b0b22a6aef12b0075c",
+              "url": "https://files.pythonhosted.org/packages/4a/15/fe2a2d440180c82cbb5eb16de0fa0477bc72b49a0a41e1fe3eac28e9fc56/recurring_ical_events-3.3.2.tar.gz"
             }
           ],
           "project_name": "recurring-ical-events",
@@ -1283,10 +1265,11 @@
             "icalendar<7.0.0,>=5.0.0",
             "python-dateutil<3.0.0,>=2.8.1",
             "tzdata; python_version >= \"3.7\"",
-            "x-wr-timezone==0.*"
+            "x-wr-timezone==0.*; python_version <= \"3.8\"",
+            "x-wr-timezone==1.*; python_version >= \"3.9\""
           ],
           "requires_python": null,
-          "version": "2.2.3"
+          "version": "3.3.2"
         },
         {
           "artifacts": [
@@ -1696,22 +1679,22 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "0b5e16f677c8f51ce41087a0b3d4f786c5fdcf78af4f8a75d4d960107dcb6d3a",
-              "url": "https://files.pythonhosted.org/packages/9d/c6/53227e391c641b891e173b0454f137a21cb969dd58b5171e487e4da7e87e/x_wr_timezone-0.0.7-py3-none-any.whl"
+              "hash": "25a981f570ce43a90b2b62e6dea6fe58ea404cc2ec7c6b3e40605a60eb8ad868",
+              "url": "https://files.pythonhosted.org/packages/92/92/9f0ad7ef8499f8175ca7153f0fac07d22ff4a6c6ead7d764895f1f6bb2cd/x_wr_timezone-1.0.1-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "ccbaae164a52086535fd2eb1dced164a5250acc83a672fbb044d11e81a268965",
-              "url": "https://files.pythonhosted.org/packages/5b/13/39d08b2f410884d167ccf123139e92b516a9292403ffb5170c48c2942179/x_wr_timezone-0.0.7.tar.gz"
+              "hash": "720fb58275c450f9563deaa1118c69ecdcad70874e9c0b4a23dcb2c10584af80",
+              "url": "https://files.pythonhosted.org/packages/ad/25/7f3972d5e4861203eadb0fa4ab285dce404005bea547a0685cb2427e711a/x_wr_timezone-1.0.1.tar.gz"
             }
           ],
           "project_name": "x-wr-timezone",
           "requires_dists": [
             "icalendar",
-            "pytz"
+            "tzdata"
           ],
           "requires_python": null,
-          "version": "0.0.7"
+          "version": "1.0.1"
         },
         {
           "artifacts": [
@@ -1762,7 +1745,7 @@
     "pytest-cov>=4.1.0",
     "pytest>=8.0.0",
     "python-dotenv<2.0.0,>=1.0.1",
-    "recurring-ical-events<3.0.0,>=2.2.3",
+    "recurring-ical-events<4.0.0,>=3.3.2",
     "requests<3.0.0,>=2.32.3",
     "ruff>=0",
     "types-beautifulsoup4>=4.12.0.5",
