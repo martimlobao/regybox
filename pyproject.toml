@@ -38,6 +38,10 @@ build-backend = "poetry.core.masonry.api"
 line_length = 99
 preview = true
 
+[tool.isort]
+profile = "black"
+line_length = 99
+
 [tool.docformatter]
 recursive = true
 style = "google"
