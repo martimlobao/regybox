@@ -109,7 +109,7 @@ class Class:
         self.is_full = self.cur_capacity >= self.max_capacity
         self.is_overbooked = bool(self._tag.find("span", attrs={"class": "erro_color"}))
         self.user_is_waitlisted = bool(
-            self._tag.find("div", attrs={"class": "preloader color-orange"})
+            self._tag.find("div", attrs={"class": re.compile(r"preloader\s*color-orange")})
         )
 
         self._init_button()
@@ -131,7 +131,9 @@ class Class:
         """
         button: Tag | NavigableString | None = self._tag.find("button")
         self.is_open = bool(button)
-        if self._tag.find("div", attrs={"class": "letra_10", "style": "padding-top:7px;"}):
+        if self._tag.find(
+            "div", attrs={"class": "letra_10", "style": re.compile(r"padding-top:\s*7px")}
+        ):
             # edge case when class is open but user is already enrolled in
             # another class
             self.is_open = True
@@ -140,7 +142,12 @@ class Class:
             raise TypeError(f"Unexpected button format: {button}")
         if (
             self._tag.find(
-                "div", attrs={"align": "right", "class": "ok_color", "style": "padding-top:1px;"}
+                "div",
+                attrs={
+                    "align": "right",
+                    "class": "ok_color",
+                    "style": re.compile(r"padding-top:\s*1px"),
+                },
             )
             is not None
         ):
@@ -181,7 +188,7 @@ class Class:
 
         if state.find("span", attrs={"class": "erro_color"}):
             self.user_is_blocked = True  # enroll window expired
-        elif state := state.find("div", attrs={"style": "padding-top:7px;"}):
+        elif state := state.find("div", attrs={"style": re.compile(r"padding-top:\s*7px")}):
             if not isinstance(state, Tag):
                 raise TypeError(f"Unexpected type for state: {state}")
             if self.user_is_waitlisted:
