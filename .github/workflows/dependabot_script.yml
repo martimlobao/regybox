@@ -1,6 +1,6 @@
 ---
 name: Dependabot Pants Lockfile Update
-on:  # yamllint disable-line rule:truthy
+on: # yamllint disable-line rule:truthy
   pull_request_target:
     types: [opened, synchronize]
     paths:
@@ -21,7 +21,7 @@ jobs:
         id: setup-python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - name: Set up pants
         uses: pantsbuild/actions/init-pants@v9
         with:

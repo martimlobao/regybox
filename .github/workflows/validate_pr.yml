@@ -1,6 +1,6 @@
 ---
 name: Validate Pull Request
-on:  # yamllint disable-line rule:truthy
+on: # yamllint disable-line rule:truthy
   pull_request:
     branches: [main]
 
@@ -15,7 +15,7 @@ jobs:
         id: setup-python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - name: Set up pants
         uses: pantsbuild/actions/init-pants@v9
         with:
@@ -32,7 +32,7 @@ jobs:
         with:
           name: pants-log-lint
           path: .pants.d/workdir/*.log
-        if: always()  # We want the log even on failures.
+        if: always() # We want the log even on failures.
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -43,7 +43,7 @@ jobs:
         id: setup-python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - name: Set up pants
         uses: pantsbuild/actions/init-pants@v9
         with:
@@ -56,4 +56,4 @@ jobs:
         with:
           name: pants-log-test
           path: .pants.d/workdir/*.log
-        if: always()  # We want the log even on failures.
+        if: always() # We want the log even on failures.
