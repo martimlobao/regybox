@@ -1,10 +1,12 @@
 target-version = "py312"
 line-length = 99
 preview = true
+include = ["**/BUILD"]
 
 [lint]
 select = ["ALL"]
 fixable = ["ALL"]
+exclude = ["**/BUILD"]
 ignore = [
   "CPY001", # missing-copyright-notice
   "D104", # undocumented-public-package
@@ -31,9 +33,6 @@ ignore = [
   "W191", # tab-indentation
 ]
 
-[lint.isort]
-known-first-party = ["regybox"]
-
 [lint.per-file-ignores]
 "tests/**/*.py" = [
   "D100", # undocumented-public-module
@@ -45,6 +44,9 @@ known-first-party = ["regybox"]
   "INP001", # implicit-namespace-package
   "S101", # assert
 ]
+
+[lint.isort]
+known-first-party = ["regybox"]
 
 [lint.pydocstyle]
 convention = "google"

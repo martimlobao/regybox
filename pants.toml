@@ -1,7 +1,7 @@
 [GLOBAL]
 pants_version = "2.20.0"
 colors = true
-pants_ignore = []
+pants_ignore = [".trunk"]
 
 backend_packages = [
   # order is relevant here, since we want to minimize the need for lint and fmt reruns
