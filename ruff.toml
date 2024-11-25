@@ -6,31 +6,29 @@ preview = true
 select = ["ALL"]
 fixable = ["ALL"]
 ignore = [
-    "ANN101",  # missing-type-self, deprecated
-    "ANN102",  # missing-type-cls, deprecated
-    "CPY001",  # missing-copyright-notice
-    "D104",  # undocumented-public-package
-    "D107",  # undocumented-public-init
-    "EM101",  # raw-string-in-exception
-    "EM102",  # f-string-in-exception
-    "G001",  # logging-string-format
-    "G004",  # logging-f-string
-    "TRY003",  # raise-vanilla-args
-    # from https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
-    "COM812",  # missing-trailing-comma
-    "COM819",  # prohibited-trailing-comma
-    "D206",  # indent-with-spaces
-    "D300",  # triple-single-quotes
-    "E111",  # indentation-with-invalid-multiple
-    "E114",  # indentation-with-invalid-multiple-comment
-    "E117",  # over-indented
-    "ISC001",  # single-line-implicit-string-concatenation
-    "ISC002",  # multi-line-implicit-string-concatenation
-    "Q000",  # bad-quotes-inline-string
-    "Q001",  # bad-quotes-multiline-string
-    "Q002",  # bad-quotes-docstring
-    "Q003",  # avoidable-escaped-quote
-    "W191",  # tab-indentation
+  "CPY001", # missing-copyright-notice
+  "D104",   # undocumented-public-package
+  "D107",   # undocumented-public-init
+  "EM101",  # raw-string-in-exception
+  "EM102",  # f-string-in-exception
+  "G001",   # logging-string-format
+  "G004",   # logging-f-string
+  "TRY003", # raise-vanilla-args
+  # from https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+  "COM812", # missing-trailing-comma
+  "COM819", # prohibited-trailing-comma
+  "D206",   # indent-with-spaces
+  "D300",   # triple-single-quotes
+  "E111",   # indentation-with-invalid-multiple
+  "E114",   # indentation-with-invalid-multiple-comment
+  "E117",   # over-indented
+  "ISC001", # single-line-implicit-string-concatenation
+  "ISC002", # multi-line-implicit-string-concatenation
+  "Q000",   # bad-quotes-inline-string
+  "Q001",   # bad-quotes-multiline-string
+  "Q002",   # bad-quotes-docstring
+  "Q003",   # avoidable-escaped-quote
+  "W191",   # tab-indentation
 ]
 
 [lint.isort]
@@ -38,14 +36,14 @@ known-first-party = ["regybox"]
 
 [lint.per-file-ignores]
 "tests/**/*.py" = [
-    "D100",  # undocumented-public-module
-    "D101",  # undocumented-public-class
-    "D102",  # undocumented-public-method
-    "D103",  # undocumented-public-function
-    "D104",  # undocumented-public-package
-    "D107",  # undocumented-public-init
-    "INP001",  # implicit-namespace-package
-    "S101",  # assert
+  "D100",   # undocumented-public-module
+  "D101",   # undocumented-public-class
+  "D102",   # undocumented-public-method
+  "D103",   # undocumented-public-function
+  "D104",   # undocumented-public-package
+  "D107",   # undocumented-public-init
+  "INP001", # implicit-namespace-package
+  "S101",   # assert
 ]
 
 [lint.pydocstyle]
