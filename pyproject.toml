@@ -12,7 +12,7 @@ icalendar = "^6.1.0"
 python-dotenv = "^1.0.1"
 recurring-ical-events = "^3.3.4"
 requests = "^2.32.3"
-urllib3 = "^2.2.3"
+urllib3 = "^2.3.0"
 
 [tool.poetry.group.dev.dependencies]
 black = ">=24.1.1"
