@@ -26,6 +26,9 @@ class Calendar(metaclass=Singleton):
 
     def __init__(self) -> None:
         """Initialize a new instance of the Calendar class."""
+        if not CALENDAR_URL:
+            self.calendar = None
+            return
         if not self.calendar:
             res: requests.models.Response = requests.get(CALENDAR_URL, timeout=10)
             res.raise_for_status()
@@ -46,6 +49,8 @@ class Calendar(metaclass=Singleton):
         Returns:
             The first matching event found, or None if no event is found.
         """
+        if not self.calendar:
+            return None
         events: list[icalendar.cal.Event] = recurring_ical_events.of(self.calendar).at(when)
         for event in events:
             if (
@@ -77,6 +82,8 @@ class Calendar(metaclass=Singleton):
         Returns:
             A list of events that fall within the specified interval.
         """
+        if not self.calendar:
+            return []
         events: list[icalendar.cal.Event] = recurring_ical_events.of(self.calendar).between(
             start, end
         )
@@ -99,6 +106,8 @@ def check_cal(date: datetime.date, time: datetime.time, event_name: str | None =
         and time.
     """
     when: datetime.datetime = datetime.datetime.combine(date, time)
+    if not Calendar().calendar:
+        return True
     if not Calendar().find(when=when, event_name=event_name):
         raise UnplannedClassError(when.isoformat())
     return True

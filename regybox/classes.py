@@ -14,6 +14,7 @@ from regybox.exceptions import (
     ClassIsOverbookedError,
     ClassNotFoundError,
     ClassNotOpenError,
+    NoClassesFoundError,
     UnparseableError,
     UserAlreadyEnrolledError,
 )
@@ -312,7 +313,10 @@ def get_classes_tags(year: int, month: int, day: int) -> list[Tag]:
     timestamp: int = int(datetime.datetime(year, month, day, tzinfo=TIMEZONE).timestamp() * 1000)
     res_html = get_classes_html(timestamp)
     soup: BeautifulSoup = BeautifulSoup(res_html, "html.parser")
-    return soup.find_all("div", attrs={"class": "filtro0"})
+    classes: list[Tag] = soup.find_all("div", attrs={"class": "filtro0"})
+    if not classes:
+        raise NoClassesFoundError(class_date=f"{year}-{month}-{day}")
+    return classes
 
 
 def get_classes(year: int, month: int, day: int) -> list[Class]:
