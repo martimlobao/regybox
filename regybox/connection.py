@@ -125,6 +125,8 @@ def get_classes_params(timestamp: int, *, user: str) -> dict[str, str]:
         "type": "",
         "source": "mes",
         "scroll": "s",
+        "box": "",
+        "plano": "0",
         "z": user,
     }
 

@@ -69,6 +69,13 @@ class ClassNotFoundError(ClassUnenrollableBaseError):
         super().__init__(f"Unable to find class '{class_type}' at {class_time} on {class_date}")
 
 
+class NoClassesFoundError(ClassUnenrollableBaseError):
+    """Exception raised when no classes are found."""
+
+    def __init__(self, *, class_date: str) -> None:
+        super().__init__(f"No classes found on {class_date}")
+
+
 class ClassNotOpenError(ClassUnenrollableBaseError):
     """Exception raised when a class is not open for enrollment."""
 
