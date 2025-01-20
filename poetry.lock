@@ -902,13 +902,13 @@ files = [
 
 [[package]]
 name = "recurring-ical-events"
-version = "3.4.0"
-description = "Calculate recurrence times of events, todos and journals based on icalendar RFC5545."
+version = "3.4.1"
+description = "Calculate recurrence times of events, todos, alarms and journals based on icalendar RFC5545."
 optional = false
 python-versions = "*"
 files = [
-    {file = "recurring_ical_events-3.4.0-py3-none-any.whl", hash = "sha256:a91c2de4350dc5da99ba3bad27232ea63f3ad2e2f22e9466718d770cb9a59317"},
-    {file = "recurring_ical_events-3.4.0.tar.gz", hash = "sha256:7ea75a560bf0526f7a8294dd93e324cc5379d09d520c48d0ccb4958e591dc2ff"},
+    {file = "recurring_ical_events-3.4.1-py3-none-any.whl", hash = "sha256:971bc3be38c03f208e6ad8956adda45227ce8122b63da9457c3a1cf125a56204"},
+    {file = "recurring_ical_events-3.4.1.tar.gz", hash = "sha256:fb94c5caeccb71e776f5f30b95ed90562ababaa3beac0334df87426b2b90c898"},
 ]
 
 [package.dependencies]
@@ -1189,4 +1189,4 @@ dev = ["doc8", "flake8", "flake8-import-order", "rstcheck[sphinx]", "sphinx"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "0b4078c0025f5a58ae5181df6dc1062a20c2527dbed84d82806b3bf40dd3e2d8"
+content-hash = "b0bf8d9929958c2dfe15d70e80a36f9586c2b5487b1f7f32baab86178a8ecfeb"
