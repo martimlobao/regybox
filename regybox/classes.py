@@ -309,6 +309,9 @@ def get_classes_tags(year: int, month: int, day: int) -> list[Tag]:
     Returns:
         A list of Tag objects containing the HTML for the classes for
         the specified date.
+
+    Raises:
+        NoClassesFoundError: If no classes are found for the specified date.
     """
     timestamp: int = int(datetime.datetime(year, month, day, tzinfo=TIMEZONE).timestamp() * 1000)
     res_html = get_classes_html(timestamp)
