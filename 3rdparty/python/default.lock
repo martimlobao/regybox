@@ -22,7 +22,7 @@
 //     "pytest>=8.0.0",
 //     "python-dotenv<2.0.0,>=1.1.0",
 //     "recurring-ical-events<4.0.0,>=3.7.0",
-//     "requests<3.0.0,>=2.32.3",
+//     "requests<3.0.0,>=2.32.4",
 //     "ruff>=0",
 //     "types-beautifulsoup4>=4.12.0.5",
 //     "types-pytz>=2023.4.0.0",
@@ -1263,13 +1263,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "c4b575967938939df64d7a25cb84e0dd9b907f21b4842fcf44eab6e9acfabaec",
-              "url": "https://files.pythonhosted.org/packages/86/5b/03deaffb3e5b91c27110ce377c8019464de050a7529892650617918da827/recurring_ical_events-3.7.0-py3-none-any.whl"
+              "hash": "cf958eb17c92d4dca5c621e44c2b3fffd4ba700dca0db66287c5dc11438f63ba",
+              "url": "https://files.pythonhosted.org/packages/36/25/88a4218cccae06ce6b15e41d2f263dd4a73e8e8cbe41537cd7784a17479b/recurring_ical_events-3.8.0-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "abf635ec48dbfd8204dc5bea2d038a4c283a59161aab55ed140d03aa8494bb30",
-              "url": "https://files.pythonhosted.org/packages/de/aa/52ba02ffb17b86b01f457b47ef19cbfb4ec1bfdbcb11c9bd88398fa3744f/recurring_ical_events-3.7.0.tar.gz"
+              "hash": "3e8c7c35d9bd8956a7ab91afad51477c60d972e1236d3fd1b55087a66bce7d04",
+              "url": "https://files.pythonhosted.org/packages/83/90/05dfcc02ecf58bd170305c88db9e3e3933aa73a1f8abac2b326c7fdc1a98/recurring_ical_events-3.8.0.tar.gz"
             }
           ],
           "project_name": "recurring-ical-events",
@@ -1282,24 +1282,25 @@
             "python-dateutil<3.0.0,>=2.8.1",
             "pytz>=2023.3; extra == \"test\"",
             "restructuredtext-lint; extra == \"test\"",
+            "typing-extensions; python_version <= \"3.9\"",
             "tzdata",
             "x-wr-timezone<3.0.0,>=1.0.0; python_version >= \"3.9\"",
             "x-wr-timezone==0.*; python_version <= \"3.8\""
           ],
           "requires_python": ">=3.8",
-          "version": "3.7.0"
+          "version": "3.8.0"
         },
         {
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "70761cfe03c773ceb22aa2f671b4757976145175cdfca038c02654d061d6dcc6",
-              "url": "https://files.pythonhosted.org/packages/f9/9b/335f9764261e915ed497fcdeb11df5dfd6f7bf257d4a6a2a686d80da4d54/requests-2.32.3-py3-none-any.whl"
+              "hash": "27babd3cda2a6d50b30443204ee89830707d396671944c998b5975b031ac2b2c",
+              "url": "https://files.pythonhosted.org/packages/7c/e4/56027c4a6b4ae70ca9de302488c5ca95ad4a39e190093d6c1a8ace08341b/requests-2.32.4-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "55365417734eb18255590a9ff9eb97e9e1da868d4ccd6402399eaf68af20a760",
-              "url": "https://files.pythonhosted.org/packages/63/70/2bf7780ad2d390a8d301ad0b550f1581eadbd9a20f896afe06353c2a2913/requests-2.32.3.tar.gz"
+              "hash": "27d0316682c8a29834d3264820024b62a36942083d52caf2f14c0591336d3422",
+              "url": "https://files.pythonhosted.org/packages/e1/0a/929373653770d8a0d7ea76c37de6e41f11eb07559b103b1c02cafb3f7cf8/requests-2.32.4.tar.gz"
             }
           ],
           "project_name": "requests",
@@ -1307,12 +1308,12 @@
             "PySocks!=1.5.7,>=1.5.6; extra == \"socks\"",
             "certifi>=2017.4.17",
             "chardet<6,>=3.0.2; extra == \"use-chardet-on-py3\"",
-            "charset-normalizer<4,>=2",
+            "charset_normalizer<4,>=2",
             "idna<4,>=2.5",
             "urllib3<3,>=1.21.1"
           ],
           "requires_python": ">=3.8",
-          "version": "2.32.3"
+          "version": "2.32.4"
         },
         {
           "artifacts": [
@@ -1765,7 +1766,7 @@
     "pytest>=8.0.0",
     "python-dotenv<2.0.0,>=1.1.0",
     "recurring-ical-events<4.0.0,>=3.7.0",
-    "requests<3.0.0,>=2.32.3",
+    "requests<3.0.0,>=2.32.4",
     "ruff>=0",
     "types-beautifulsoup4>=4.12.0.5",
     "types-pytz>=2023.4.0.0",
