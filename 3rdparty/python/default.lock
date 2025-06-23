@@ -488,13 +488,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "3e45c8d4d601c5cdb82d335aa1d0e9d3e9ff147ac7d07f3ef6cbfbd161d90117",
-              "url": "https://files.pythonhosted.org/packages/95/b7/41a3cf277b3e19f7890b9b94a255fa592d861fcb217df5a91b4453321e4e/hypothesis-6.135.11-py3-none-any.whl"
+              "hash": "0dd5b8095e36bd288367c631f864a16c30500b01b17943dcea681233f7421860",
+              "url": "https://files.pythonhosted.org/packages/ce/cf/491a487229b04a2ad56175c74700cfb79635dfce2d942becc6ab10c0ceb9/hypothesis-6.135.14-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "de2881633c06bd96f8fd4f83b4e62a0c060d488dfe2ea61fe1ede0081e2f16af",
-              "url": "https://files.pythonhosted.org/packages/89/d5/d0c7b1dd676c45807de5105e62eeea3c5bfb0ffdd1fe10b3efa3fea0f61e/hypothesis-6.135.11.tar.gz"
+              "hash": "2666df50b3cc40ea08b161a5389d6a1cd5aa3cab0dd8fde0ae339389714a4f67",
+              "url": "https://files.pythonhosted.org/packages/70/a5/d4f74ba61bbe5dd001c998ae8b85f9bfdc6cd29e6c5693d1116847b64251/hypothesis-6.135.14.tar.gz"
             }
           ],
           "project_name": "hypothesis",
@@ -539,7 +539,7 @@
             "watchdog>=4.0.0; extra == \"watchdog\""
           ],
           "requires_python": ">=3.9",
-          "version": "6.135.11"
+          "version": "6.135.14"
         },
         {
           "artifacts": [
@@ -1064,13 +1064,13 @@
           "artifacts": [
             {
               "algorithm": "sha256",
-              "hash": "9ea1544ad55cecf4b8242fab6dd35a93bbce657034b0611ee383099054ab6d8c",
-              "url": "https://files.pythonhosted.org/packages/8a/0b/9fcc47d19c48b59121088dd6da2488a49d5f72dacf8262e2790a1d2c7d15/pygments-2.19.1-py3-none-any.whl"
+              "hash": "86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b",
+              "url": "https://files.pythonhosted.org/packages/c7/21/705964c7812476f378728bdf590ca4b771ec72385c533964653c68e86bdc/pygments-2.19.2-py3-none-any.whl"
             },
             {
               "algorithm": "sha256",
-              "hash": "61c16d2a8576dc0649d9f39e089b5f02bcd27fba10d8fb4dcc28173f7a45151f",
-              "url": "https://files.pythonhosted.org/packages/7c/2d/c3338d48ea6cc0feb8446d8e6937e1408088a72a39937982cc6111d17f84/pygments-2.19.1.tar.gz"
+              "hash": "636cb2477cec7f8952536970bc533bc43743542f70392ae026374600add5b887",
+              "url": "https://files.pythonhosted.org/packages/b0/77/a5b8c569bf593b0140bde72ea885a803b82086995367bf2037de0159d924/pygments-2.19.2.tar.gz"
             }
           ],
           "project_name": "pygments",
@@ -1078,7 +1078,7 @@
             "colorama>=0.4.6; extra == \"windows-terminal\""
           ],
           "requires_python": ">=3.8",
-          "version": "2.19.1"
+          "version": "2.19.2"
         },
         {
           "artifacts": [
