@@ -17,7 +17,7 @@ def test_version() -> None:
     with Path("pyproject.toml").open("rb") as file_:
         project_meta: dict[str, Any] = tomllib.load(file_)
 
-    assert __version__ == project_meta["tool"]["poetry"]["version"]
+    assert __version__ == project_meta["project"]["version"]
 
 
 def test_times() -> None:

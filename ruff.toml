@@ -1,7 +1,7 @@
 target-version = "py312"
 line-length = 99
 preview = true
-include = ["**/BUILD"]
+extend-include = ["**/BUILD"]
 
 [lint]
 select = ["ALL"]
