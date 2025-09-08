@@ -10,9 +10,12 @@ update:
 
 .PHONY: check
 check:
-	pants lint check ::
-	poetry check
-	pants tailor --check update-build-files --check ::
+	uv run ruff check
+	uv run yamllint .
+	uv run pylint src/ tests/
+	# pants lint check ::
+	# poetry check
+	# pants tailor --check update-build-files --check ::
 
 .PHONY: fix
 fix:
