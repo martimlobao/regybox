@@ -4,35 +4,27 @@ version = "1.1.0"
 description = "Automatically enroll in Regybox CrossFit classes"
 readme = "README.md"
 authors = [
-    { name = "Martim Lobao", email = "m@rtimlobao.com" }
+  { name = "Martim Lobao", email = "m@rtimlobao.com" },
 ]
 license = "MIT"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "beautifulsoup4>=4.13.4,<5.0.0",
-    "icalendar>=6.3.1,<7.0.0",
-    "python-dotenv>=1.1.1,<2.0.0",
-    "recurring-ical-events>=3.8.0,<4.0.0",
-    "requests>=2.32.4,<3.0.0",
-    "urllib3>=2.5.0,<3.0.0",
+  "beautifulsoup4>=4.13.4,<5.0.0",
+  "icalendar>=6.3.1,<7.0.0",
+  "python-dotenv>=1.1.1,<2.0.0",
+  "recurring-ical-events>=3.8.0,<4.0.0",
+  "requests>=2.32.4,<3.0.0",
+  "urllib3>=2.5.0,<3.0.0",
 ]
 
-[dependency-groups]
-dev = [
-    "coverage>=7.10.6",
-    "docformatter>=1.7.7",
-    "hypothesis>=6.138.15",
-    "ipython>=9.5.0",
-    "mypy>=1.17.1",
-    "pylint>=3.3.8",
-    "pytest>=8.4.2",
-    "pytest-cov>=6.3.0",
-    "ruff>=0.12.12",
-    "types-beautifulsoup4>=4.12.0.20250516",
-    "types-pytz>=2025.2.0.20250809",
-    "types-requests>=2.32.4.20250809",
-    "yamllint>=1.37.1",
-]
+[tool.poetry.dependencies]
+python = ">=3.12,<3.13"
+beautifulsoup4 = "^4.13.4"
+icalendar = "^6.3.1"
+python-dotenv = "^1.1.1"
+recurring-ical-events = "^3.8.0"
+requests = "^2.32.4"
+urllib3 = "^2.5.0"
 
 [project.scripts]
 regybox = "regybox.__main__:run"
@@ -40,6 +32,17 @@ regybox = "regybox.__main__:run"
 [build-system]
 requires = ["uv_build>=0.8.15,<0.9.0"]
 build-backend = "uv_build"
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+
+[tool.black]
+line_length = 99
+preview = true
+
+[tool.isort]
+profile = "black"
+line_length = 99
 
 [tool.docformatter]
 recursive = true

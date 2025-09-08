@@ -19,6 +19,6 @@ def export_class_tag(tag: Tag, name: str) -> None:
         >>> from regybox.classes import get_classes_tags
         >>> from tests.html_examples.export import export_class_tag
         >>> tags = get_classes_tags(year=2024, month=7, day=1)
-        >>> export_class_tag(tags[0], 'example_class')
+        >>> export_class_tag(tags[0], "example_class")
     """
     Path(__file__).parent.joinpath(f"{name}.html").write_text(tag.prettify(), encoding="utf-8")
