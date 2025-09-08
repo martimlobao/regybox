@@ -1,12 +1,23 @@
-[tool.poetry]
+[project]
 name = "regybox"
 version = "1.1.0"
 description = "Automatically enroll in Regybox CrossFit classes"
-authors = ["Martim Lobao <m@rtimlobao.com>"]
+authors = [
+    { name = "Martim Lobao", email = "m@rtimlobao.com" }
+]
 license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "beautifulsoup4>=4.13.4,<5.0.0",
+    "icalendar>=6.3.1,<7.0.0",
+    "python-dotenv>=1.1.1,<2.0.0",
+    "recurring-ical-events>=3.8.0,<4.0.0",
+    "requests>=2.32.4,<3.0.0",
+    "urllib3>=2.5.0,<3.0.0",
+]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.12,<3.13"
 beautifulsoup4 = "^4.13.4"
 icalendar = "^6.3.1"
 python-dotenv = "^1.1.1"
@@ -33,6 +44,9 @@ yamllint = ">=1.33.0"
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.bandit]
+exclude_dirs = ["tests"]
 
 [tool.black]
 line_length = 99

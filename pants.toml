@@ -1,5 +1,5 @@
 [GLOBAL]
-pants_version = "2.20.0"
+pants_version = "2.27.0"
 colors = true
 pants_ignore = [".trunk"]
 
@@ -7,10 +7,11 @@ backend_packages = [
   # order is relevant here, since we want to minimize the need for lint and fmt reruns
   "pants.backend.python.lint.pylint",
   "pants.backend.python.lint.docformatter",
-  "pants.backend.python.lint.black",
   "pants.backend.python.typecheck.mypy",
+  "pants.backend.python.lint.bandit",
   "pants.backend.build_files.fmt.black",
   "pants.backend.experimental.python.lint.ruff.check",
+  "pants.backend.experimental.python.lint.ruff.format",
   "pants.backend.experimental.tools.yamllint",
   "pants.backend.python",
   "pants.backend.shell.lint.shellcheck",
@@ -43,6 +44,9 @@ use_coverage = true
 [coverage-py]
 install_from_resolve = "python-default"
 filter = ["regybox"]
+
+[bandit]
+config = "pyproject.toml"
 
 [black]
 install_from_resolve = "python-default"
@@ -88,12 +92,6 @@ install_from_resolve = "python-default"
 requirements = [
   "//:root#pytest",
   "//:root#pytest-cov",
-]
-
-[ruff]
-install_from_resolve = "python-default"
-requirements = [
-  "//:root#ruff",
 ]
 
 [yamllint]
