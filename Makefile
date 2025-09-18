@@ -3,7 +3,7 @@ sync:
 	uv sync
 
 .PHONY: check
-check: lint typecheck test
+check: lint typecheck test trunk-check
 
 .PHONY: lint
 lint:
@@ -12,6 +12,7 @@ lint:
 	uv run pylint src/regybox
 	uv run bandit -r src/regybox
 	uv run yamllint .
+	trunk check
 
 .PHONY: format
 format:
@@ -25,3 +26,11 @@ typecheck:
 .PHONY: test
 test:
 	uv run pytest
+
+.PHONY: trunk-check
+trunk-check:
+	trunk check
+
+.PHONY: trunk-fmt
+trunk-fmt:
+	trunk fmt

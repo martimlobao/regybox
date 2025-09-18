@@ -1,9 +1,8 @@
 """Test configuration for the Regybox package."""
 
-import os
 from typing import Final
 
-import requests
+import pytest
 
 CALENDAR_FIXTURE: Final[str] = """BEGIN:VCALENDAR
 VERSION:2.0
@@ -46,9 +45,11 @@ class _StaticResponse:
         """Mirror the requests API without performing any checks."""
 
 
-os.environ.setdefault("REGYBOX_USER", "test-user")
-os.environ.setdefault("PHPSESSID", "test-session")
-os.environ.setdefault("CALENDAR_URL", "https://calendar.local/regybox.ics")
+@pytest.fixture(autouse=True)
+def regybox_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("REGYBOX_USER", "test-user")
+    monkeypatch.setenv("PHPSESSID", "test-session")
+    monkeypatch.setenv("CALENDAR_URL", "https://calendar.local/regybox.ics")
 
 
 def _mock_get(url: str, timeout: int = 10, **_: object) -> _StaticResponse:
@@ -56,4 +57,6 @@ def _mock_get(url: str, timeout: int = 10, **_: object) -> _StaticResponse:
     return _StaticResponse(CALENDAR_FIXTURE)
 
 
-requests.get = _mock_get  # type: ignore[assignment]
+@pytest.fixture
+def mock_requests_get(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("requests.get", _mock_get)

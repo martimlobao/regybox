@@ -18,8 +18,7 @@ The calendar URL is optional, and is used to check if the user's personal calend
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management and the `src/` layout for the package code.
 
-* Install dependencies with `uv sync`.
-* Run the test suite with `uv run pytest`.
-* Lint the code with `make lint` (docformatter, ruff, pylint, bandit, yamllint via uv).
-* Type-check the project with `uv run mypy src tests`.
-
+- Install dependencies with `uv sync`.
+- Run the test suite with `uv run pytest`.
+- Lint the code with `make lint` (docformatter, ruff, pylint, bandit, yamllint via uv).
+- Type-check the project with `uv run mypy src tests`.
