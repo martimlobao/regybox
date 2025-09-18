@@ -17,15 +17,8 @@ dependencies = [
   "urllib3>=2.5.0,<3.0.0",
 ]
 
-[build-system]
-requires = ["hatchling>=1.26.0"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/regybox"]
-
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
   "black>=24.1.1",
   "coverage>=7.4.1",
   "docformatter>=1.7.5",
@@ -43,12 +36,15 @@ dev-dependencies = [
   "yamllint>=1.33.0",
 ]
 
+[project.scripts]
+regybox = "regybox.__main__:run"
+
+[build-system]
+requires = ["uv_build>=0.8.15,<0.9.0"]
+build-backend = "uv_build"
+
 [tool.bandit]
 exclude_dirs = ["tests"]
-
-[tool.black]
-line_length = 99
-preview = true
 
 [tool.isort]
 profile = "black"
