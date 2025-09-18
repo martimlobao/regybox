@@ -71,6 +71,12 @@ END:VCALENDAR
 """
 
 
+mp: pytest.MonkeyPatch = pytest.MonkeyPatch()
+mp.setenv("REGYBOX_USER", "test-user")
+mp.setenv("PHPSESSID", "test-session")
+mp.setenv("CALENDAR_URL", "https://calendar.local/regybox.ics")
+
+
 class _StaticResponse:
     """Minimal response object used to stub `requests.get`."""
 
@@ -79,13 +85,6 @@ class _StaticResponse:
 
     def raise_for_status(self) -> None:
         """Mirror the requests API without performing any checks."""
-
-
-@pytest.fixture(autouse=True)
-def regybox_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("REGYBOX_USER", "test-user")
-    monkeypatch.setenv("PHPSESSID", "test-session")
-    monkeypatch.setenv("CALENDAR_URL", "https://calendar.local/regybox.ics")
 
 
 def _mock_get(url: str, timeout: int = 10, **_: object) -> _StaticResponse:

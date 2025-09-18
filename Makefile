@@ -12,12 +12,12 @@ lint:
 	uv run pylint src/regybox
 	uv run bandit -r src/regybox
 	uv run yamllint .
-	trunk check
 
-.PHONY: format
-format:
+.PHONY: fix
+fix:
 	uv run docformatter -r src tests
-	uv run ruff check --select I --fix src tests
+	uv run ruff check --fix src tests
+	uv run ruff format src tests
 
 .PHONY: typecheck
 typecheck:
