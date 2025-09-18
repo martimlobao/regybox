@@ -70,11 +70,6 @@ END:VEVENT
 END:VCALENDAR
 """
 
-@pytest.fixture(autouse=True)
-def _set_required_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("REGYBOX_USER", "test-user")
-    monkeypatch.setenv("PHPSESSID", "test-session")
-    monkeypatch.setenv("CALENDAR_URL", "https://calendar.local/regybox.ics")
 
 class _StaticResponse:
     """Minimal response object used to stub `requests.get`."""
