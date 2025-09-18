@@ -34,3 +34,7 @@ trunk-check:
 .PHONY: trunk-fmt
 trunk-fmt:
 	trunk fmt
+
+.PHONY: repl
+repl:
+	uv run ipython
