@@ -51,6 +51,7 @@ class RegyboxSession(requests.Session, metaclass=Singleton):
     """
 
     def __init__(self, *, user: str = REGYBOX_USER) -> None:
+        """Initialize a new instance of the RegyboxSession class."""
         super().__init__()
         adapter: HTTPAdapter = HTTPAdapter(max_retries=Retry(connect=10, backoff_factor=0.5))
         self.mount("http://", adapter)
