@@ -18,6 +18,7 @@ class RegyboxLoginError(RegyboxBaseError):
     """Exception raised when a login error occurs."""
 
     def __init__(self) -> None:
+        """Initialize a new instance of the RegyboxLoginError class."""
         super().__init__("Unable to log in")
 
 
@@ -25,6 +26,7 @@ class UnparseableError(RegyboxBaseError):
     """Exception raised when an error occurs during parsing of a web page."""
 
     def __init__(self, message: str = "") -> None:
+        """Initialize a new instance of the UnparseableError class."""
         super().__init__(message or "Unable to parse HTML")
 
 
@@ -32,6 +34,7 @@ class RegyboxTimeoutError(RegyboxBaseError):
     """Exception raised when an enrollment timeout occurs."""
 
     def __init__(self, timeout_secs: int, *, time_to_enroll: str | None = None) -> None:
+        """Initialize a new instance of the RegyboxTimeoutError class."""
         if time_to_enroll:
             message = (
                 f"Enrollment for class opens in {time_to_enroll}, which is more than allowed"
@@ -46,6 +49,7 @@ class UnplannedClassError(RegyboxBaseError):
     """Exception raised when a class is not planned on the user's calendar."""
 
     def __init__(self, class_isotime: str) -> None:
+        """Initialize a new instance of the UnplannedClassError class."""
         super().__init__(
             f"CrossFit class at {class_isotime} is not scheduled on personal calendar"
         )
@@ -66,6 +70,7 @@ class ClassNotFoundError(ClassUnenrollableBaseError):
     """
 
     def __init__(self, *, class_type: str, class_time: str, class_date: str) -> None:
+        """Initialize a new instance of the ClassNotFoundError class."""
         super().__init__(f"Unable to find class '{class_type}' at {class_time} on {class_date}")
 
 
@@ -73,6 +78,7 @@ class NoClassesFoundError(ClassUnenrollableBaseError):
     """Exception raised when no classes are found."""
 
     def __init__(self, *, class_date: str) -> None:
+        """Initialize a new instance of the NoClassesFoundError class."""
         super().__init__(f"No classes found on {class_date}")
 
 
@@ -80,6 +86,7 @@ class ClassNotOpenError(ClassUnenrollableBaseError):
     """Exception raised when a class is not open for enrollment."""
 
     def __init__(self) -> None:
+        """Initialize a new instance of the ClassNotOpenError class."""
         super().__init__("Class is not open for enrollment")
 
 
@@ -87,6 +94,7 @@ class ClassIsOverbookedError(ClassUnenrollableBaseError):
     """Exception raised when a class is overbooked."""
 
     def __init__(self) -> None:
+        """Initialize a new instance of the ClassIsOverbookedError class."""
         super().__init__("Class is overbooked")
 
 
@@ -94,4 +102,5 @@ class UserAlreadyEnrolledError(ClassUnenrollableBaseError):
     """Exception raised when a user is already enrolled in a class."""
 
     def __init__(self) -> None:
+        """Initialize a new instance of the UserAlreadyEnrolledError class."""
         super().__init__("User already enrolled in class")
