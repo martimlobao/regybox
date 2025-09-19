@@ -7,17 +7,11 @@ check: lint typecheck test trunk-check
 
 .PHONY: lint
 lint:
+	uv run ruff check
 	uv run docformatter --check -r src tests
-	uv run ruff check src tests
-	uv run pylint src/regybox
-	uv run bandit -r src/regybox
+	uv run pylint src
+	uv run bandit -r src
 	uv run yamllint .
-
-.PHONY: fix
-fix:
-	uv run docformatter -r src tests
-	uv run ruff check --fix src tests
-	uv run ruff format src tests
 
 .PHONY: typecheck
 typecheck:
@@ -26,6 +20,12 @@ typecheck:
 .PHONY: test
 test:
 	uv run pytest
+
+.PHONY: fix
+fix:
+	uv run ruff format
+	uv run ruff check --fix
+	uv run docformatter -r src tests
 
 .PHONY: trunk-check
 trunk-check:
