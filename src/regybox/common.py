@@ -39,4 +39,4 @@ EVENT_NAME: str = "CrossFit"
 
 REGYBOX_USER: str = os.environ["REGYBOX_USER"]
 PHPSESSID: str = os.environ["PHPSESSID"]
-CALENDAR_URL: str | None = os.environ.get("CALENDAR_URL")
+CALENDAR_URL: str = os.environ.get("CALENDAR_URL", "")
