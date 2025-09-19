@@ -8,7 +8,7 @@ from regybox.common import TIMEZONE
 from regybox.exceptions import UnplannedClassError
 
 
-def test_check_cal() -> None:
+def test_check_cal(mock_requests_get: pytest.MonkeyPatch) -> None:  # noqa: ARG001
     assert check_cal(datetime.date(2012, 2, 13), datetime.time(10, 0)) is True
     with pytest.raises(UnplannedClassError):
         check_cal(datetime.date(2012, 2, 13), datetime.time(10, 0), event_name="foo")

@@ -15,30 +15,22 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
-      - name: Set up python
-        id: setup-python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - name: Set up pants
-        uses: pantsbuild/actions/init-pants@v10
-        with:
-          gha-cache-key: ${{ runner.os }}-pants-init-${{ hashFiles('pants.toml') }}
-          named-caches-hash: ${{ hashFiles('3rdparty/python/default.lock') }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
       - name: Get class date
         run: |
           echo "CLASS_DATE=$(date -d '+3 days' +%F)" >> $GITHUB_ENV
           echo "CLASS_TIME='06:30'" >> $GITHUB_ENV
           echo "CLASS_TYPE='WOD Rato'" >> $GITHUB_ENV
       - name: Regybox enroll
-        run: pants run regybox:main -- ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
+        run: uv run regybox ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
         env:
           PHPSESSID: ${{ secrets.PHPSESSID }}
           REGYBOX_USER: ${{ secrets.REGYBOX_USER }}
           CALENDAR_URL: ${{ secrets.CALENDAR_URL }}
       - name: Send mail
         if: always()
-        uses: dawidd6/action-send-mail@v6
+        uses: dawidd6/action-send-mail@6d98ae34d733f9a723a9e04e94f2f24ba05e1402
         with:
           server_address: smtp.gmail.com
           server_port: 465

@@ -1,27 +1,40 @@
-.PHONY: update
-update:
-	poetry update
-	pants tailor ::
-	pants update-build-files ::
-	pants generate-lockfiles ::
-	$(pants 2>/dev/null)
-	$(pants list :: 2>/dev/null)
-	$(pants filedeps :: 2>/dev/null)
+.PHONY: sync
+sync:
+	uv sync
 
 .PHONY: check
-check:
-	pants lint check ::
-	poetry check
-	pants tailor --check update-build-files --check ::
+check: lint typecheck test trunk-check
+
+.PHONY: lint
+lint:
+	uv run docformatter --check -r src tests
+	uv run ruff check src tests
+	uv run pylint src/regybox
+	uv run bandit -r src/regybox
+	uv run yamllint .
 
 .PHONY: fix
 fix:
-	pants fix ::
+	uv run docformatter -r src tests
+	uv run ruff check --fix src tests
+	uv run ruff format src tests
+
+.PHONY: typecheck
+typecheck:
+	uv run mypy src tests
 
 .PHONY: test
 test:
-	pants test ::
+	uv run pytest
+
+.PHONY: trunk-check
+trunk-check:
+	trunk check
+
+.PHONY: trunk-fmt
+trunk-fmt:
+	trunk fmt
 
 .PHONY: repl
 repl:
-	pants repl //:root
+	uv run ipython

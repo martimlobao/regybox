@@ -6,11 +6,12 @@ from bs4.element import PageElement, Tag
 
 from regybox.classes import Class
 from regybox.exceptions import UnparseableError
-from tests.html_examples import __package__ as html_package
+
+from . import html_examples
 
 
 def extract_class(filename: str) -> Class:
-    html: str = resources.files(html_package).joinpath(filename).read_text()
+    html: str = resources.files(html_examples).joinpath(filename).read_text()
     if not html:
         raise FileNotFoundError(f"HTML file {filename} is empty")
     element: PageElement = BeautifulSoup(html, "html.parser").contents[0]
