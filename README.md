@@ -57,15 +57,16 @@ The steps below explain the entire process as if you have never used GitHub befo
 6. If you need the enrollment to happen right when the class opens, set the schedule to start **5—15 minutes before** the signup window. GitHub sometimes takes a few minutes to start the job.
 
    ```yaml
+   ---
    name: Book my Regybox class
 
    on:
+     workflow_dispatch:
      schedule: # 48 hours and 15 minutes in advance for morning classes on weekdays
        # standard time, will be off on the last week of march
        - cron: 15 6 * 1-3,11-12 5-6,0-2
        # daylight saving time, will be off on the last week of october
        - cron: 15 5 * 4-10 5-6,0-2
-     workflow_dispatch: {}
 
    jobs:
      enroll:

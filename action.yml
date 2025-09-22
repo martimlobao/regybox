@@ -12,7 +12,7 @@ inputs:
   class-date-offset-days:
     description: How many days from today the class should be booked.
     required: false
-    default: 3
+    default: "2"
   phpsessid:
     description: Value of the PHPSESSID cookie from regybox.pt.
     required: true
