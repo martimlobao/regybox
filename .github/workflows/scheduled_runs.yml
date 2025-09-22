@@ -18,7 +18,7 @@ jobs:
       - name: Regybox auto enrollment
         uses: ./
         with:
-          class-time: "06:30"
+          class-time: 06:30
           class-type: WOD Rato
           class-date-offset-days: 3
           phpsessid: ${{ secrets.PHPSESSID }}

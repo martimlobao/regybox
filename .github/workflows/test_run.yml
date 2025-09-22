@@ -1,7 +1,7 @@
 ---
 name: Book my Regybox class
 
-on:
+on: # yamllint disable-line rule:truthy
   workflow_dispatch:
   schedule: # 60 hours in advance for morning classes
     # standard time, will be off on the last week of march
@@ -16,7 +16,7 @@ jobs:
       - name: Run the Regybox Auto Enroll action
         uses: martimlobao/regybox@main
         with:
-          class-time: "06:30"
+          class-time: 06:30
           class-type: WOD Rato
           class-date-offset-days: 3
           phpsessid: ${{ secrets.PHPSESSID }}
