@@ -46,12 +46,12 @@ inputs:
   email-port:
     description: SMTP server port.
     required: false
-    default: !!str 465
+    default: "465"
 runs:
   using: composite
   steps:
     - name: Install uv
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4
     - name: Prepare class information
       shell: bash
       working-directory: ${{ github.action_path }}
@@ -73,6 +73,19 @@ runs:
         REGYBOX_USER: ${{ inputs.regybox-user }}
         CALENDAR_URL: ${{ inputs.calendar-url }}
       run: uv run regybox "${CLASS_DATE}" "${CLASS_TIME}" "${CLASS_TYPE}"
+    - name: Validate email inputs
+      if: ${{ inputs.send-email != 'false' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        missing=()
+        [[ -z "${{ inputs.email-to }}" ]] && missing+=("email-to")
+        [[ -z "${{ inputs.email-username }}" ]] && missing+=("email-username")
+        [[ -z "${{ inputs.email-password }}" ]] && missing+=("email-password")
+        if [[ ${#missing[@]} -gt 0 ]]; then
+          printf 'Missing required email inputs when send-email is true: %s\n' "${missing[*]}" >&2
+          exit 1
+        fi
     - name: Send confirmation email
       if: ${{ inputs.send-email != 'false' }}
       uses: dawidd6/action-send-mail@6d98ae34d733f9a723a9e04e94f2f24ba05e1402
