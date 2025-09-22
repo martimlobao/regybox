@@ -52,6 +52,9 @@ runs:
   steps:
     - name: Install uv
       uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4
+      with:
+        ignore-empty-workdir: true
+        enable-cache: false
     - name: Prepare class information
       shell: bash
       working-directory: ${{ github.action_path }}
@@ -65,7 +68,8 @@ runs:
         echo "CLASS_DATE=${class_date}" >> "$GITHUB_ENV"
         echo "CLASS_TIME=${INPUT_CLASS_TIME}" >> "$GITHUB_ENV"
         echo "CLASS_TYPE=${INPUT_CLASS_TYPE}" >> "$GITHUB_ENV"
-    - name: Enroll in class
+    - id: enroll
+      name: Enroll in class
       shell: bash
       working-directory: ${{ github.action_path }}
       env:
@@ -73,6 +77,19 @@ runs:
         REGYBOX_USER: ${{ inputs.regybox-user }}
         CALENDAR_URL: ${{ inputs.calendar-url }}
       run: uv run regybox "${CLASS_DATE}" "${CLASS_TIME}" "${CLASS_TYPE}"
+    - name: Capture enrollment result
+      if: always()
+      shell: bash
+      env:
+        ENROLL_OUTCOME: ${{ steps.enroll.outcome }}
+      run: |
+        set -euo pipefail
+        if [[ "${ENROLL_OUTCOME}" == "success" ]]; then
+          result=success
+        else
+          result=failure
+        fi
+        echo "ENROLL_RESULT=${result}" >> "$GITHUB_ENV"
     - name: Validate email inputs
       if: always() && inputs.send-email != 'false'
       shell: bash
@@ -95,10 +112,10 @@ runs:
         username: ${{ inputs.email-username }}
         password: ${{ inputs.email-password }}
         subject: >-
-          Regybox Auto-enroll: ${{ job.status }} for ${{ env.CLASS_TYPE }} on
+          Regybox Auto-enroll: ${{ env.ENROLL_RESULT }} for ${{ env.CLASS_TYPE }} on
           ${{ env.CLASS_DATE }} at ${{ env.CLASS_TIME }}
         body: >
-          The Regybox enrollment finished in a ${{ job.status }} state.
+          The Regybox enrollment finished in a ${{ env.ENROLL_RESULT }} state.
 
           See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} for the full log.
         to: ${{ inputs.email-to }}
