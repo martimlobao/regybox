@@ -39,34 +39,16 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-      - name: Get class date
-        run: |
-          echo "CLASS_DATE=$(date -d '+2 days' +%F)" >> $GITHUB_ENV
-          echo "CLASS_TIME='10:00'" >> $GITHUB_ENV
-          echo "CLASS_TYPE='Weekend WOD Rato'" >> $GITHUB_ENV
-      - name: Regybox enroll
-        run: uv run regybox ${{ env.CLASS_DATE }} ${{ env.CLASS_TIME }} ${{ env.CLASS_TYPE }}
-        env:
-          PHPSESSID: ${{ secrets.PHPSESSID }}
-          REGYBOX_USER: ${{ secrets.REGYBOX_USER }}
-          CALENDAR_URL: ${{ secrets.CALENDAR_URL }}
-      - name: Send mail
-        if: always()
-        uses: dawidd6/action-send-mail@6d98ae34d733f9a723a9e04e94f2f24ba05e1402
+      - name: Regybox auto enrollment
+        uses: ./
         with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          username: ${{ secrets.EMAIL_USERNAME }}
-          password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: >
-            Regybox HOLIDAY Auto-enroll: ${{ job.status }} for ${{ env.CLASS_TYPE }} on ${{ env.CLASS_DATE }}
-            at ${{ env.CLASS_TIME }}
-          body: >
-            Job '${{ github.job }}' in worflow ${{ github.workflow }} of ${{ github.repository }} finished in a
-            ${{ job.status }} state.
-
-            See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
-          to: ${{ secrets.EMAIL_TO }}
-          from: Regybox Auto-enroll
+          class-time: 10:00
+          class-type: Weekend WOD Rato
+          class-date-offset-days: 2
+          phpsessid: ${{ secrets.PHPSESSID }}
+          regybox-user: ${{ secrets.REGYBOX_USER }}
+          calendar-url: ${{ secrets.CALENDAR_URL }}
+          send-email: true
+          email-to: ${{ secrets.EMAIL_TO }}
+          email-username: ${{ secrets.EMAIL_USERNAME }}
+          email-password: ${{ secrets.EMAIL_PASSWORD }}
