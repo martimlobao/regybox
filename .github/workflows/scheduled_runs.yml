@@ -9,14 +9,12 @@ on: # yamllint disable-line rule:truthy
     - cron: 15 17 * 4-10 5-6,0-2
 
 jobs:
-  build:
-    name: Trigger Regybox run
+  enroll:
+    name: Trigger Regybox enrollment
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
       - name: Regybox auto enrollment
-        uses: ./
+        uses: martimlobao/regybox@main
         with:
           class-time: 06:30
           class-type: WOD Rato
