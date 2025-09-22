@@ -101,7 +101,7 @@ The steps below explain the entire process as if you have never used GitHub befo
 4. Wait for the job to finish. Assuming you selected a class that is open for enrollment, you should see a green check mark, and a confirmation email if you left notifications enabled.
 5. If the run fails, open the failed step to read the message. Fix the issue (for example, double-check your cookies, or confirm the class you selected is open for enrollment) and repeat this test.
 
-![Test run success.](./static/enroll-runs.png)
+![Test run success.](./static/enrollment-runs.png)
 
 ### Step 5 — Let it run automatically
 
