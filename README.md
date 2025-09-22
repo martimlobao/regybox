@@ -52,7 +52,7 @@ The steps below explain the entire process as if you have never used GitHub befo
 1. Go back to the **Code** tab of your repository.
 2. Click the green **Add file** button and choose **Create new file**.
 3. Type `.github/workflows/regybox.yml` as the file name (include the folders).
-4. Paste the following text into the editor. If you want to use a tagged release, replace `@main` with the tag name, such as `@v1`.
+4. Paste the following text into the editor. If you do not want to use a tagged release, replace `@v2` with `@main`.
 5. Update the `cron` line to the time you want the booking to run. Schedules are written in [UTC](https://en.wikipedia.org/wiki/Coordinated_Universal_Time) and do **not** adjust for daylight saving changes, so the run may happen an hour earlier or later when clocks change.
 6. If you need the enrollment to happen right when the class opens, set the schedule to start **5—15 minutes before** the signup window. GitHub sometimes takes a few minutes to start the job.
 
@@ -72,7 +72,7 @@ The steps below explain the entire process as if you have never used GitHub befo
        runs-on: ubuntu-latest
        steps:
          - name: Run the Regybox Auto Enroll action
-           uses: martimlobao/regybox@main
+           uses: martimlobao/regybox@v2
            with:
              class-time: "06:30"
              class-type: WOD Rato
