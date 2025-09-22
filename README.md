@@ -20,44 +20,51 @@ The steps below explain the entire process as if you have never used GitHub befo
 
 ### Before you start
 
-1. Collect the values listed in the **Configuration** section above. You will copy and paste them later.
-   <!-- TODO: Screenshot: Browser dev tools showing how to copy the PHPSESSID and regybox_user cookies. -->
-2. Decide which email account you want to use for notifications. If you use Gmail you should create an [App Password](https://support.google.com/accounts/answer/185833) and **not** your normal password.
+1. Open the [regybox.pt](https://www.regybox.pt/app/app_nova/index.php) website in your browser and collect the cookie values for `PHPSESSID` and `regybox_user` by opening the developer tools (usually `Ctrl+Shift+I` or `Cmd+Shift+I`) and clicking on the **Application** tab. You will copy and paste them later.
+   ![Browser dev tools showing how to copy the PHPSESSID and regybox_user cookies.](./static/cookies.png)
+2. Decide which email account you want to use for notifications. If you use Gmail you should create an [App Password](https://myaccount.google.com/apppasswords) and **not** your normal password.
+   ![Google App Password creation page.](./static/create-app-password.png)
+   ![Generated Google App Password.](./static/app-password.png)
 
-### Step 1 – Make a home for the workflow
+### Step 1 — Make a home for the workflow
 
-1. Sign in to GitHub.
-2. Create a new **private** repository (click **New**, give it any name, keep it empty).
+1. [Sign in](https://github.com/login) to GitHub or [create an account](https://github.com/signup) if you don't have one.
+2. Create a [new **private** repository](https://github.com/new) (click **New**, give it any name, such as `regybox`).
 3. Open the repository you just created.
 
-### Step 2 – Store your secrets safely
+### Step 2 — Store your secrets safely
 
 1. In the repository, click **Settings** (near the top right).
 2. In the left menu, click **Secrets and variables** and then **Actions**.
 3. Press the **New repository secret** button for each secret below:
-   - **`PHPSESSID`** – paste the PHPSESSID cookie value.
-   - **`REGYBOX_USER`** – paste the regybox_user cookie value.
-   - **`CALENDAR_URL`** – paste the calendar link (skip this one if you do not use a calendar).
-   - **`EMAIL_USERNAME`** – the username for the email account that will send notifications.
-   - **`EMAIL_PASSWORD`** – the password or app password for that email account.
-   - **`EMAIL_TO`** – the email address that should receive the confirmation messages.
+   - **`PHPSESSID`** — paste the PHPSESSID cookie value.
+   - **`REGYBOX_USER`** — paste the regybox_user cookie value.
+   - **`CALENDAR_URL`** — paste the calendar link (skip this one if you do not use a calendar).
+   - **`EMAIL_USERNAME`** — the username for the email account that will send notifications.
+   - **`EMAIL_PASSWORD`** — the password or app password for that email account.
+   - **`EMAIL_TO`** — the email address that should receive the confirmation messages.
 4. Secrets are saved automatically after you click **Add secret**. Repeat until all of them appear in the list.
 
-### Step 3 – Add the workflow file
+![Repository secrets list.](./static/repo-secrets.png)
+
+### Step 3 — Add the workflow file
 
 1. Go back to the **Code** tab of your repository.
 2. Click the green **Add file** button and choose **Create new file**.
 3. Type `.github/workflows/regybox.yml` as the file name (include the folders).
-4. Paste the following text into the editor. Replace `YOUR-GITHUB-USERNAME/regybox` with the actual GitHub path of this project (for example `alice/regybox`). If you use a tagged release, replace `@main` with the tag name, such as `@v1`.
+4. Paste the following text into the editor. If you want to use a tagged release, replace `@main` with the tag name, such as `@v1`.
 5. Update the `cron` line to the time you want the booking to run. Schedules are written in [UTC](https://en.wikipedia.org/wiki/Coordinated_Universal_Time) and do **not** adjust for daylight saving changes, so the run may happen an hour earlier or later when clocks change.
-6. If you need the enrollment to happen right when the class opens, set the schedule to start **5–10 minutes before** the signup window. GitHub sometimes takes a few minutes to start the job.
+6. If you need the enrollment to happen right when the class opens, set the schedule to start **5—15 minutes before** the signup window. GitHub sometimes takes a few minutes to start the job.
 
    ```yaml
    name: Book my Regybox class
 
    on:
-     schedule:
-       - cron: "15 18 * * *" # change this to the time you want the booking to run
+     schedule: # 48 hours and 15 minutes in advance for morning classes on weekdays
+       # standard time, will be off on the last week of march
+       - cron: 15 6 * 1-3,11-12 5-6,0-2
+       # daylight saving time, will be off on the last week of october
+       - cron: 15 5 * 4-10 5-6,0-2
      workflow_dispatch: {}
 
    jobs:
@@ -65,11 +72,11 @@ The steps below explain the entire process as if you have never used GitHub befo
        runs-on: ubuntu-latest
        steps:
          - name: Run the Regybox Auto Enroll action
-           uses: YOUR-GITHUB-USERNAME/regybox@main
+           uses: martimlobao/regybox@main
            with:
-             class-time: !!str 06:30 # !!str keeps the leading zero in the time
+             class-time: "06:30"
              class-type: WOD Rato
-             class-date-offset-days: 3
+             class-date-offset-days: 2
              phpsessid: ${{ secrets.PHPSESSID }}
              regybox-user: ${{ secrets.REGYBOX_USER }}
              calendar-url: ${{ secrets.CALENDAR_URL }}
@@ -80,20 +87,21 @@ The steps below explain the entire process as if you have never used GitHub befo
    ```
 
 7. Scroll down and click **Commit new file**.
-8. For a real-world example, check the [scheduled_runs.yml](.github/workflows/scheduled_runs.yml) file in this repository.
-   <!-- TODO: Screenshot: Example of the completed workflow file in the GitHub editor. -->
+8. For a real-world example, check the [scheduled_runs.yml](.github/workflows/scheduled_runs.yml) and [scheduled_holiday_runs.yml](.github/workflows/scheduled_holiday_runs.yml) files in this repository.
 
-`class-time` and `class-type` are required. Change them to match the exact class you want. `class-date-offset-days` controls how many days in advance the script will look for the class (for example, `3` means “three days from today”).
+`class-time` and `class-type` are required. Change them to match the exact class you want. `class-date-offset-days` controls how many days in advance the script will look for the class (for example, `2` means "three days from today").
 
-### Step 4 – Test the workflow
+### Step 4 — Test the workflow
 
 1. Click the **Actions** tab in your repository. GitHub may ask you to enable workflows—click **I understand my workflows, go ahead and enable them**.
 2. In the left sidebar, choose **Book my Regybox class**.
-3. Press **Run workflow**, keep the default branch selected, and press **Run workflow** again. This launches a test run immediately.
-4. Wait for the job to finish. You should see a green check mark, and a confirmation email if you left notifications enabled.
-5. If the run fails, open the failed step to read the message. Fix the issue (for example, double-check your cookies) and repeat this test.
+3. Press **Run workflow**, keep the default `main` branch selected, and press **Run workflow** again. This launches a test run immediately.
+4. Wait for the job to finish. Assuming you selected a class that is open for enrollment, you should see a green check mark, and a confirmation email if you left notifications enabled.
+5. If the run fails, open the failed step to read the message. Fix the issue (for example, double-check your cookies, or confirm the class you selected is open for enrollment) and repeat this test.
 
-### Step 5 – Let it run automatically
+![Test run success.](./static/enroll-runs.png)
+
+### Step 5 — Let it run automatically
 
 After the test succeeds, the workflow will continue to run on the schedule you configured. You can return to the **Actions** tab any time to confirm it is still working.
 
