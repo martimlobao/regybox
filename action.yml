@@ -74,7 +74,7 @@ runs:
         CALENDAR_URL: ${{ inputs.calendar-url }}
       run: uv run regybox "${CLASS_DATE}" "${CLASS_TIME}" "${CLASS_TYPE}"
     - name: Validate email inputs
-      if: ${{ inputs.send-email != 'false' }}
+      if: always() && inputs.send-email != 'false'
       shell: bash
       run: |
         set -euo pipefail
@@ -87,7 +87,7 @@ runs:
           exit 1
         fi
     - name: Send confirmation email
-      if: ${{ inputs.send-email != 'false' }}
+      if: always() && inputs.send-email != 'false'
       uses: dawidd6/action-send-mail@6d98ae34d733f9a723a9e04e94f2f24ba05e1402
       with:
         server_address: ${{ inputs.email-server }}
