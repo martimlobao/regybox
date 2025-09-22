@@ -1,0 +1,95 @@
+---
+name: Regybox Auto Enroll
+description: Enroll in a Regybox class and optionally send yourself an email confirmation.
+author: Regybox Maintainers
+inputs:
+  class-time:
+    description: Class start time (HH:MM).
+    required: true
+  class-type:
+    description: Name of the class to book.
+    required: true
+  class-date-offset-days:
+    description: How many days from today the class should be booked.
+    required: false
+    default: 3
+  phpsessid:
+    description: Value of the PHPSESSID cookie from regybox.pt.
+    required: true
+  regybox-user:
+    description: Value of the regybox_user cookie from regybox.pt.
+    required: true
+  calendar-url:
+    description: Optional URL to an iCal calendar that blocks the slot when you already have a class planned.
+    required: false
+  send-email:
+    description: Set to true to send a confirmation email when the job finishes.
+    required: false
+    default: true
+  email-to:
+    description: Recipient email address for the confirmation email. Required when send-email is true.
+    required: false
+  email-from-name:
+    description: Display name to use for the confirmation email.
+    required: false
+    default: Regybox Auto-enroll
+  email-username:
+    description: SMTP username used to send the confirmation email.
+    required: false
+  email-password:
+    description: SMTP password or app password used to send the confirmation email.
+    required: false
+  email-server:
+    description: SMTP server address.
+    required: false
+    default: smtp.gmail.com
+  email-port:
+    description: SMTP server port.
+    required: false
+    default: !!str 465
+runs:
+  using: composite
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+    - name: Prepare class information
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        INPUT_CLASS_DATE_OFFSET_DAYS: ${{ inputs.class-date-offset-days }}
+        INPUT_CLASS_TIME: ${{ inputs.class-time }}
+        INPUT_CLASS_TYPE: ${{ inputs.class-type }}
+      run: |
+        set -euo pipefail
+        class_date=$(date -d "+${INPUT_CLASS_DATE_OFFSET_DAYS} days" +%F)
+        echo "CLASS_DATE=${class_date}" >> "$GITHUB_ENV"
+        echo "CLASS_TIME=${INPUT_CLASS_TIME}" >> "$GITHUB_ENV"
+        echo "CLASS_TYPE=${INPUT_CLASS_TYPE}" >> "$GITHUB_ENV"
+    - name: Enroll in class
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        PHPSESSID: ${{ inputs.phpsessid }}
+        REGYBOX_USER: ${{ inputs.regybox-user }}
+        CALENDAR_URL: ${{ inputs.calendar-url }}
+      run: uv run regybox "${CLASS_DATE}" "${CLASS_TIME}" "${CLASS_TYPE}"
+    - name: Send confirmation email
+      if: ${{ inputs.send-email != 'false' }}
+      uses: dawidd6/action-send-mail@6d98ae34d733f9a723a9e04e94f2f24ba05e1402
+      with:
+        server_address: ${{ inputs.email-server }}
+        server_port: ${{ inputs.email-port }}
+        username: ${{ inputs.email-username }}
+        password: ${{ inputs.email-password }}
+        subject: >-
+          Regybox Auto-enroll: ${{ job.status }} for ${{ env.CLASS_TYPE }} on
+          ${{ env.CLASS_DATE }} at ${{ env.CLASS_TIME }}
+        body: >
+          The Regybox enrollment finished in a ${{ job.status }} state.
+
+          See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} for the full log.
+        to: ${{ inputs.email-to }}
+        from: ${{ inputs.email-from-name }}
+branding:
+  color: blue
+  icon: clock
