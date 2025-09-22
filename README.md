@@ -70,12 +70,13 @@ The steps below explain the entire process as if you have never used GitHub befo
 
    jobs:
      enroll:
+       name: Trigger Regybox enrollment
        runs-on: ubuntu-latest
        steps:
-         - name: Run the Regybox Auto Enroll action
+         - name: Regybox auto enrollment
            uses: martimlobao/regybox@v2
            with:
-             class-time: "06:30"
+             class-time: 06:30
              class-type: WOD Rato
              class-date-offset-days: 2
              phpsessid: ${{ secrets.PHPSESSID }}

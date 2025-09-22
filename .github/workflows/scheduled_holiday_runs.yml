@@ -29,18 +29,16 @@ jobs:
       - id: set
         run: |
           echo "WEEKDAY=$([[ "$(date -d '+2 days' +%u)" -lt 6 ]] && echo "true" || echo "false")" >> "$GITHUB_OUTPUT"
-  build:
-    name: Trigger Regybox run
+  enroll:
+    name: Trigger Regybox enrollment
     runs-on: ubuntu-latest
     needs:
       - weekday
     # only for holidays that are not on weekends
     if: needs.weekday.outputs.WEEKDAY == 'true'
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
       - name: Regybox auto enrollment
-        uses: ./
+        uses: martimlobao/regybox@main
         with:
           class-time: 10:00
           class-type: Weekend WOD Rato
