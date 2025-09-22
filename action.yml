@@ -52,6 +52,9 @@ runs:
   steps:
     - name: Install uv
       uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4
+      with:
+        ignore-empty-workdir: true
+        enable-cache: false
     - name: Prepare class information
       shell: bash
       working-directory: ${{ github.action_path }}
