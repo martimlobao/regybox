@@ -18,9 +18,12 @@ This project powers a GitHub Action that books a class for you and can send a co
 
 1. Sign in to GitHub and create a [new **private** repository](https://github.com/new) (any name works, for example `regybox`).
 2. In the repository, open **Settings → Secrets and variables → Actions** and click **New repository secret**. Paste the cookie values from step 1 into:
+
    - `PHPSESSID`
    - `REGYBOX_USER`
+
    ![Repository secrets list.](./static/repo-secrets.png)
+
 3. Add the workflow file at `.github/workflows/regybox.yml` using the example below. Update the values under the `with:` section (class time, type, secrets, etc.) so they match your preferences.
 
    ```yaml
@@ -28,8 +31,11 @@ This project powers a GitHub Action that books a class for you and can send a co
 
    on:
      workflow_dispatch:
-     schedule:
-       - cron: 15 5 * * 1-5 # Weekdays at 05:15 UTC
+     schedule: # 48 hours and 15 minutes in advance for morning classes on weekdays
+       # standard time, will be wrong on the last week of march
+       - cron: 15 6 * 1-3,11-12 5-6,0-2
+       # daylight saving time, will be wrong on the last week of october
+       - cron: 15 5 * 4-10 5-6,0-2
 
    jobs:
      enroll:
@@ -38,9 +44,9 @@ This project powers a GitHub Action that books a class for you and can send a co
          - name: Regybox auto enrollment
            uses: martimlobao/regybox@v2
            with:
-             class-time: 06:30             # Class start time in HH:MM (24-hour) format
-             class-type: WOD Rato          # Exact class name as it appears in Regybox
-             class-date-offset-days: 2     # Look this many days ahead when booking
+             class-time: 06:30 # Class start time in HH:MM (24-hour) format
+             class-type: WOD Rato # Exact class name as it appears in Regybox
+             class-date-offset-days: 2 # Look this many days ahead when booking
              phpsessid: ${{ secrets.PHPSESSID }}
              regybox-user: ${{ secrets.REGYBOX_USER }}
              calendar-url: ${{ secrets.CALENDAR_URL }}
@@ -88,14 +94,14 @@ You can optionally chose to have the auto-enroller check your personal calendar 
 
 ## Summary of secrets
 
-| Secret name        | Required | Description |
-| ------------------ | :------: | ----------- |
-| `PHPSESSID`        |   Yes    | Value of the `PHPSESSID` cookie from regybox.pt. |
-| `REGYBOX_USER`     |   Yes    | Value of the `regybox_user` cookie from regybox.pt. |
-| `EMAIL_USERNAME`   |   Yes*   | Email address that sends confirmations. Required if `send-email` is `true`. |
-| `EMAIL_PASSWORD`   |   Yes*   | Password or app password for `EMAIL_USERNAME`. Required if `send-email` is `true`. |
-| `EMAIL_TO`         |   Yes*   | Email address that receives confirmations. Required if `send-email` is `true`. |
-| `CALENDAR_URL`     |    No    | Secret `.ics` feed URL for your calendar. Enables calendar sync. |
+| Secret name      | Required | Description                                                                        |
+| ---------------- | :------: | ---------------------------------------------------------------------------------- |
+| `PHPSESSID`      |   Yes    | Value of the `PHPSESSID` cookie from regybox.pt.                                   |
+| `REGYBOX_USER`   |   Yes    | Value of the `regybox_user` cookie from regybox.pt.                                |
+| `EMAIL_USERNAME` |  Yes\*   | Email address that sends confirmations. Required if `send-email` is `true`.        |
+| `EMAIL_PASSWORD` |  Yes\*   | Password or app password for `EMAIL_USERNAME`. Required if `send-email` is `true`. |
+| `EMAIL_TO`       |  Yes\*   | Email address that receives confirmations. Required if `send-email` is `true`.     |
+| `CALENDAR_URL`   |    No    | Secret `.ics` feed URL for your calendar. Enables calendar sync.                   |
 
 > [!TIP]
 > After committing the workflow, open the **Actions** tab and run it once with **Run workflow** to confirm the setup. A successful run looks like this:
