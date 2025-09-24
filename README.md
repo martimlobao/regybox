@@ -4,81 +4,49 @@ Automatically enroll in a CrossFit class on the Regybox platform.
 
 This project powers a GitHub Action that books a class for you and can send a confirmation email when it finishes. You can run it on a schedule (for example every morning) or trigger it manually.
 
-## Configuration
+## Usage
 
-The app requires the following environment variables to be set:
+### 1. Fetch the cookie values from the Regybox website
 
-- `REGYBOX_USER`: The value for `regybox_user` in the [regybox.pt](https://www.regybox.pt/app/app_nova/index.php) cookie
-- `PHPSESSID`: The value for `PHPSESSID` in the [regybox.pt](https://www.regybox.pt/app/app_nova/index.php) cookie
-- `CALENDAR_URL`: The .ics URL of the calendar to use for the enrollment
+1. Open [regybox.pt](https://www.regybox.pt/app/app_nova/index.php) and sign in.
+2. Open your browser's developer tools (`Ctrl+Shift+I` on Windows/Linux or `Cmd+Shift+I` on macOS) and select the **Application** tab.
+3. Find the cookies named `PHPSESSID` and `regybox_user`, then copy their values. You will store them later as GitHub Action secrets.
 
-The calendar URL is optional, and is used to check if the user's personal calendar has a CrossFit class planned at the time of the enrollment. If it _does not_, the enrollment is skipped. The calendar must either be public or the URL must be accessible without authentication using the _"Secret address in iCal format"_ provided in Google Calendar.
+![Browser dev tools showing how to copy the PHPSESSID and regybox_user cookies.](./static/cookies.png)
 
-## Use this project as a ready-made GitHub Action
+### 2. Create a repository with the GitHub Action
 
-The steps below explain the entire process as if you have never used GitHub before. Take your time and follow them in order.
+1. Sign in to GitHub and create a [new **private** repository](https://github.com/new) (any name works, for example `regybox`).
+2. In the repository, open **Settings → Secrets and variables → Actions** and click **New repository secret**. Paste the cookie values from step 1 into:
 
-### Before you start
+   - `PHPSESSID`
+   - `REGYBOX_USER`
 
-1. Open the [regybox.pt](https://www.regybox.pt/app/app_nova/index.php) website in your browser and collect the cookie values for `PHPSESSID` and `regybox_user` by opening the developer tools (usually `Ctrl+Shift+I` or `Cmd+Shift+I`) and clicking on the **Application** tab. You will copy and paste them later.
-   ![Browser dev tools showing how to copy the PHPSESSID and regybox_user cookies.](./static/cookies.png)
-2. Decide which email account you want to use for notifications. If you use Gmail you should create an [App Password](https://myaccount.google.com/apppasswords) and **not** your normal password.
-   ![Google App Password creation page.](./static/create-app-password.png)
-   ![Generated Google App Password.](./static/app-password.png)
+   ![Repository secrets list.](./static/repo-secrets.png)
 
-### Step 1 — Make a home for the workflow
-
-1. [Sign in](https://github.com/login) to GitHub or [create an account](https://github.com/signup) if you don't have one.
-2. Create a [new **private** repository](https://github.com/new) (click **New**, give it any name, such as `regybox`).
-3. Open the repository you just created.
-
-### Step 2 — Store your secrets safely
-
-1. In the repository, click **Settings** (near the top right).
-2. In the left menu, click **Secrets and variables** and then **Actions**.
-3. Press the **New repository secret** button for each secret below:
-   - **`PHPSESSID`** — paste the PHPSESSID cookie value.
-   - **`REGYBOX_USER`** — paste the regybox_user cookie value.
-   - **`CALENDAR_URL`** — paste the calendar link (skip this one if you do not use a calendar).
-   - **`EMAIL_USERNAME`** — the username for the email account that will send notifications.
-   - **`EMAIL_PASSWORD`** — the password or app password for that email account.
-   - **`EMAIL_TO`** — the email address that should receive the confirmation messages.
-4. Secrets are saved automatically after you click **Add secret**. Repeat until all of them appear in the list.
-
-![Repository secrets list.](./static/repo-secrets.png)
-
-### Step 3 — Add the workflow file
-
-1. Go back to the **Code** tab of your repository.
-2. Click the green **Add file** button and choose **Create new file**.
-3. Type `.github/workflows/regybox.yml` as the file name (include the folders).
-4. Paste the following text into the editor. If you do not want to use a tagged release, replace `@v2` with `@main`.
-5. Update the `cron` line to the time you want the booking to run. Schedules are written in [UTC](https://en.wikipedia.org/wiki/Coordinated_Universal_Time) and do **not** adjust for daylight saving changes, so the run may happen an hour earlier or later when clocks change.
-6. If you need the enrollment to happen right when the class opens, set the schedule to start **5—15 minutes before** the signup window. GitHub sometimes takes a few minutes to start the job.
+3. Add the workflow file at `.github/workflows/regybox.yml` using the example below. Update the values under the `with:` section (class time, type, secrets, etc.) so they match your preferences.
 
    ```yaml
-   ---
    name: Book my Regybox class
 
    on:
      workflow_dispatch:
      schedule: # 48 hours and 15 minutes in advance for morning classes on weekdays
-       # standard time, will be off on the last week of march
+       # standard time, will be wrong on the last week of march
        - cron: 15 6 * 1-3,11-12 5-6,0-2
-       # daylight saving time, will be off on the last week of october
+       # daylight saving time, will be wrong on the last week of october
        - cron: 15 5 * 4-10 5-6,0-2
 
    jobs:
      enroll:
-       name: Trigger Regybox enrollment
        runs-on: ubuntu-latest
        steps:
          - name: Regybox auto enrollment
            uses: martimlobao/regybox@v2
            with:
-             class-time: 06:30
-             class-type: WOD Rato
-             class-date-offset-days: 2
+             class-time: 06:30 # Class start time in HH:MM (24-hour) format
+             class-type: WOD Rato # Exact class name as it appears in Regybox
+             class-date-offset-days: 2 # Look this many days ahead when booking
              phpsessid: ${{ secrets.PHPSESSID }}
              regybox-user: ${{ secrets.REGYBOX_USER }}
              calendar-url: ${{ secrets.CALENDAR_URL }}
@@ -88,30 +56,57 @@ The steps below explain the entire process as if you have never used GitHub befo
              email-password: ${{ secrets.EMAIL_PASSWORD }}
    ```
 
-7. Scroll down and click **Commit new file**.
-8. For a real-world example, check the [scheduled_runs.yml](.github/workflows/scheduled_runs.yml) and [scheduled_holiday_runs.yml](.github/workflows/scheduled_holiday_runs.yml) files in this repository.
+4. Adjust the `cron` schedules to control when the workflow runs. Cron expressions follow the format `minute hour day-of-month month day-of-week` in **UTC**:
+   - The example above (`15 5 * * 1-5`) runs **every weekday at 05:15 UTC**, which is 06:15 in Lisbon during standard time.
+   - If enrollment opens 48 hours before each class, schedule the job to run **two days before** the class start time.
+   - Start the job **5–15 minutes before** the signup window opens so the booking begins as soon as slots are released.
+   - GitHub schedules always use UTC and cannot adjust for daylight saving time. Expect the job to shift by an hour when clocks change and update the schedule if needed.
+   - Days of the week use numbers (`0` or `7` for Sunday, `1` for Monday, …, `6` for Saturday). Use ranges like `1-5` for weekdays.
+   - Use [crontab.guru](https://crontab.guru/) to preview the schedule before saving.
 
-`class-time` and `class-type` are required. Change them to match the exact class you want. `class-date-offset-days` controls how many days in advance the script will look for the class (for example, `2` means "three days from today").
+### 3. Set up email notifications
 
-### Step 4 — Test the workflow
+1. Decide which email account should send confirmations. If you use Gmail, create an [App Password](https://myaccount.google.com/apppasswords) and use it instead of your regular password. The sender and recipient can be the same Gmail address.
+2. In **Settings → Secrets and variables → Actions**, create secrets for:
+   - `EMAIL_USERNAME` — the email address that will send the notification.
+   - `EMAIL_PASSWORD` — the password or app password.
+   - `EMAIL_TO` — the address that should receive notifications (usually the same as `EMAIL_USERNAME` for Gmail).
+3. Set `send-email: true` in the workflow file so the action sends confirmation emails.
 
-1. Click the **Actions** tab in your repository. GitHub may ask you to enable workflows—click **I understand my workflows, go ahead and enable them**.
-2. In the left sidebar, choose **Book my Regybox class**.
-3. Press **Run workflow**, keep the default `main` branch selected, and press **Run workflow** again. This launches a test run immediately.
-4. Wait for the job to finish. Assuming you selected a class that is open for enrollment, you should see a green check mark, and a confirmation email if you left notifications enabled.
-5. If the run fails, open the failed step to read the message. Fix the issue (for example, double-check your cookies, or confirm the class you selected is open for enrollment) and repeat this test.
+![Google App Password creation page.](./static/create-app-password.png)
+
+![Generated Google App Password.](./static/app-password.png)
+
+### 4. Set up calendar sync
+
+You can optionally chose to have the auto-enroller check your personal calendar to confirm if there is a class scheduled at the desired time before attempting to enroll in the class. If no such class exists on your calendar, the action will fail to enroll in the class. This may be useful if you are travelling and you do not plan on attending your usual classes: simply delete the classes you do not wish to attend from your calendar and the auto-enroller will not enroll you automatically in the class.
+
+> [!IMPORTANT]
+> If you have already enrolled in a class and you delete the class from your calendar, the auto-enroller **will not** unenroll you automatically from the class.
+
+1. Open your calendar provider and locate the secret `.ics` feed URL for your personal calendar. In Google Calendar, open **Settings → Settings for my calendars → Integrate calendar** and copy the **Secret address in iCal format**.
+2. Store this URL in the repository as the `CALENDAR_URL` secret.
+
+![Secret Google Calendar address](./static/gcal.png)
+
+> [!IMPORTANT]
+> Ensure the calendar event for the class is titled **“Crossfit”** so the action recognizes it as a session you plan to attend.
+
+## Summary of secrets
+
+| Secret name      | Required | Description                                                                        |
+| ---------------- | :------: | ---------------------------------------------------------------------------------- |
+| `PHPSESSID`      |   Yes    | Value of the `PHPSESSID` cookie from regybox.pt.                                   |
+| `REGYBOX_USER`   |   Yes    | Value of the `regybox_user` cookie from regybox.pt.                                |
+| `EMAIL_USERNAME` |  Yes\*   | Email address that sends confirmations. Required if `send-email` is `true`.        |
+| `EMAIL_PASSWORD` |  Yes\*   | Password or app password for `EMAIL_USERNAME`. Required if `send-email` is `true`. |
+| `EMAIL_TO`       |  Yes\*   | Email address that receives confirmations. Required if `send-email` is `true`.     |
+| `CALENDAR_URL`   |    No    | Secret `.ics` feed URL for your calendar. Enables calendar sync.                   |
+
+> [!TIP]
+> After committing the workflow, open the **Actions** tab and run it once with **Run workflow** to confirm the setup. A successful run looks like this:
 
 ![Test run success.](./static/enrollment-runs.png)
-
-### Step 5 — Let it run automatically
-
-After the test succeeds, the workflow will continue to run on the schedule you configured. You can return to the **Actions** tab any time to confirm it is still working.
-
-### Make it your own
-
-- **Change the schedule:** Update the `cron` line in the workflow file. Use [crontab.guru](https://crontab.guru/) if you are unsure how to express the time you want.
-- **Pick a different class:** Edit `class-type`, `class-time`, or `class-date-offset-days` to match the class you need.
-- **Skip emails:** Change `send-email` to `false` and remove the email-related lines.
 
 ## Development
 
