@@ -9,17 +9,18 @@ This project powers a GitHub Action that books a class for you and can send a co
 ### 1. Fetch the cookie values from the Regybox website
 
 1. Open [regybox.pt](https://www.regybox.pt/app/app_nova/index.php) and sign in.
-2. Open your browser's developer tools (`Ctrl+Shift+I` on Windows/Linux or `Cmd+Shift+I` on macOS) and select the **Application** or **Storage** tab.
-3. Find the cookies named `PHPSESSID` and `regybox_user`, then copy their values. You will store them as GitHub Action secrets.
+2. Open your browser's developer tools (`Ctrl+Shift+I` on Windows/Linux or `Cmd+Shift+I` on macOS) and select the **Application** tab.
+3. Find the cookies named `PHPSESSID` and `regybox_user`, then copy their values. You will store them later as GitHub Action secrets.
 
 ![Browser dev tools showing how to copy the PHPSESSID and regybox_user cookies.](./static/cookies.png)
 
 ### 2. Create a repository with the GitHub Action
 
-1. Sign in to GitHub and create a **private** repository (any name works, for example `regybox`).
+1. Sign in to GitHub and create a [new **private** repository](https://github.com/new) (any name works, for example `regybox`).
 2. In the repository, open **Settings → Secrets and variables → Actions** and click **New repository secret**. Paste the cookie values from step 1 into:
    - `PHPSESSID`
    - `REGYBOX_USER`
+   ![Repository secrets list.](./static/repo-secrets.png)
 3. Add the workflow file at `.github/workflows/regybox.yml` using the example below. Update the values under the `with:` section (class time, type, secrets, etc.) so they match your preferences.
 
    ```yaml
@@ -57,21 +58,6 @@ This project powers a GitHub Action that books a class for you and can send a co
    - Days of the week use numbers (`0` or `7` for Sunday, `1` for Monday, …, `6` for Saturday). Use ranges like `1-5` for weekdays.
    - Use [crontab.guru](https://crontab.guru/) to preview the schedule before saving.
 
-![Repository secrets list.](./static/repo-secrets.png)
-
-| Secret name        | Required | Description |
-| ------------------ | :------: | ----------- |
-| `PHPSESSID`        |   Yes    | Value of the `PHPSESSID` cookie from regybox.pt. |
-| `REGYBOX_USER`     |   Yes    | Value of the `regybox_user` cookie from regybox.pt. |
-| `EMAIL_USERNAME`   |   Yes*   | Email address that sends confirmations. Required if `send-email` is `true`. |
-| `EMAIL_PASSWORD`   |   Yes*   | Password or app password for `EMAIL_USERNAME`. Required if `send-email` is `true`. |
-| `EMAIL_TO`         |   Yes*   | Email address that receives confirmations. Required if `send-email` is `true`. |
-| `CALENDAR_URL`     |    No    | Secret `.ics` feed URL for your calendar. Enables calendar sync. |
-
-> **Tip:** After committing the workflow, open the **Actions** tab and run it once with **Run workflow** to confirm the setup. A successful run looks like this:
-
-![Test run success.](./static/enrollment-runs.png)
-
 ### 3. Set up email notifications
 
 1. Decide which email account should send confirmations. If you use Gmail, create an [App Password](https://myaccount.google.com/apppasswords) and use it instead of your regular password. The sender and recipient can be the same Gmail address.
@@ -87,11 +73,34 @@ This project powers a GitHub Action that books a class for you and can send a co
 
 ### 4. Set up calendar sync
 
+You can optionally chose to have the auto-enroller check your personal calendar to confirm if there is a class scheduled at the desired time before attempting to enroll in the class. If no such class exists on your calendar, the action will fail to enroll in the class. This may be useful if you are travelling and you do not plan on attending your usual classes: simply delete the classes you do not wish to attend from your calendar and the auto-enroller will not enroll you automatically in the class.
+
+> [!IMPORTANT]
+> If you have already enrolled in a class and you delete the class from your calendar, the auto-enroller **will not** unenroll you automatically from the class.
+
 1. Open your calendar provider and locate the secret `.ics` feed URL for your personal calendar. In Google Calendar, open **Settings → Settings for my calendars → Integrate calendar** and copy the **Secret address in iCal format**.
 2. Store this URL in the repository as the `CALENDAR_URL` secret.
-3. Ensure the calendar event for the class is titled **“Crossfit”** so the action recognizes it as a session you plan to attend.
 
-<!-- TODO: Add screenshot of locating the secret iCal URL. -->
+![Secret Google Calendar address](./static/gcal.png)
+
+> [!IMPORTANT]
+> Ensure the calendar event for the class is titled **“Crossfit”** so the action recognizes it as a session you plan to attend.
+
+## Summary of secrets
+
+| Secret name        | Required | Description |
+| ------------------ | :------: | ----------- |
+| `PHPSESSID`        |   Yes    | Value of the `PHPSESSID` cookie from regybox.pt. |
+| `REGYBOX_USER`     |   Yes    | Value of the `regybox_user` cookie from regybox.pt. |
+| `EMAIL_USERNAME`   |   Yes*   | Email address that sends confirmations. Required if `send-email` is `true`. |
+| `EMAIL_PASSWORD`   |   Yes*   | Password or app password for `EMAIL_USERNAME`. Required if `send-email` is `true`. |
+| `EMAIL_TO`         |   Yes*   | Email address that receives confirmations. Required if `send-email` is `true`. |
+| `CALENDAR_URL`     |    No    | Secret `.ics` feed URL for your calendar. Enables calendar sync. |
+
+> [!TIP]
+> After committing the workflow, open the **Actions** tab and run it once with **Run workflow** to confirm the setup. A successful run looks like this:
+
+![Test run success.](./static/enrollment-runs.png)
 
 ## Development
 
