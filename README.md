@@ -9,7 +9,7 @@ This project powers a GitHub Action that books a class for you and can send a co
 ### 1. Fetch the cookie values from the Regybox website
 
 1. Open [regybox.pt](https://www.regybox.pt/app/app_nova/index.php) and sign in.
-2. Open your browser's developer tools (`Ctrl+Shift+I` on Windows/Linux or `Cmd+Shift+I` on macOS) and select the **Application** tab.
+2. Open your browser's developer tools (`Cmd+Option+I` on macOS or `Ctrl+Shift+I` on Windows/Linux) and select the **Application** tab.
 3. Find the cookies named `PHPSESSID` and `regybox_user`, then copy their values. You will store them later as GitHub Action secrets.
 
 ![Browser dev tools showing how to copy the PHPSESSID and regybox_user cookies.](./static/cookies.png)
