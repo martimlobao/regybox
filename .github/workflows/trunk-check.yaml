@@ -1,6 +1,7 @@
 ---
 name: Pull Request
-on: [pull_request]
+on: # yamllint disable-line rule:truthy
+  [pull_request]
 concurrency:
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
