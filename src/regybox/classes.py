@@ -20,6 +20,28 @@ from regybox.exceptions import (
 )
 
 
+def _parse_capacity_value(value: str) -> int | None:
+    """Convert the capacity token to an integer when possible.
+
+    The booking platform can display an infinity symbol when there is no
+    explicit limit for a class. In that case we represent the capacity as
+    ``None`` so the rest of the application can continue to operate.
+
+    Returns:
+        The parsed integer capacity or ``None`` when unlimited.
+
+    Raises:
+        UnparseableError: If the capacity value uses an unknown format.
+    """
+    normalized: str = value.strip()
+    if normalized == "∞":
+        return None
+    try:
+        return int(normalized)
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        raise UnparseableError(f"Unexpected capacity value: {value}") from exc
+
+
 @dataclass
 class Class:
     """Represent a CrossFit class with its attributes and behavior.
@@ -34,8 +56,10 @@ class Class:
         date: The date of the class in ISO format.
         start: The start time of the class in HH:MM format.
         end: The end time of the class in HH:MM format.
-        max_capacity: The maximum capacity of the class.
-        cur_capacity: The current capacity of the class.
+        max_capacity: The maximum capacity of the class. ``None`` represents
+            unlimited capacity.
+        cur_capacity: The current capacity of the class. ``None`` represents
+            an unknown value.
         is_open: Indicates if the class is open for enrollment.
         is_full: Indicates if the class has no remaining capacity, though it
             but may still be accepting users on the waitlist.
@@ -58,8 +82,8 @@ class Class:
     date: str
     start: str
     end: str
-    max_capacity: int
-    cur_capacity: int
+    max_capacity: int | None
+    cur_capacity: int | None
     is_open: bool = False
     is_full: bool = False
     is_overbooked: bool = False
@@ -106,8 +130,12 @@ class Class:
         self.date = datetime.datetime.fromtimestamp(date, tz=TIMEZONE).date().isoformat()
         self.start, *_, self.end = time_.text.split()
         cap_parts: list[str] = capacity.text.split()
-        self.cur_capacity, self.max_capacity = int(cap_parts[0]), int(cap_parts[-1])
-        self.is_full = self.cur_capacity >= self.max_capacity
+        self.cur_capacity = _parse_capacity_value(cap_parts[0])
+        self.max_capacity = _parse_capacity_value(cap_parts[-1])
+        if self.cur_capacity is not None and self.max_capacity is not None:
+            self.is_full = self.cur_capacity >= self.max_capacity
+        else:
+            self.is_full = False
         self.is_overbooked = bool(self._tag.find("span", attrs={"class": "erro_color"}))
         self.user_is_waitlisted = bool(
             self._tag.find("div", attrs={"class": re.compile(r"preloader\s*color-orange")})

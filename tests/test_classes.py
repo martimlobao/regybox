@@ -9,6 +9,8 @@ from regybox.exceptions import UnparseableError
 
 from . import html_examples
 
+INFINITE_CLASS_CURRENT_CAPACITY = 3
+
 
 def extract_class(filename: str) -> Class:
     html: str = resources.files(html_examples).joinpath(filename).read_text()
@@ -175,6 +177,13 @@ def test_waitlisted() -> None:
     assert class_.time_to_enroll is None
     assert class_.enroll_url is None
     assert bool(class_.unenroll_url)
+
+
+def test_infinite_capacity() -> None:
+    class_: Class = extract_class("infinite_capacity.html")
+    assert class_.cur_capacity == INFINITE_CLASS_CURRENT_CAPACITY
+    assert class_.max_capacity is None
+    assert class_.is_full is False
 
 
 def test_not_yet_open() -> None:
