@@ -179,13 +179,6 @@ def test_waitlisted() -> None:
     assert bool(class_.unenroll_url)
 
 
-def test_infinite_capacity() -> None:
-    class_: Class = extract_class("infinite_capacity.html")
-    assert class_.cur_capacity == INFINITE_CLASS_CURRENT_CAPACITY
-    assert class_.max_capacity is None
-    assert class_.is_full is False
-
-
 def test_not_yet_open() -> None:
     class_: Class = extract_class("not_yet_open.html")
     assert class_.is_open is False
@@ -194,6 +187,29 @@ def test_not_yet_open() -> None:
     assert class_.is_over is False
     assert class_.user_is_blocked is True
     assert class_.user_is_enrolled is False
+    assert class_.user_is_waitlisted is False
+    assert class_.time_to_start is None
+    assert class_.time_to_enroll is not None
+    assert class_.time_to_enroll > 0
+    assert class_.enroll_url is None
+    assert class_.unenroll_url is None
+
+
+def test_infinite_capacity() -> None:
+    class_: Class = extract_class("infinite_capacity.html")
+    assert class_.cur_capacity == INFINITE_CLASS_CURRENT_CAPACITY
+    assert class_.max_capacity is None
+    assert class_.is_full is False
+
+
+def test_unlimited() -> None:
+    class_: Class = extract_class("unlimited.html")
+    assert class_.is_open is False
+    assert class_.is_full is False
+    assert class_.max_capacity is None
+    assert class_.cur_capacity == 0
+    assert class_.is_overbooked is False
+    assert class_.is_over is False
     assert class_.user_is_waitlisted is False
     assert class_.time_to_start is None
     assert class_.time_to_enroll is not None

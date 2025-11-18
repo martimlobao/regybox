@@ -58,8 +58,7 @@ class Class:
         end: The end time of the class in HH:MM format.
         max_capacity: The maximum capacity of the class. ``None`` represents
             unlimited capacity.
-        cur_capacity: The current capacity of the class. ``None`` represents
-            an unknown value.
+        cur_capacity: The current capacity of the class.
         is_open: Indicates if the class is open for enrollment.
         is_full: Indicates if the class has no remaining capacity, though it
             but may still be accepting users on the waitlist.
@@ -83,7 +82,7 @@ class Class:
     start: str
     end: str
     max_capacity: int | None
-    cur_capacity: int | None
+    cur_capacity: int
     is_open: bool = False
     is_full: bool = False
     is_overbooked: bool = False
@@ -132,7 +131,7 @@ class Class:
         cap_parts: list[str] = capacity.text.split()
         self.cur_capacity = _parse_capacity_value(cap_parts[0])
         self.max_capacity = _parse_capacity_value(cap_parts[-1])
-        if self.cur_capacity is not None and self.max_capacity is not None:
+        if self.max_capacity is not None:
             self.is_full = self.cur_capacity >= self.max_capacity
         else:
             self.is_full = False
