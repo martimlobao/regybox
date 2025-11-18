@@ -38,8 +38,8 @@ def _parse_capacity_value(value: str) -> int | None:
         return None
     try:
         return int(normalized)
-    except ValueError as exc:  # pragma: no cover - defensive guard
-        raise UnparseableError(f"Unexpected capacity value: {value}") from exc
+    except ValueError as e:
+        raise UnparseableError(f"Unexpected capacity value: {value}") from e
 
 
 @dataclass
