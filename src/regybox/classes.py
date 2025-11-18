@@ -283,15 +283,22 @@ class Class:
         LOGGER.debug(f"Enrolled at {self.enroll_url} with response: '{res_html}'")
         self.user_is_enrolled = True
         soup = BeautifulSoup(res_html, "html.parser")
-        self.user_is_waitlisted = bool(
-            re.findall(
-                r"parent.popup\('php\/popups\/lista_espera\.php'",
-                soup.find_all("script")[0].text,
+        scripts: list[Tag] = soup.find_all("script")
+        self.user_is_waitlisted = False
+        waitlist_script = _find_script_containing(scripts, "lista_espera.php")
+        if waitlist_script is not None:
+            self.user_is_waitlisted = bool(
+                re.findall(
+                    r"parent.popup\('php\/popups\/lista_espera\.php'",
+                    waitlist_script,
+                )
             )
-        )
+        response_script = _find_script_containing(scripts, "msg_toast_icon")
+        if response_script is None:
+            raise UnparseableError(f"Couldn't parse response for enrollment: {res_html}")
         responses: list[str] = re.findall(
-            r"parent\.msg_toast_icon\s\(\"(.+)\",",
-            soup.find_all("script")[-1].text,
+            r"parent\.msg_toast_icon\s*\(\"(.+?)\",",
+            response_script,
         )
         if len(responses) != 1:
             raise UnparseableError(f"Couldn't parse response for enrollment: {res_html}")
@@ -318,14 +325,26 @@ class Class:
         LOGGER.info(f"Unenrolled at {self.unenroll_url} with response: '{res_html}'")
         self.user_is_enrolled = False
         soup = BeautifulSoup(res_html, "html.parser")
+        response_script = _find_script_containing(soup.find_all("script"), "msg_toast_icon")
+        if response_script is None:
+            raise UnparseableError(f"Couldn't parse response for unenrollment: {res_html}")
         responses: list[str] = re.findall(
-            r"parent\.msg_toast_icon\s\(\"(.+)\",",
-            soup.find_all("script")[-1].text,
+            r"parent\.msg_toast_icon\s*\(\"(.+?)\",",
+            response_script,
         )
         if len(responses) != 1:
             raise UnparseableError(f"Couldn't parse response for unenrollment: {res_html}")
         LOGGER.info(responses[0])
         return responses[0]
+
+
+def _find_script_containing(scripts: list[Tag], needle: str) -> str | None:
+    """Return the text of the first script tag containing a substring."""
+    for script in scripts:
+        text = script.text
+        if text and needle in text:
+            return text
+    return None
 
 
 def get_classes_tags(year: int, month: int, day: int) -> list[Tag]:
