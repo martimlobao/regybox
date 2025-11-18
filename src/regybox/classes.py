@@ -20,7 +20,7 @@ from regybox.exceptions import (
 )
 
 
-def _parse_capacity_value(value: str) -> int | None:
+def parse_capacity_value(value: str) -> int | None:
     """Convert the capacity token to an integer when possible.
 
     The booking platform can display an infinity symbol when there is no
@@ -129,8 +129,11 @@ class Class:
         self.date = datetime.datetime.fromtimestamp(date, tz=TIMEZONE).date().isoformat()
         self.start, *_, self.end = time_.text.split()
         cap_parts: list[str] = capacity.text.split()
-        self.cur_capacity = _parse_capacity_value(cap_parts[0])
-        self.max_capacity = _parse_capacity_value(cap_parts[-1])
+        cur_capacity: int | None = parse_capacity_value(cap_parts[0])
+        if cur_capacity is None:
+            raise UnparseableError(f"Unexpected capacity value: {cap_parts[0]}")
+        self.cur_capacity = cur_capacity
+        self.max_capacity = parse_capacity_value(cap_parts[-1])
         if self.max_capacity is not None:
             self.is_full = self.cur_capacity >= self.max_capacity
         else:

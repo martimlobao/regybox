@@ -17,6 +17,9 @@ dependencies = [
   "urllib3>=2.5.0,<3.0.0",
 ]
 
+[project.scripts]
+regybox = "regybox.__main__:run"
+
 [dependency-groups]
 dev = [
   "coverage>=7.4.1",
@@ -34,9 +37,6 @@ dev = [
   "types-requests>=2.31.0.1",
   "yamllint>=1.33.0",
 ]
-
-[project.scripts]
-regybox = "regybox.__main__:run"
 
 [build-system]
 requires = ["uv_build>=0.8.15,<0.9.0"]

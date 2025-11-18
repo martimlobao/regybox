@@ -11,7 +11,7 @@ lint:
 	uv run docformatter --check -r src tests
 	uv run pylint src
 	uv run bandit -r src
-	uv run yamllint .
+	uv run yamllint --strict .
 
 .PHONY: typecheck
 typecheck:

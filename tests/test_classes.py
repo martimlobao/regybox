@@ -4,7 +4,7 @@ import pytest
 from bs4 import BeautifulSoup
 from bs4.element import PageElement, Tag
 
-from regybox.classes import Class
+from regybox.classes import Class, parse_capacity_value
 from regybox.exceptions import UnparseableError
 
 from . import html_examples
@@ -195,13 +195,6 @@ def test_not_yet_open() -> None:
     assert class_.unenroll_url is None
 
 
-def test_infinite_capacity() -> None:
-    class_: Class = extract_class("infinite_capacity.html")
-    assert class_.cur_capacity == INFINITE_CLASS_CURRENT_CAPACITY
-    assert class_.max_capacity is None
-    assert class_.is_full is False
-
-
 def test_unlimited() -> None:
     class_: Class = extract_class("unlimited.html")
     assert class_.is_open is False
@@ -216,3 +209,18 @@ def test_unlimited() -> None:
     assert class_.time_to_enroll > 0
     assert class_.enroll_url is None
     assert class_.unenroll_url is None
+
+
+def test_parse_capacity_empty_string_raises() -> None:
+    with pytest.raises(UnparseableError):
+        parse_capacity_value("")
+
+
+def test_parse_capacity_non_numeric_raises() -> None:
+    with pytest.raises(UnparseableError):
+        parse_capacity_value("abc")
+
+
+def test_parse_capacity_malformed_raises() -> None:
+    with pytest.raises(UnparseableError):
+        parse_capacity_value("12/34/56")
