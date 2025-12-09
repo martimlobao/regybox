@@ -26,7 +26,7 @@ from regybox.regybox import list_classes, main
 
 
 def run() -> None:
-    """Run the Regybox application."""
+    """Run the Regybox enrollment application."""
     try:
         class_date, class_time, class_type = sys.argv[1:]
     except ValueError:
@@ -40,12 +40,7 @@ def run() -> None:
 
 
 def run_list() -> None:
-    """Run the list classes command.
-
-    Raises:
-        RegyboxBaseError: If an expected error occurs during the execution
-            of the list function.
-    """
+    """Run the list classes command."""
     try:
         class_date = sys.argv[1]
     except IndexError:
@@ -55,7 +50,7 @@ def run_list() -> None:
         list_classes(class_date=class_date)
     except RegyboxBaseError as e:
         LOGGER.error(e)
-        raise
+        sys.exit(1)
     except ValueError as e:
         LOGGER.error(f"Invalid date format. Expected YYYY-MM-DD: {e}")
         sys.exit(1)
