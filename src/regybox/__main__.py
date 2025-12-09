@@ -22,11 +22,11 @@ import sys
 
 from regybox.common import LOGGER
 from regybox.exceptions import RegyboxBaseError
-from regybox.regybox import main
+from regybox.regybox import list_classes, main
 
 
 def run() -> None:
-    """Run the Regybox application."""
+    """Run the Regybox enrollment application."""
     try:
         class_date, class_time, class_type = sys.argv[1:]
     except ValueError:
@@ -36,6 +36,23 @@ def run() -> None:
         main(class_date=class_date, class_time=class_time, class_type=class_type)
     except RegyboxBaseError as e:
         LOGGER.error(e)
+        sys.exit(1)
+
+
+def run_list() -> None:
+    """Run the list classes command."""
+    try:
+        class_date = sys.argv[1]
+    except IndexError:
+        LOGGER.error("Usage: uv run list <class_date>")
+        sys.exit(1)
+    try:
+        list_classes(class_date=class_date)
+    except RegyboxBaseError as e:
+        LOGGER.error(e)
+        sys.exit(1)
+    except ValueError as e:
+        LOGGER.error(f"Invalid date format. Expected YYYY-MM-DD: {e}")
         sys.exit(1)
 
 

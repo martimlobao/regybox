@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass, field
 from urllib.parse import urljoin
 
+import ftfy
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
 
@@ -47,12 +48,12 @@ class Class:
     """Represent a CrossFit class with its attributes and behavior.
 
     This class encapsulates the attributes and behavior of a class,
-    including its name, location, date, start and end times, capacity,
+    including its name, details, date, start and end times, capacity,
     enrollment status, and various flags indicating the class state.
 
     Attributes:
         name: The name of the class.
-        location: The location of the class.
+        details: The details of the class.
         date: The date of the class in ISO format.
         start: The start time of the class in HH:MM format.
         end: The end time of the class in HH:MM format.
@@ -77,7 +78,7 @@ class Class:
 
     _tag: Tag = field(init=False, repr=False)
     name: str
-    location: str
+    details: str
     date: str
     start: str
     end: str
@@ -108,7 +109,7 @@ class Class:
         name: Tag | NavigableString | None = self._tag.find(
             "div", attrs={"align": "left", "class": "col-50"}
         )
-        location: Tag | NavigableString | None = self._tag.find(
+        details: Tag | NavigableString | None = self._tag.find(
             "div", attrs={"align": "right", "class": "col-50"}
         )
         try:
@@ -121,11 +122,11 @@ class Class:
         capacity: Tag | NavigableString | None = self._tag.find(
             "div", attrs={"align": "center", "class": "col"}
         )
-        if name is None or location is None or time_ is None or capacity is None:
+        if name is None or details is None or time_ is None or capacity is None:
             raise UnparseableError
 
         self.name = name.text.strip()
-        self.location = location.text.strip()
+        self.details = ftfy.fix_text(details.text.strip())
         self.date = datetime.datetime.fromtimestamp(date, tz=TIMEZONE).date().isoformat()
         self.start, *_, self.end = time_.text.split()
         cap_parts: list[str] = capacity.text.split()

@@ -2,14 +2,15 @@
 name = "regybox"
 version = "1.2.0"
 description = "Automatically enroll in Regybox CrossFit classes"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = "MIT"
 authors = [
   { name = "Martim Lobao", email = "m@rtimlobao.com" },
 ]
-license = "MIT"
-readme = "README.md"
-requires-python = ">=3.12,<3.13"
 dependencies = [
   "beautifulsoup4>=4.13.4,<5.0.0",
+  "ftfy>=6.3.1,<7.0.0",
   "icalendar>=6.3.1,<7.0.0",
   "python-dotenv>=1.1.1,<2.0.0",
   "recurring-ical-events>=3.8.0,<4.0.0",
@@ -18,18 +19,19 @@ dependencies = [
 ]
 
 [project.scripts]
+list = "regybox.__main__:run_list"
 regybox = "regybox.__main__:run"
 
 [dependency-groups]
 dev = [
+  "bandit>=1.7.8",
   "coverage>=7.4.1",
   "docformatter>=1.7.5",
-  "bandit>=1.7.8",
   "hypothesis>=6.97.3",
   "ipython>=8.20.0",
   "mypy>=1.8.0",
   "pylint>=3.0.3",
-  "pytest>=8.0.0",
+  "pytest>=9.0.0",
   "pytest-cov>=4.1.0",
   "ruff>=0",
   "types-beautifulsoup4>=4.12.0.5",
@@ -45,12 +47,15 @@ build-backend = "uv_build"
 [tool.bandit]
 exclude_dirs = ["tests"]
 
-[tool.isort]
-profile = "black"
-line_length = 99
-
 [tool.docformatter]
 recursive = true
 style = "google"
 wrap-descriptions = 80
 wrap-summaries = 80
+
+[tool.isort]
+profile = "black"
+line_length = 99
+
+[tool.pytest]
+addopts = ["--cov-fail-under=60", "--cov=src"]
