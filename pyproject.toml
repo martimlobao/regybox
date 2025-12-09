@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "beautifulsoup4>=4.13.4,<5.0.0",
+  "ftfy>=6.3.1",
   "icalendar>=6.3.1,<7.0.0",
   "python-dotenv>=1.1.1,<2.0.0",
   "recurring-ical-events>=3.8.0,<4.0.0",
@@ -19,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 regybox = "regybox.__main__:run"
+list = "regybox.__main__:run_list"
 
 [dependency-groups]
 dev = [
@@ -54,3 +56,6 @@ recursive = true
 style = "google"
 wrap-descriptions = 80
 wrap-summaries = 80
+
+[tool.pytest]
+addopts = ["--cov-fail-under=60", "--cov=src"]

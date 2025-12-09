@@ -105,3 +105,85 @@ def main(
     except UserAlreadyEnrolledError:
         LOGGER.info("Already enrolled in class")
     LOGGER.info(f"Runtime: {(datetime.datetime.now(TIMEZONE) - START).total_seconds():.3f}")
+
+
+def list_classes(class_date: str) -> None:
+    """List all classes for a specific date.
+
+    Args:
+        class_date: The date of the classes in the format 'YYYY-MM-DD'.
+    """
+    date = (datetime.datetime.strptime(class_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE)).date()
+    classes: list[Class] = get_classes(date.year, date.month, date.day)
+
+    # Prepare data and calculate column widths
+    table_data = []
+    for class_ in classes:
+        status_parts = []
+        if class_.is_open:
+            status_parts.append("OPEN")
+        if class_.is_full:
+            status_parts.append("FULL")
+        if class_.is_overbooked:
+            status_parts.append("OVERBOOKED")
+        if class_.is_over:
+            status_parts.append("OVER")
+        if class_.user_is_enrolled:
+            status_parts.append("ENROLLED")
+        if class_.user_is_waitlisted:
+            status_parts.append("WAITLISTED")
+        if class_.user_is_blocked:
+            status_parts.append("BLOCKED")
+
+        status = ", ".join(status_parts) if status_parts else "-"
+        capacity = (
+            f"{class_.cur_capacity}/{class_.max_capacity}"
+            if class_.max_capacity is not None
+            else f"{class_.cur_capacity}/∞"
+        )
+        time_range = f"{class_.start}-{class_.end}"
+
+        table_data.append((class_.name, class_.details, time_range, capacity, status))
+
+    # Calculate max width for each column
+    if not table_data:
+        LOGGER.info(f"Classes for {class_date}: No classes found.")
+        return
+
+    col_widths = [
+        max(len("Name"), *(len(row[0]) for row in table_data)),
+        max(len("Details"), *(len(row[1]) for row in table_data)),
+        max(len("Time"), *(len(row[2]) for row in table_data)),
+        max(len("Capacity"), *(len(row[3]) for row in table_data)),
+        max(len("Status"), *(len(row[4]) for row in table_data)),
+    ]
+
+    # Build markdown table with fixed column widths
+    header = (
+        f"| {'Name':<{col_widths[0]}} | {'Details':<{col_widths[1]}} | "
+        f"{'Time':<{col_widths[2]}} | {'Capacity':<{col_widths[3]}} | "
+        f"{'Status':<{col_widths[4]}} |"
+    )
+    separator = (
+        f"| {'-' * col_widths[0]} | {'-' * col_widths[1]} | "
+        f"{'-' * col_widths[2]} | {'-' * col_widths[3]} | "
+        f"{'-' * col_widths[4]} |"
+    )
+
+    rows = []
+    for name, details, time_range, capacity, status in table_data:
+        rows.append(
+            f"| {name:<{col_widths[0]}} | {details:<{col_widths[1]}} | "
+            f"{time_range:<{col_widths[2]}} | {capacity:<{col_widths[3]}} | "
+            f"{status:<{col_widths[4]}} |"
+        )
+
+    table_lines = [
+        f"Classes for {class_date}:",
+        "",
+        header,
+        separator,
+        *rows,
+    ]
+
+    LOGGER.info("\n".join(table_lines))
