@@ -3,7 +3,7 @@ sync:
 	uv sync
 
 .PHONY: check
-check: lint typecheck test trunk-check
+check: lint typecheck test
 
 .PHONY: lint
 lint:
@@ -26,14 +26,6 @@ fix:
 	uv run ruff format
 	uv run ruff check --fix
 	uv run docformatter -r src tests
-
-.PHONY: trunk-check
-trunk-check:
-	trunk check
-
-.PHONY: trunk-fmt
-trunk-fmt:
-	trunk fmt
 
 .PHONY: repl
 repl:
