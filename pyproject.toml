@@ -1,6 +1,6 @@
 [project]
 name = "regybox"
-version = "1.2.0"
+version = "2.2.0"
 description = "Automatically enroll in Regybox CrossFit classes"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
