@@ -22,33 +22,8 @@ jobs:
       - name: Fetch tags
         run: git fetch --tags --force
 
-      - name: Check pyproject.toml change
-        id: pyproject_change
-        run: |
-          base="${{ github.event.before }}"
-          if [ "$base" = "0000000000000000000000000000000000000000" ] \
-            || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            base=""
-          fi
-
-          if [ -z "$base" ]; then
-            if [ -f pyproject.toml ]; then
-              echo "changed=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "changed=false" >> "$GITHUB_OUTPUT"
-            fi
-            exit 0
-          fi
-
-          if git diff --name-only "$base" "${{ github.sha }}" | grep -q '^pyproject\.toml$'; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Read current version
         id: current_version
-        if: steps.pyproject_change.outputs.changed == 'true'
         run: |
           set -euo pipefail
           if [ ! -f pyproject.toml ]; then
@@ -69,31 +44,15 @@ jobs:
           )
           printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
 
-      - name: Read previous version
-        id: previous_version
-        if: steps.pyproject_change.outputs.changed == 'true'
+      - name: Read latest tag
+        id: latest_tag
         run: |
           set -euo pipefail
-          if git show "${{ github.event.before }}:pyproject.toml" > /tmp/pyproject.toml 2>/dev/null; then
-            previous=$(python - <<'PY'
-            import pathlib
-            import tomllib
-
-            data = tomllib.loads(pathlib.Path("/tmp/pyproject.toml").read_text())
-            version = data.get("project", {}).get("version")
-            if not version:
-                raise SystemExit("previous pyproject.toml is missing project.version")
-            print(version)
-            PY
-            )
-            printf 'version=%s\n' "$previous" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=" >> "$GITHUB_OUTPUT"
-          fi
+          latest_tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+          printf 'tag=%s\n' "$latest_tag" >> "$GITHUB_OUTPUT"
 
       - name: Compare versions
         id: version_compare
-        if: steps.pyproject_change.outputs.changed == 'true'
         run: |
           set -euo pipefail
           if [ -z "${{ steps.current_version.outputs.version }}" ]; then
@@ -101,12 +60,8 @@ jobs:
             exit 1
           fi
 
-          if [ -z "${{ steps.previous_version.outputs.version }}" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ "${{ steps.current_version.outputs.version }}" = "${{ steps.previous_version.outputs.version }}" ]; then
+          current_tag="v${{ steps.current_version.outputs.version }}"
+          if git show-ref --tags --verify --quiet "refs/tags/${current_tag}"; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
