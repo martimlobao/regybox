@@ -92,7 +92,7 @@ jobs:
         if: steps.version_compare.outputs.changed == 'true'
         run: |
           version="${{ steps.current_version.outputs.version }}"
-          if ! [[ "$version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Unsupported version format: $version"
             exit 0
           fi
@@ -102,28 +102,12 @@ jobs:
           minor_tag=""
           patch_tag=""
 
-          if [ -n "$minor" ]; then
-            minor_tag="v${major}.${minor}"
-          fi
-
-          if [ -n "$patch" ]; then
-            patch_tag="v${major}.${minor}.${patch}"
-          fi
-
+          minor_tag="v${major}.${minor}"
+          patch_tag="v${major}.${minor}.${patch}"
+          
           git tag -f "$major_tag" "${{ github.sha }}"
-          if [ -n "$minor_tag" ]; then
-            git tag -f "$minor_tag" "${{ github.sha }}"
-          fi
-          if [ -n "$patch_tag" ]; then
-            git tag -f "$patch_tag" "${{ github.sha }}"
-          fi
+          git tag -f "$minor_tag" "${{ github.sha }}"
+          git tag -f "$patch_tag" "${{ github.sha }}"
 
-          if [ -n "$minor_tag" ]; then
-            git push origin -f "$major_tag" "$minor_tag"
-          else
-            git push origin -f "$major_tag"
-          fi
-
-          if [ -n "$patch_tag" ]; then
-            git push origin "$patch_tag"
-          fi
+          git push origin "$patch_tag"
+          git push origin -f "$major_tag" "$minor_tag"
