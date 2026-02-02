@@ -53,22 +53,43 @@ jobs:
         id: current_version
         if: steps.pyproject_change.outputs.changed == 'true'
         run: |
-          version=$(uv run python -c \
-            'import pathlib, tomllib; ' \
-            'data = tomllib.loads(pathlib.Path("pyproject.toml").read_text()); ' \
-            'print(data["project"]["version"])')
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          if [ ! -f pyproject.toml ]; then
+            echo "pyproject.toml not found." >&2
+            exit 1
+          fi
+
+          version=$(python - <<'PY'
+          import pathlib
+          import tomllib
+
+          data = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          version = data.get("project", {}).get("version")
+          if not version:
+              raise SystemExit("pyproject.toml is missing project.version")
+          print(version)
+          PY
+          )
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
 
       - name: Read previous version
         id: previous_version
         if: steps.pyproject_change.outputs.changed == 'true'
         run: |
+          set -euo pipefail
           if git show "${{ github.event.before }}:pyproject.toml" > /tmp/pyproject.toml 2>/dev/null; then
-            previous=$(uv run python -c \
-              'import pathlib, tomllib; ' \
-              'data = tomllib.loads(pathlib.Path("/tmp/pyproject.toml").read_text()); ' \
-              'print(data["project"]["version"])')
-            echo "version=$previous" >> "$GITHUB_OUTPUT"
+            previous=$(python - <<'PY'
+            import pathlib
+            import tomllib
+
+            data = tomllib.loads(pathlib.Path("/tmp/pyproject.toml").read_text())
+            version = data.get("project", {}).get("version")
+            if not version:
+                raise SystemExit("previous pyproject.toml is missing project.version")
+            print(version)
+            PY
+            )
+            printf 'version=%s\n' "$previous" >> "$GITHUB_OUTPUT"
           else
             echo "version=" >> "$GITHUB_OUTPUT"
           fi
@@ -77,6 +98,12 @@ jobs:
         id: version_compare
         if: steps.pyproject_change.outputs.changed == 'true'
         run: |
+          set -euo pipefail
+          if [ -z "${{ steps.current_version.outputs.version }}" ]; then
+            echo "Current version could not be read from pyproject.toml." >&2
+            exit 1
+          fi
+
           if [ -z "${{ steps.previous_version.outputs.version }}" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -91,10 +118,11 @@ jobs:
       - name: Tag release
         if: steps.version_compare.outputs.changed == 'true'
         run: |
+          set -euo pipefail
           version="${{ steps.current_version.outputs.version }}"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Unsupported version format: $version"
-            exit 0
+            echo "Unsupported version format: $version" >&2
+            exit 1
           fi
 
           IFS='.' read -r major minor patch <<< "$version"
