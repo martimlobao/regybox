@@ -104,7 +104,7 @@ jobs:
 
           minor_tag="v${major}.${minor}"
           patch_tag="v${major}.${minor}.${patch}"
-          
+
           git tag -f "$major_tag" "${{ github.sha }}"
           git tag -f "$minor_tag" "${{ github.sha }}"
           git tag -f "$patch_tag" "${{ github.sha }}"
