@@ -18,6 +18,7 @@ Returns:
     None
 """
 
+import argparse
 import sys
 
 from regybox.common import LOGGER
@@ -27,13 +28,30 @@ from regybox.regybox import list_classes, main
 
 def run() -> None:
     """Run the Regybox enrollment application."""
-    try:
-        class_date, class_time, class_type = sys.argv[1:]
-    except ValueError:
-        LOGGER.error("Usage: uv run regybox <class_date> <class_time> <class_type>")
+    parser = argparse.ArgumentParser(
+        prog="regybox",
+        description="Enroll in a Regybox class.",
+    )
+    parser.add_argument("class_date", help="Class date in YYYY-MM-DD format.")
+    parser.add_argument("class_time", help="Class start time in HH:MM format.")
+    parser.add_argument("class_type", help="Class type name.")
+    parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=900,
+        help="Maximum number of seconds to wait for enrollment to open.",
+    )
+    args = parser.parse_args()
+    if args.timeout_seconds <= 0:
+        LOGGER.error("timeout-seconds must be a positive integer.")
         sys.exit(1)
     try:
-        main(class_date=class_date, class_time=class_time, class_type=class_type)
+        main(
+            class_date=args.class_date,
+            class_time=args.class_time,
+            class_type=args.class_type,
+            timeout=args.timeout_seconds,
+        )
     except RegyboxBaseError as e:
         LOGGER.error(e)
         sys.exit(1)

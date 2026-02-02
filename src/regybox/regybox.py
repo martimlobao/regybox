@@ -42,6 +42,7 @@ def main(
     class_time: str = CLASS_TIME,
     class_type: str = CLASS_TYPE,
     check_calendar: bool = True,
+    timeout: int = 900,
 ) -> None:
     """Execute the main Regybox application.
 
@@ -54,6 +55,8 @@ def main(
         check_calendar: Flag indicating whether to check a personal calendar for
             the existence of a planned class at the given date and time.
             Defaults to True.
+        timeout: Maximum number of seconds to wait for enrollment to open.
+            Defaults to 900 seconds (15 minutes).
 
     Raises:
         ClassNotOpenError: If the class is not open for enrollment.
@@ -74,7 +77,6 @@ def main(
             event_name=EVENT_NAME,
         )
 
-    timeout: int = 900  # try for 15 minutes
     while (datetime.datetime.now(TIMEZONE) - START).total_seconds() < timeout:
         classes: list[Class] = get_classes(date.year, date.month, date.day)
         class_: Class = pick_class(

@@ -22,6 +22,10 @@ inputs:
   calendar-url:
     description: Optional URL to an iCal calendar that blocks the slot when you already have a class planned.
     required: false
+  timeout-seconds:
+    description: Maximum number of seconds to wait for enrollment to open.
+    required: false
+    default: "900"
   send-email:
     description: Set to true to send a confirmation email when the job finishes.
     required: false
@@ -76,7 +80,9 @@ runs:
         PHPSESSID: ${{ inputs.phpsessid }}
         REGYBOX_USER: ${{ inputs.regybox-user }}
         CALENDAR_URL: ${{ inputs.calendar-url }}
-      run: uv run regybox "${CLASS_DATE}" "${CLASS_TIME}" "${CLASS_TYPE}"
+      run: >-
+        uv run regybox "${CLASS_DATE}" "${CLASS_TIME}" "${CLASS_TYPE}"
+        --timeout-seconds "${{ inputs.timeout-seconds }}"
     - name: Capture enrollment result
       if: always()
       shell: bash

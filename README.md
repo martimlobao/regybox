@@ -47,6 +47,7 @@ This project powers a GitHub Action that books a class for you and can send a co
              class-time: 06:30 # Class start time in HH:MM (24-hour) format
              class-type: WOD Rato # Exact class name as it appears in Regybox
              class-date-offset-days: 2 # Look this many days ahead when booking
+             timeout-seconds: 900 # Maximum seconds to wait for enrollment to open
              phpsessid: ${{ secrets.PHPSESSID }}
              regybox-user: ${{ secrets.REGYBOX_USER }}
              calendar-url: ${{ secrets.CALENDAR_URL }}
