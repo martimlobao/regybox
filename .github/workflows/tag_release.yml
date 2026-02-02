@@ -1,7 +1,7 @@
 ---
 name: Tag Release
 
-"on":
+on: # yamllint disable-line rule:truthy
   push:
     branches:
       - main
@@ -19,13 +19,31 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
       - name: Fetch tags
         run: git fetch --tags --force
 
       - name: Check pyproject.toml change
         id: pyproject_change
         run: |
-          if git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -q '^pyproject\.toml$'; then
+          base="${{ github.event.before }}"
+          if [ "$base" = "0000000000000000000000000000000000000000" ] \
+            || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            base=""
+          fi
+
+          if [ -z "$base" ]; then
+            if [ -f pyproject.toml ]; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
+          if git diff --name-only "$base" "${{ github.sha }}" | grep -q '^pyproject\.toml$'; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -35,14 +53,10 @@ jobs:
         id: current_version
         if: steps.pyproject_change.outputs.changed == 'true'
         run: |
-          version=$(python - <<'PY'
-          import pathlib
-          import tomllib
-
-          data = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
-          print(data["project"]["version"])
-          PY
-          )
+          version=$(uv run python -c \
+            'import pathlib, tomllib; ' \
+            'data = tomllib.loads(pathlib.Path("pyproject.toml").read_text()); ' \
+            'print(data["project"]["version"])')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Read previous version
@@ -50,14 +64,10 @@ jobs:
         if: steps.pyproject_change.outputs.changed == 'true'
         run: |
           if git show "${{ github.event.before }}:pyproject.toml" > /tmp/pyproject.toml 2>/dev/null; then
-            previous=$(python - <<'PY'
-            import pathlib
-            import tomllib
-
-            data = tomllib.loads(pathlib.Path("/tmp/pyproject.toml").read_text())
-            print(data["project"]["version"])
-            PY
-            )
+            previous=$(uv run python -c \
+              'import pathlib, tomllib; ' \
+              'data = tomllib.loads(pathlib.Path("/tmp/pyproject.toml").read_text()); ' \
+              'print(data["project"]["version"])')
             echo "version=$previous" >> "$GITHUB_OUTPUT"
           else
             echo "version=" >> "$GITHUB_OUTPUT"
@@ -82,10 +92,38 @@ jobs:
         if: steps.version_compare.outputs.changed == 'true'
         run: |
           version="${{ steps.current_version.outputs.version }}"
+          if ! [[ "$version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+            echo "Unsupported version format: $version"
+            exit 0
+          fi
+
           IFS='.' read -r major minor patch <<< "$version"
+          major_tag="v${major}"
+          minor_tag=""
+          patch_tag=""
 
-          git tag -f "v${major}" "${{ github.sha }}"
-          git tag -f "v${major}.${minor}" "${{ github.sha }}"
-          git tag -f "v${major}.${minor}.${patch}" "${{ github.sha }}"
+          if [ -n "$minor" ]; then
+            minor_tag="v${major}.${minor}"
+          fi
 
-          git push origin -f "v${major}" "v${major}.${minor}" "v${major}.${minor}.${patch}"
+          if [ -n "$patch" ]; then
+            patch_tag="v${major}.${minor}.${patch}"
+          fi
+
+          git tag -f "$major_tag" "${{ github.sha }}"
+          if [ -n "$minor_tag" ]; then
+            git tag -f "$minor_tag" "${{ github.sha }}"
+          fi
+          if [ -n "$patch_tag" ]; then
+            git tag -f "$patch_tag" "${{ github.sha }}"
+          fi
+
+          if [ -n "$minor_tag" ]; then
+            git push origin -f "$major_tag" "$minor_tag"
+          else
+            git push origin -f "$major_tag"
+          fi
+
+          if [ -n "$patch_tag" ]; then
+            git push origin "$patch_tag"
+          fi
