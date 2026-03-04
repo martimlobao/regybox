@@ -1,6 +1,8 @@
 ---
 name: Validate Pull Request
 on: # yamllint disable-line rule:truthy
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -28,3 +30,10 @@ jobs:
       - name: Test
         run: |
           make test
+      - name: Generate coverage report
+        run: uv run coverage xml -o coverage.xml
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          fail_ci_if_error: true
