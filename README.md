@@ -1,5 +1,8 @@
 # Regybox Auto-Enroller
 
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://docs.astral.sh/uv/)
+[![codecov](https://codecov.io/gh/martimlobao/regybox/graph/badge.svg?branch=main)](https://codecov.io/gh/martimlobao/regybox)
+
 Automatically enroll in a CrossFit class on the Regybox platform.
 
 This project powers a GitHub Action that books a class for you and can send a
