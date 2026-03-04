@@ -8,6 +8,7 @@ from regybox.notifications import (
     extract_error_signal,
     extract_traceback,
     extract_user_error_payload,
+    read_log_text,
 )
 
 
@@ -141,3 +142,59 @@ def test_email_appendix_is_trimmed() -> None:
 
     assert "Technical details (for support):" in body
     assert "... (truncated)" in body
+
+
+def test_read_log_text_none_returns_empty() -> None:
+    assert read_log_text(None) == ""  # noqa: PLC1901
+
+
+def test_read_log_text_missing_file_returns_empty() -> None:
+    assert read_log_text("/nonexistent/path/12345") == ""  # noqa: PLC1901
+
+
+def test_extract_user_error_payload_returns_none_when_no_payload() -> None:
+    assert extract_user_error_payload("plain log line\nanother line") is None
+
+
+def test_extract_user_error_payload_with_tuple_next_steps() -> None:
+    """user_next_steps as tuple in payload is normalized to list of strings."""
+    payload = {
+        "error_code": "login_error",
+        "user_title": "Title",
+        "user_message": "Message",
+        "user_next_steps": ("Step one", "Step two"),
+        "technical_message": "Technical",
+    }
+    log = f"ERROR {REGYBOX_USER_ERROR_PREFIX}{json.dumps(payload)}"
+    parsed = extract_user_error_payload(log)
+    assert parsed is not None
+    assert parsed["user_next_steps"] == ["Step one", "Step two"]
+
+
+def test_extract_user_error_payload_with_trailing_json() -> None:
+    """Payload can be parsed when prefixed by log text."""
+    payload = {"error_code": "x", "user_title": "T", "user_message": "M", "technical_message": ""}
+    log = f"2026-03-04 00:00:00 ERROR [REGYBOX] - {REGYBOX_USER_ERROR_PREFIX}{json.dumps(payload)}"
+    parsed = extract_user_error_payload(log)
+    assert parsed is not None
+    assert parsed["error_code"] == "x"
+
+
+def test_extract_user_error_payload_skips_line_with_invalid_json_after_prefix() -> None:
+    """Lines where JSON after prefix is invalid are skipped."""
+    # First line valid, second has prefix but invalid inner JSON
+    valid = {"error_code": "a", "user_title": "A", "user_message": "M", "technical_message": ""}
+    log = (
+        f"ERROR {REGYBOX_USER_ERROR_PREFIX}{json.dumps(valid)}\n"
+        f"ERROR {REGYBOX_USER_ERROR_PREFIX}prefix {{ not valid json }}"
+    )
+    parsed = extract_user_error_payload(log)
+    # Should return the last (first in reversed) valid payload
+    assert parsed is not None
+    assert parsed["error_code"] == "a"
+
+
+def test_extract_user_error_payload_skips_non_dict_json() -> None:
+    """Lines where payload is valid JSON but not a dict are skipped."""
+    log = f"ERROR {REGYBOX_USER_ERROR_PREFIX}[1, 2, 3]"
+    assert extract_user_error_payload(log) is None

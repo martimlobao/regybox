@@ -10,12 +10,12 @@ Args:
     class_time (str): The time of the class.
     class_type (str): The type of the class.
 
+Returns:
+    None
+
 Raises:
     RegyboxBaseError: If an expected error occurs during the execution of the
     main function.
-
-Returns:
-    None
 """
 
 import argparse

@@ -57,7 +57,7 @@ def _normalize_steps(value: object) -> tuple[str, ...]:
     if isinstance(value, list):
         return tuple(str(step) for step in cast("list[object]", value) if str(step).strip())
     if isinstance(value, tuple):
-        return tuple(str(step) for step in cast("tuple[object, ...]", value) if str(step).strip())
+        return tuple(str(step) for step in value if str(step).strip())  # pyright: ignore[reportUnknownArgumentType,reportUnknownVariableType]
     if isinstance(value, str) and value.strip():
         return (value.strip(),)
     return ()
