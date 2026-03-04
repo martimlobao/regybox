@@ -98,7 +98,7 @@ morning) or trigger it manually.
 
 ### 4. Set Up Calendar Sync
 
-You can optionally chose to have the auto-enroller check your personal calendar to confirm if
+You can optionally choose to have the auto-enroller check your personal calendar to confirm if
 there is a class scheduled at the desired time before attempting to enroll in the class. If no such
 class exists on your calendar, the action will fail to enroll in the class. This may be useful if
 you are travelling and you do not plan on attending your usual classes: simply delete the classes
