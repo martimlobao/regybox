@@ -49,11 +49,11 @@ def main(
     Args:
         class_date: The date of the class in the format 'YYYY-MM-DD'. If None,
             the current date plus 2 days will be used. Defaults to None.
-        class_time: The time of the class in the format 'HH:MM'. Defaults to the
-            value of CLASS_TIME.
+        class_time: The time of the class in the format 'HH:MM'. Defaults to
+            the value of CLASS_TIME.
         class_type: The type of class. Defaults to the value of CLASS_TYPE.
-        check_calendar: Flag indicating whether to check a personal calendar for
-            the existence of a planned class at the given date and time.
+        check_calendar: Whether to check a personal calendar for a planned
+            class at the given date and time.
             Defaults to True.
         timeout: Maximum number of seconds to wait for enrollment to open.
             Defaults to 900 seconds (15 minutes).
@@ -119,9 +119,9 @@ def list_classes(class_date: str) -> None:
     classes: list[Class] = get_classes(date.year, date.month, date.day)
 
     # Prepare data and calculate column widths
-    table_data = []
+    table_data: list[tuple[str, str, str, str, str]] = []
     for class_ in classes:
-        status_parts = []
+        status_parts: list[str] = []
         if class_.is_open:
             status_parts.append("OPEN")
         if class_.is_full:
@@ -172,7 +172,7 @@ def list_classes(class_date: str) -> None:
         f"{'-' * col_widths[4]} |"
     )
 
-    rows = []
+    rows: list[str] = []
     for name, details, time_range, capacity, status in table_data:
         rows.append(
             f"| {name:<{col_widths[0]}} | {details:<{col_widths[1]}} | "
@@ -180,7 +180,7 @@ def list_classes(class_date: str) -> None:
             f"{status:<{col_widths[4]}} |"
         )
 
-    table_lines = [
+    table_lines: list[str] = [
         f"Classes for {class_date}:",
         "",
         header,

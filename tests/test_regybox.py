@@ -1,4 +1,6 @@
+import json
 import logging
+import sys
 import tomllib
 from importlib import resources
 from pathlib import Path
@@ -9,8 +11,9 @@ import pytest
 from hypothesis import given
 from hypothesis.strategies import integers
 
+from regybox import __main__ as cli
 from regybox import __version__
-from regybox.exceptions import NoClassesFoundError
+from regybox.exceptions import REGYBOX_USER_ERROR_PREFIX, NoClassesFoundError, RegyboxLoginError
 from regybox.regybox import LONG_WAIT, MED_WAIT, SHORT_WAIT, list_classes, snooze
 
 from . import html_examples
@@ -75,9 +78,7 @@ def test_list_classes(caplog: pytest.LogCaptureFixture) -> None:
     # Verify the table has rows
     lines = log_output.split("\n")
     table_lines = [
-        line
-        for line in lines
-        if line.startswith("|") and "Name" not in line and "---" not in line
+        line for line in lines if line.startswith("|") and "Name" not in line and "---" not in line
     ]
     assert len(table_lines) > 0, "Table should have at least one data row"
 
@@ -90,3 +91,84 @@ def test_list_classes_no_classes(caplog: pytest.LogCaptureFixture) -> None:
         pytest.raises(NoClassesFoundError),
     ):
         list_classes("2024-07-01")
+
+
+def test_cli_run_calls_main_with_parsed_args(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["regybox", "2026-03-10", "06:30", "WOD Rato", "--timeout-seconds", "12"],
+    )
+    with patch("regybox.__main__.main") as mock_main:
+        cli.run()
+
+    mock_main.assert_called_once_with(
+        class_date="2026-03-10",
+        class_time="06:30",
+        class_type="WOD Rato",
+        timeout=12,
+    )
+
+
+def test_cli_run_exits_on_non_positive_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["regybox", "2026-03-10", "06:30", "WOD Rato", "--timeout-seconds", "0"],
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        cli.run()
+
+    assert exc_info.value.code == 1
+
+
+def test_cli_run_exits_and_logs_payload_on_known_error(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["regybox", "2026-03-10", "06:30", "WOD Rato", "--timeout-seconds", "12"],
+    )
+    with (
+        caplog.at_level(logging.ERROR),
+        patch("regybox.__main__.main", side_effect=RegyboxLoginError()),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        cli.run()
+
+    assert exc_info.value.code == 1
+    payload_line = next(
+        line for line in caplog.text.splitlines() if REGYBOX_USER_ERROR_PREFIX in line
+    )
+    payload = json.loads(payload_line.split(REGYBOX_USER_ERROR_PREFIX, maxsplit=1)[1])
+    assert payload["error_code"] == "login_error"
+    assert payload["technical_message"] == "Unable to log in"
+
+
+def test_cli_run_list_exits_when_missing_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["list"])
+    with pytest.raises(SystemExit) as exc_info:
+        cli.run_list()
+
+    assert exc_info.value.code == 1
+
+
+def test_cli_run_list_calls_list_classes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["list", "2026-03-10"])
+    with patch("regybox.__main__.list_classes") as mock_list_classes:
+        cli.run_list()
+
+    mock_list_classes.assert_called_once_with(class_date="2026-03-10")
+
+
+def test_cli_run_list_exits_on_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["list", "not-a-date"])
+    with (
+        patch("regybox.__main__.list_classes", side_effect=ValueError("bad date")),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        cli.run_list()
+
+    assert exc_info.value.code == 1

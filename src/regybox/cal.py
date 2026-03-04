@@ -5,9 +5,10 @@ parsing the calendar specified by CALENDAR_URL.
 """
 
 import datetime
+from typing import cast
 
 import icalendar
-import recurring_ical_events
+import recurring_ical_events  # pyright: ignore[reportMissingTypeStubs]
 import requests
 
 from regybox.common import CALENDAR_URL, LOGGER
@@ -32,7 +33,11 @@ class Calendar(metaclass=Singleton):
         if not self.calendar:
             res: requests.models.Response = requests.get(CALENDAR_URL, timeout=10)
             res.raise_for_status()
-            self.calendar = icalendar.Calendar.from_ical(res.content)
+            decoded = res.content.decode("utf-8", errors="replace")
+            self.calendar = cast(
+                "icalendar.Calendar",
+                icalendar.Calendar.from_ical(decoded),
+            )
 
     def find(
         self,
@@ -51,7 +56,10 @@ class Calendar(metaclass=Singleton):
         """
         if not self.calendar:
             return None
-        events: list[icalendar.cal.Event] = recurring_ical_events.of(self.calendar).at(when)
+        events = cast(
+            "list[icalendar.cal.Event]",
+            recurring_ical_events.of(self.calendar).at(when),
+        )
         for event in events:
             if (
                 type(event["DTSTART"].dt) is datetime.date
@@ -84,10 +92,10 @@ class Calendar(metaclass=Singleton):
         """
         if not self.calendar:
             return []
-        events: list[icalendar.cal.Event] = recurring_ical_events.of(self.calendar).between(
-            start, end
+        return cast(
+            "list[icalendar.cal.Event]",
+            recurring_ical_events.of(self.calendar).between(start, end),
         )
-        return events
 
 
 def check_cal(date: datetime.date, time: datetime.time, event_name: str | None = None) -> bool:

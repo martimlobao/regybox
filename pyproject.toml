@@ -1,6 +1,6 @@
 [project]
 name = "regybox"
-version = "2.2.2"
+version = "2.3.0"
 description = "Automatically enroll in Regybox CrossFit classes"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -24,25 +24,27 @@ regybox = "regybox.__main__:run"
 
 [dependency-groups]
 dev = [
-  "bandit>=1.7.8",
-  "coverage>=7.4.1",
-  "docformatter>=1.7.5",
-  "hypothesis>=6.97.3",
-  "ipython>=8.20.0",
-  "mypy>=1.8.0",
-  "pylint>=3.0.3",
-  "pytest>=9.0.0",
-  "pytest-cov>=4.1.0",
+  "bandit>=1.8.6",
+  "coverage>=7.10.6",
+  "docformatter>=1.7.7",
+  "hypothesis>=6.139.2",
+  "ipython>=9.5.0",
+  "pyright>=1.1.405",
+  "pytest>=8.4.2",
+  "pytest-cov>=7.0.0",
   "pytest-env>=1.2.0",
-  "ruff>=0",
+  "ruff>=0.13.1",
+  "rumdl>=0.0.174",
+  "tombi>=0.6.42",
+  "ty>=0.0.2",
   "types-beautifulsoup4>=4.12.0.5",
   "types-pytz>=2023.4.0.0",
   "types-requests>=2.31.0.1",
-  "yamllint>=1.33.0",
+  "yamllint>=1.37.1",
 ]
 
 [build-system]
-requires = ["uv_build>=0.8.15,<0.11.0"]
+requires = ["uv_build>=0.10.1,<0.11.0"]
 build-backend = "uv_build"
 
 [tool.bandit]
@@ -51,15 +53,15 @@ exclude_dirs = ["tests"]
 [tool.docformatter]
 recursive = true
 style = "google"
-wrap-descriptions = 80
-wrap-summaries = 80
+wrap-descriptions = 79
+wrap-summaries = 79
 
-[tool.isort]
-profile = "black"
-line_length = 99
+[tool.pyright]
+include = ["src", "tests"]
+typeCheckingMode = "strict"
 
 [tool.pytest]
-addopts = ["--cov-fail-under=60", "--cov=src"]
+addopts = ["--cov-fail-under=75", "--cov=src"]
 
 [tool.pytest_env]
 REGYBOX_USER = "test-user"
