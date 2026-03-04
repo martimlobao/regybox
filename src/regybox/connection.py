@@ -1,8 +1,8 @@
 """Provide functionality for managing a connection to the Regybox website.
 
 This module defines the RegyboxSession class, which represents a session with
-the Regybox website. It also provides functions for retrieving HTML content from
-URLs and generating parameters for class retrieval requests.
+the Regybox website. It also provides functions for retrieving HTML content
+from URLs and generating parameters for class retrieval requests.
 """
 
 import re
@@ -87,7 +87,7 @@ class RegyboxSession(requests.Session, metaclass=Singleton):
         }
 
 
-def get_url_html(url: str, *, params: dict | None = None) -> str:
+def get_url_html(url: str, *, params: dict[str, str] | None = None) -> str:
     """Retrieve the HTML content of a given URL.
 
     Args:
@@ -100,10 +100,9 @@ def get_url_html(url: str, *, params: dict | None = None) -> str:
     Raises:
         RegyboxLoginError: If the request to the URL fails.
     """
-    if not params:
-        params = {}
+    query_params: dict[str, str] = params if params is not None else {}
     res: requests.models.Response = RegyboxSession().get(
-        url, headers=HEADERS, params=params, timeout=10
+        url, headers=HEADERS, params=query_params, timeout=10
     )
     res.raise_for_status()
     if re.findall(r"app/app_nova/login.php", res.text):

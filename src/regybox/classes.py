@@ -71,7 +71,7 @@ class Class:
         user_is_enrolled: Indicates if the user is enrolled in the class.
         user_is_waitlisted: Indicates if the user is on the class waitlist.
         time_to_start: The number of seconds remaining until the class starts.
-        time_to_enroll: The number of seconds remaining until enrollment closes.
+        time_to_enroll: The number of seconds until enrollment closes.
         enroll_url: The URL to enroll in the class.
         unenroll_url: The URL to unenroll from the class.
     """
@@ -224,7 +224,7 @@ class Class:
             if not isinstance(state, Tag):
                 raise TypeError(f"Unexpected type for state: {state}")
             if self.user_is_waitlisted:
-                # explicit logic because next check fails for waitlisted classes
+                # next check fails for waitlisted classes
                 self.is_over = False
             elif "class" not in state.attrs:
                 self.is_over = True
@@ -312,7 +312,7 @@ class Class:
         Raises:
             ValueError: If the unenroll URL is not set.
             RuntimeError: If the student is not enrolled in the class.
-            UnparseableError: If the response for unenrollment cannot be parsed.
+            UnparseableError: If the unenrollment response cannot be parsed.
 
         Returns:
             The response message indicating successful unenrollment.
@@ -381,7 +381,7 @@ def get_classes(year: int, month: int, day: int) -> list[Class]:
         day: The day of the date.
 
     Returns:
-        A list of Class objects representing the classes for the specified date.
+        A list of Class objects for the specified date.
     """
     return [Class(tag) for tag in get_classes_tags(year, month, day)]
 

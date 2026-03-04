@@ -75,9 +75,7 @@ def test_list_classes(caplog: pytest.LogCaptureFixture) -> None:
     # Verify the table has rows
     lines = log_output.split("\n")
     table_lines = [
-        line
-        for line in lines
-        if line.startswith("|") and "Name" not in line and "---" not in line
+        line for line in lines if line.startswith("|") and "Name" not in line and "---" not in line
     ]
     assert len(table_lines) > 0, "Table should have at least one data row"
 

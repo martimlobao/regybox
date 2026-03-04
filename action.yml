@@ -80,9 +80,13 @@ runs:
         PHPSESSID: ${{ inputs.phpsessid }}
         REGYBOX_USER: ${{ inputs.regybox-user }}
         CALENDAR_URL: ${{ inputs.calendar-url }}
-      run: >-
-        uv run regybox "${CLASS_DATE}" "${CLASS_TIME}" "${CLASS_TYPE}"
-        --timeout-seconds "${{ inputs.timeout-seconds }}"
+      run: |
+        set -euo pipefail
+        log_path="${RUNNER_TEMP}/regybox-enroll.log"
+        echo "ENROLL_LOG_PATH=${log_path}" >> "$GITHUB_ENV"
+        uv run regybox "${CLASS_DATE}" "${CLASS_TIME}" "${CLASS_TYPE}" \
+          --timeout-seconds "${{ inputs.timeout-seconds }}" \
+          2>&1 | tee "${log_path}"
     - name: Capture enrollment result
       if: always()
       shell: bash
@@ -96,6 +100,18 @@ runs:
           result=failure
         fi
         echo "ENROLL_RESULT=${result}" >> "$GITHUB_ENV"
+    - name: Compose confirmation email
+      if: always() && inputs.send-email != 'false'
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        ENROLL_RESULT: ${{ env.ENROLL_RESULT }}
+        CLASS_TYPE: ${{ env.CLASS_TYPE }}
+        CLASS_DATE: ${{ env.CLASS_DATE }}
+        CLASS_TIME: ${{ env.CLASS_TIME }}
+        ENROLL_LOG_PATH: ${{ env.ENROLL_LOG_PATH }}
+        ACTION_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: uv run python -m regybox.notifications
     - name: Validate email inputs
       if: always() && inputs.send-email != 'false'
       shell: bash
@@ -117,13 +133,8 @@ runs:
         server_port: ${{ inputs.email-port }}
         username: ${{ inputs.email-username }}
         password: ${{ inputs.email-password }}
-        subject: >-
-          Regybox Auto-enroll: ${{ env.ENROLL_RESULT }} for ${{ env.CLASS_TYPE }} on
-          ${{ env.CLASS_DATE }} at ${{ env.CLASS_TIME }}
-        body: >
-          The Regybox enrollment finished in a ${{ env.ENROLL_RESULT }} state.
-
-          See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} for the full log.
+        subject: ${{ env.EMAIL_SUBJECT }}
+        body: ${{ env.EMAIL_BODY }}
         to: ${{ inputs.email-to }}
         from: ${{ inputs.email-from-name }}
 branding:
