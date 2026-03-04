@@ -1,0 +1,106 @@
+[global]
+disable = [
+  "MD028",  # no-blanks-blockquote
+]
+
+[per-file-ignores]
+".agents/**/*.md" = ["MD013", "MD033"]
+"{AGENTS.md,README.md}" = ["MD033"]  # Allow HTML in AGENTS.md and README.md
+
+[MD003]
+style = "atx"  # Options: "consistent", "atx", "atx_closed", "setext", "setext_with_atx", "setext_with_atx_closed"
+
+[MD004]
+style = "dash"  # Unordered list style (asterisk, plus, dash, consistent)
+
+[MD007]
+indent = 4  # Unordered list indentation
+style = "fixed"  # Indentation style: "text-aligned" (default) or "fixed" (default: "text-aligned")
+
+[MD009]
+br-spaces = 2  # Number of spaces for hard line breaks (default: 2)
+strict = true  # Remove all trailing spaces, even line breaks (default: false)
+list-item-empty-lines = false  # Allow trailing spaces in empty list item lines (default: false)
+
+[MD013]
+line-length = 99
+code-blocks = false
+
+[MD022]
+lines-above = 1
+lines-below = 1
+
+[MD029]
+style = "ordered"
+
+[MD032]
+allow-lazy-continuation = false
+
+[MD033]
+allowed-elements = ["br"]  # List of allowed HTML tags (default: none)
+
+[MD044]
+# Proper names that should be capitalized correctly
+names = [
+  "GitHub",
+  "Markdown",
+  "rumdl",
+]
+code-blocks = false  # Check code blocks for proper names (default: false, skips code blocks)
+
+[MD046]
+style = "fenced"  # Options: "consistent", "fenced", "indented"
+
+[MD048]
+style = "backtick"  # Options: "consistent", "backtick", "tilde"
+
+[MD049]
+style = "asterisk"  # Options: "consistent", "asterisk", "underscore"
+
+[MD050]
+style = "asterisk"  # Options: "consistent", "asterisk", "underscore"
+
+[MD054]
+autolink = false  # Allow <https://example.com>
+inline = true  # Allow [text](url) and ![alt](url)
+full = false  # Allow [text][ref] with separate [ref]: url definition
+collapsed = false  # Allow [text][] with separate [text]: url definition
+shortcut = true  # Allow [text] with separate [text]: url definition
+url-inline = true  # Allow [https://example.com](https://example.com)
+
+[MD055]
+style = "leading-and-trailing"
+
+[MD060]
+enabled = true
+style = "aligned"
+max-width = 0
+
+[MD063]
+enabled = true
+style = "title_case"
+lowercase-words = [
+  "a",
+  "an",
+  "and",
+  "at",
+  "but",
+  "by",
+  "de",
+  "for",
+  "from",
+  "into",
+  "nor",
+  "o",
+  "of",
+  "on",
+  "onto",
+  "or",
+  "the",
+  "to",
+  "upon",
+  "via",
+  "vs",
+  "with",
+  "without",
+]

@@ -19,11 +19,20 @@ Returns:
 """
 
 import argparse
+import json
 import sys
 
 from regybox.common import LOGGER
-from regybox.exceptions import RegyboxBaseError
+from regybox.exceptions import REGYBOX_USER_ERROR_PREFIX, RegyboxBaseError
 from regybox.regybox import list_classes, main
+
+
+def _log_user_error(error: RegyboxBaseError) -> None:
+    """Log technical and user-facing payload details for known errors."""
+    LOGGER.error(error)
+    LOGGER.error(
+        f"{REGYBOX_USER_ERROR_PREFIX}{json.dumps(error.to_user_payload(), ensure_ascii=True)}"
+    )
 
 
 def run() -> None:
@@ -53,7 +62,7 @@ def run() -> None:
             timeout=args.timeout_seconds,
         )
     except RegyboxBaseError as e:
-        LOGGER.error(e)
+        _log_user_error(e)
         sys.exit(1)
 
 
@@ -67,7 +76,7 @@ def run_list() -> None:
     try:
         list_classes(class_date=class_date)
     except RegyboxBaseError as e:
-        LOGGER.error(e)
+        _log_user_error(e)
         sys.exit(1)
     except ValueError as e:
         LOGGER.error(f"Invalid date format. Expected YYYY-MM-DD: {e}")
