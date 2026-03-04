@@ -6,6 +6,7 @@ import pytest
 from regybox.cal import Calendar, check_cal
 from regybox.common import TIMEZONE
 from regybox.exceptions import UnplannedClassError
+from regybox.utils.singleton import Singleton
 
 
 def test_check_cal(mock_requests_get: pytest.MonkeyPatch) -> None:  # noqa: ARG001
@@ -32,3 +33,15 @@ def test_check_cal(mock_requests_get: pytest.MonkeyPatch) -> None:  # noqa: ARG0
         )
         != []
     )
+
+
+def test_check_cal_returns_true_when_no_calendar_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """check_cal returns True when CALENDAR_URL is unset."""
+    monkeypatch.setattr("regybox.cal.CALENDAR_URL", "")
+    if Calendar in Singleton._instances:
+        del Singleton._instances[Calendar]
+    try:
+        assert check_cal(datetime.date(2012, 2, 13), datetime.time(10, 0)) is True
+    finally:
+        if Calendar in Singleton._instances:
+            del Singleton._instances[Calendar]

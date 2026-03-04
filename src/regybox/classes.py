@@ -260,6 +260,9 @@ class Class:
     def enroll(self) -> str:
         """Enroll the student in the CrossFit class.
 
+        Returns:
+            The response message after successful enrollment.
+
         Raises:
             ValueError: If the enroll URL is not set.
             UserAlreadyEnrolledError: If the user is already enrolled in the
@@ -267,9 +270,6 @@ class Class:
             ClassNotOpenError: If the class is not open for enrollment.
             ClassIsOverbookedError: If the class is already overbooked.
             UnparseableError: If the response for enrollment cannot be parsed.
-
-        Returns:
-            The response message after successful enrollment.
         """
         if self.user_is_enrolled:
             raise UserAlreadyEnrolledError
@@ -309,13 +309,13 @@ class Class:
     def unenroll(self) -> str:
         """Unenroll the student from the CrossFit class.
 
+        Returns:
+            The response message indicating successful unenrollment.
+
         Raises:
             ValueError: If the unenroll URL is not set.
             RuntimeError: If the student is not enrolled in the class.
             UnparseableError: If the unenrollment response cannot be parsed.
-
-        Returns:
-            The response message indicating successful unenrollment.
         """
         if self.unenroll_url is None:
             raise ValueError("Unenroll URL is not set")

@@ -1,11 +1,22 @@
 from importlib import resources
+from unittest.mock import patch
 
 import pytest
 from bs4 import BeautifulSoup
 from bs4.element import PageElement, Tag
 
-from regybox.classes import Class, parse_capacity_value
-from regybox.exceptions import UnparseableError
+from regybox.classes import (
+    Class,
+    get_classes,
+    get_classes_tags,
+    parse_capacity_value,
+    pick_class,
+)
+from regybox.exceptions import (
+    ClassNotFoundError,
+    NoClassesFoundError,
+    UnparseableError,
+)
 
 from . import html_examples
 
@@ -224,3 +235,95 @@ def test_parse_capacity_non_numeric_raises() -> None:
 def test_parse_capacity_malformed_raises() -> None:
     with pytest.raises(UnparseableError):
         parse_capacity_value("12/34/56")
+
+
+def test_parse_capacity_infinity_returns_none() -> None:
+    assert parse_capacity_value("∞") is None
+
+
+def test_enroll_returns_message() -> None:
+    """Enroll() returns the message from the response script."""
+    class_: Class = extract_class("open.html")
+    enroll_html = (
+        "<html><body><script>"
+        'parent.msg_toast_icon("Inscrito com sucesso", "ok");'
+        "</script></body></html>"
+    )
+    with patch("regybox.classes.get_url_html", return_value=enroll_html):
+        result = class_.enroll()
+    assert result == "Inscrito com sucesso"
+
+
+def test_enroll_sets_waitlisted_when_lista_espera_in_response() -> None:
+    """Enroll() sets user_is_waitlisted when response contains lista_espera."""
+    class_: Class = extract_class("open.html")
+    enroll_html = (
+        "<html><body><script>"
+        "parent.popup('php/popups/lista_espera.php');"
+        'parent.msg_toast_icon("Waitlisted", "ok");'
+        "</script></body></html>"
+    )
+    with patch("regybox.classes.get_url_html", return_value=enroll_html):
+        class_.enroll()
+    assert class_.user_is_waitlisted is True
+
+
+def test_enroll_raises_unparseable_when_no_response_script() -> None:
+    """Enroll() raises UnparseableError when no msg_toast_icon in response."""
+    class_: Class = extract_class("open.html")
+    with (
+        patch("regybox.classes.get_url_html", return_value="<html><body>no script</body></html>"),
+        pytest.raises(UnparseableError),
+    ):
+        class_.enroll()
+
+
+def test_unenroll_returns_message() -> None:
+    """Unenroll() returns the message from the response script."""
+    class_: Class = extract_class("registered.html")
+    unenroll_html = (
+        '<html><body><script>parent.msg_toast_icon("Cancelado", "ok");</script></body></html>'
+    )
+    with patch("regybox.classes.get_url_html", return_value=unenroll_html):
+        result = class_.unenroll()
+    assert result == "Cancelado"
+
+
+def test_unenroll_raises_unparseable_when_no_response_script() -> None:
+    """Unenroll() raises UnparseableError when no msg_toast_icon."""
+    class_: Class = extract_class("registered.html")
+    with (
+        patch("regybox.classes.get_url_html", return_value="<html><body>no script</body></html>"),
+        pytest.raises(UnparseableError),
+    ):
+        class_.unenroll()
+
+
+def test_pick_class_raises_when_not_found() -> None:
+    """pick_class raises ClassNotFoundError when no matching class."""
+    class_: Class = extract_class("open.html")
+    with pytest.raises(ClassNotFoundError):
+        pick_class(
+            [class_],
+            class_time="07:00",
+            class_type="WOD Rato",
+            class_date=class_.date,
+        )
+
+
+def test_get_classes_tags_raises_when_no_classes() -> None:
+    """get_classes_tags raises NoClassesFoundError when HTML has no filtro0."""
+    with (
+        patch("regybox.classes.get_classes_html", return_value="<html><body></body></html>"),
+        pytest.raises(NoClassesFoundError),
+    ):
+        get_classes_tags(2024, 7, 1)
+
+
+def test_get_classes_returns_list_of_classes() -> None:
+    """get_classes returns Class instances from get_classes_tags."""
+    open_html = resources.files(html_examples).joinpath("open.html").read_text()
+    with patch("regybox.classes.get_classes_html", return_value=open_html):
+        classes = get_classes(2024, 7, 1)
+    assert len(classes) == 1
+    assert classes[0].name == "WOD Rato"

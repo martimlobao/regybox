@@ -82,11 +82,9 @@ def test_run_list_calls_list_classes(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_run_list_exits_on_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_list exits with code 1 when list_classes raises ValueError."""
     monkeypatch.setattr(sys, "argv", ["list", "not-a-date"])
-    with (
-        patch("regybox.__main__.list_classes", side_effect=ValueError("bad date")),
-        pytest.raises(SystemExit) as exc_info,
-    ):
+    with pytest.raises(SystemExit) as exc_info:
         cli.run_list()
 
     assert exc_info.value.code == 1
