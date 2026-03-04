@@ -61,7 +61,7 @@ include = ["src", "tests"]
 typeCheckingMode = "strict"
 
 [tool.pytest]
-addopts = ["--cov-fail-under=70", "--cov=src"]
+addopts = ["--cov-fail-under=75", "--cov=src"]
 
 [tool.pytest_env]
 REGYBOX_USER = "test-user"
