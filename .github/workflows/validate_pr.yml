@@ -6,6 +6,10 @@ on: # yamllint disable-line rule:truthy
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   lint:
     name: Lint
@@ -37,3 +41,4 @@ jobs:
         with:
           files: coverage.xml
           fail_ci_if_error: true
+          use_oidc: true
