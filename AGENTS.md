@@ -7,6 +7,6 @@
 - Before sending changes, run `make lint`, `make typecheck`, and `make test`, which are
   shortcuts for quality checks (e.g., `uv run pytest`, `uv run ruff check`, `uv run mypy
   src tests`).
-- Do not mask failing CI or external integration problems by disabling checks, making
-  failures non-blocking, or otherwise weakening enforcement unless the user explicitly
-  asks for that tradeoff.
+- Do not mask failures by disabling checks, making failures non-blocking, swallowing
+  errors, or otherwise weakening enforcement or hiding the problem unless the user
+  explicitly asks for that tradeoff.
