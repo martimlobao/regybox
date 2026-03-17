@@ -219,6 +219,9 @@ pyrightconfig.json
 # Built Visual Studio Code Extensions
 *.vsix
 
+# Local git worktrees used for isolated agent branches
+.worktrees/
+
 ### VisualStudioCode Patch ###
 # Ignore all local history of files
 .history
