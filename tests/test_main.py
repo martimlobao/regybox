@@ -54,6 +54,33 @@ def test_run_calls_main_with_calendar_event_name(monkeypatch: pytest.MonkeyPatch
     )
 
 
+def test_run_calls_main_with_whitespace_calendar_event_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "regybox",
+            "2026-03-10",
+            "06:30",
+            "WOD Rato",
+            "--calendar-event-name",
+            "   ",
+        ],
+    )
+    with patch("regybox.__main__.main") as mock_main:
+        cli.run()
+
+    mock_main.assert_called_once_with(
+        class_date="2026-03-10",
+        class_time="06:30",
+        class_type="WOD Rato",
+        event_name="   ",
+        timeout=900,
+    )
+
+
 def test_run_exits_on_non_positive_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         sys,

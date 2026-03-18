@@ -87,6 +87,8 @@ def test_exception_technical_message_is_preserved() -> None:
     )
     assert "WOD Rato" in unplanned_error.user_message
     assert "Crossfit" in unplanned_error.user_message
+    assert any("calendar-event-name" in step for step in unplanned_error.user_next_steps)
+    assert any("calendar-url" in step for step in unplanned_error.user_next_steps)
 
 
 def test_unplanned_class_error_without_class_type_omits_placeholder() -> None:

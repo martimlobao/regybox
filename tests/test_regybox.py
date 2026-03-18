@@ -1,6 +1,4 @@
-import json
 import logging
-import sys
 import tomllib
 from importlib import resources
 from pathlib import Path
@@ -11,13 +9,10 @@ import pytest
 from hypothesis import given
 from hypothesis.strategies import integers
 
-from regybox import __main__ as cli
 from regybox import __version__
 from regybox.exceptions import (
-    REGYBOX_USER_ERROR_PREFIX,
     ClassNotOpenError,
     NoClassesFoundError,
-    RegyboxLoginError,
     RegyboxTimeoutError,
     UserAlreadyEnrolledError,
 )
@@ -109,113 +104,6 @@ def test_list_classes_no_classes(caplog: pytest.LogCaptureFixture) -> None:
         pytest.raises(NoClassesFoundError),
     ):
         list_classes("2024-07-01")
-
-
-def test_cli_run_calls_main_with_parsed_args(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["regybox", "2026-03-10", "06:30", "WOD Rato", "--timeout-seconds", "12"],
-    )
-    with patch("regybox.__main__.main") as mock_main:
-        cli.run()
-
-    mock_main.assert_called_once_with(
-        class_date="2026-03-10",
-        class_time="06:30",
-        class_type="WOD Rato",
-        event_name=None,
-        timeout=12,
-    )
-
-
-def test_cli_run_calls_main_with_calendar_event_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "regybox",
-            "2026-03-10",
-            "06:30",
-            "WOD Rato",
-            "--calendar-event-name",
-            "Crossfit",
-        ],
-    )
-    with patch("regybox.__main__.main") as mock_main:
-        cli.run()
-
-    mock_main.assert_called_once_with(
-        class_date="2026-03-10",
-        class_time="06:30",
-        class_type="WOD Rato",
-        event_name="Crossfit",
-        timeout=900,
-    )
-
-
-def test_cli_run_exits_on_non_positive_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["regybox", "2026-03-10", "06:30", "WOD Rato", "--timeout-seconds", "0"],
-    )
-    with pytest.raises(SystemExit) as exc_info:
-        cli.run()
-
-    assert exc_info.value.code == 1
-
-
-def test_cli_run_exits_and_logs_payload_on_known_error(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["regybox", "2026-03-10", "06:30", "WOD Rato", "--timeout-seconds", "12"],
-    )
-    with (
-        caplog.at_level(logging.ERROR),
-        patch("regybox.__main__.main", side_effect=RegyboxLoginError()),
-        pytest.raises(SystemExit) as exc_info,
-    ):
-        cli.run()
-
-    assert exc_info.value.code == 1
-    payload_line = next(
-        line for line in caplog.text.splitlines() if REGYBOX_USER_ERROR_PREFIX in line
-    )
-    payload = json.loads(payload_line.split(REGYBOX_USER_ERROR_PREFIX, maxsplit=1)[1])
-    assert payload["error_code"] == "login_error"
-    assert payload["technical_message"] == "Unable to log in"
-
-
-def test_cli_run_list_exits_when_missing_date(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["list"])
-    with pytest.raises(SystemExit) as exc_info:
-        cli.run_list()
-
-    assert exc_info.value.code == 1
-
-
-def test_cli_run_list_calls_list_classes(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["list", "2026-03-10"])
-    with patch("regybox.__main__.list_classes") as mock_list_classes:
-        cli.run_list()
-
-    mock_list_classes.assert_called_once_with(class_date="2026-03-10")
-
-
-def test_cli_run_list_exits_on_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["list", "not-a-date"])
-    with (
-        patch("regybox.__main__.list_classes", side_effect=ValueError("bad date")),
-        pytest.raises(SystemExit) as exc_info,
-    ):
-        cli.run_list()
-
-    assert exc_info.value.code == 1
 
 
 def test_main_enrolls_when_class_open(
@@ -374,6 +262,27 @@ def test_main_calls_check_cal_with_explicit_event_name() -> None:
 
     assert mock_check_cal.call_args[1]["event_name"] == "Crossfit"
     assert mock_check_cal.call_args[1]["class_type"] == "WOD Rato"
+
+
+def test_main_calls_check_cal_with_whitespace_event_name_uses_default() -> None:
+    mock_class: MagicMock = MagicMock()
+    mock_class.is_open = True
+    mock_class.enroll.return_value = "OK"
+    with (
+        patch("regybox.regybox.check_cal") as mock_check_cal,
+        patch("regybox.regybox.get_classes", return_value=[mock_class]),
+        patch("regybox.regybox.pick_class", return_value=mock_class),
+    ):
+        main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD Rato",
+            event_name="   ",
+            check_calendar=True,
+            timeout=60,
+        )
+
+    assert mock_check_cal.call_args[1]["event_name"] == "CrossFit"
 
 
 def test_main_waits_then_enrolls_when_class_opens_later(

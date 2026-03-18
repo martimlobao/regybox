@@ -58,7 +58,7 @@ morning) or trigger it manually.
            with:
              class-time: 06:30 # Class start time in HH:MM (24-hour) format
              class-type: WOD Rato # Exact class name as it appears in Regybox
-             calendar-event-name: Crossfit # Optional calendar title override; defaults to CrossFit
+             calendar-event-name: CrossFit # Optional calendar title override; defaults to CrossFit
              class-date-offset-days: 2 # Look this many days ahead when booking
              timeout-seconds: 900 # Maximum seconds to wait for enrollment to open
              phpsessid: ${{ secrets.PHPSESSID }}

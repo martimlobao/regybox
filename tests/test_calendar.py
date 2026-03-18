@@ -59,6 +59,23 @@ def test_check_cal_error_includes_normalized_event_name(
     )
 
 
+def test_check_cal_error_uses_requested_event_placeholder_when_no_event_name(
+    mock_requests_get: pytest.MonkeyPatch,  # noqa: ARG001
+) -> None:
+    with pytest.raises(UnplannedClassError) as exc_info:
+        check_cal(
+            datetime.date(2012, 2, 13),
+            datetime.time(11, 0),
+            event_name=None,
+            class_type="WOD Rato",
+        )
+
+    message = str(exc_info.value)
+    assert "requested event" in message
+    assert "WOD Rato" in message
+    assert "2012-02-13T11:00:00" in message
+
+
 def test_check_cal_returns_true_when_no_calendar_url(monkeypatch: pytest.MonkeyPatch) -> None:
     """check_cal returns True when CALENDAR_URL is unset."""
     monkeypatch.setattr("regybox.cal.CALENDAR_URL", "")

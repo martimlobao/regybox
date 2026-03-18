@@ -140,10 +140,10 @@ def check_cal(
         and time.
     """
     when: datetime.datetime = datetime.datetime.combine(date, time)
-    normalized_event_name: str | None = _normalize_event_name(event_name)
     if not Calendar().calendar:
         return True
-    if not Calendar().find(when=when, event_name=normalized_event_name):
+    if not Calendar().find(when=when, event_name=event_name):
+        normalized_event_name: str | None = _normalize_event_name(event_name)
         raise UnplannedClassError(
             class_type=class_type,
             event_name=normalized_event_name or "requested event",
