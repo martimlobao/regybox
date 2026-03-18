@@ -2,4 +2,4 @@
 
 __all__: list[str] = ["__version__"]
 
-__version__: str = "2.3.0"
+__version__: str = "2.4.0"
