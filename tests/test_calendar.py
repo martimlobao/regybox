@@ -13,6 +13,13 @@ def test_check_cal(mock_requests_get: pytest.MonkeyPatch) -> None:  # noqa: ARG0
     assert check_cal(datetime.date(2012, 2, 13), datetime.time(10, 0)) is True
     with pytest.raises(UnplannedClassError):
         check_cal(datetime.date(2012, 2, 13), datetime.time(10, 0), event_name="foo")
+    assert (
+        check_cal(datetime.date(2012, 2, 13), datetime.time(10, 0), event_name="crossfit") is True
+    )
+    assert (
+        check_cal(datetime.date(2012, 2, 13), datetime.time(10, 0), event_name="  CrossFit  ")
+        is True
+    )
 
     calendar = Calendar()
     timezone = ZoneInfo("Europe/Vaduz")
@@ -33,6 +40,40 @@ def test_check_cal(mock_requests_get: pytest.MonkeyPatch) -> None:  # noqa: ARG0
         )
         != []
     )
+
+
+def test_check_cal_error_includes_normalized_event_name(
+    mock_requests_get: pytest.MonkeyPatch,  # noqa: ARG001
+) -> None:
+    with pytest.raises(UnplannedClassError) as exc_info:
+        check_cal(
+            datetime.date(2012, 2, 13),
+            datetime.time(10, 0),
+            event_name="  foo  ",
+            class_type="WOD Rato",
+        )
+
+    assert str(exc_info.value) == (
+        "CrossFit class 'WOD Rato' at 2012-02-13T10:00:00 is not scheduled on personal"
+        " calendar as 'foo'"
+    )
+
+
+def test_check_cal_error_uses_requested_event_placeholder_when_no_event_name(
+    mock_requests_get: pytest.MonkeyPatch,  # noqa: ARG001
+) -> None:
+    with pytest.raises(UnplannedClassError) as exc_info:
+        check_cal(
+            datetime.date(2012, 2, 13),
+            datetime.time(11, 0),
+            event_name=None,
+            class_type="WOD Rato",
+        )
+
+    message = str(exc_info.value)
+    assert "requested event" in message
+    assert "WOD Rato" in message
+    assert "2012-02-13T11:00:00" in message
 
 
 def test_check_cal_returns_true_when_no_calendar_url(monkeypatch: pytest.MonkeyPatch) -> None:

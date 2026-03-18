@@ -22,6 +22,9 @@ inputs:
   calendar-url:
     description: Optional URL to an iCal calendar that blocks the slot when you already have a class planned.
     required: false
+  calendar-event-name:
+    description: Optional calendar event title to match. Defaults to CrossFit when omitted.
+    required: false
   timeout-seconds:
     description: Maximum number of seconds to wait for enrollment to open.
     required: false
@@ -66,12 +69,14 @@ runs:
         INPUT_CLASS_DATE_OFFSET_DAYS: ${{ inputs.class-date-offset-days }}
         INPUT_CLASS_TIME: ${{ inputs.class-time }}
         INPUT_CLASS_TYPE: ${{ inputs.class-type }}
+        INPUT_CALENDAR_EVENT_NAME: ${{ inputs.calendar-event-name }}
       run: |
         set -euo pipefail
         class_date=$(date -d "+${INPUT_CLASS_DATE_OFFSET_DAYS} days" +%F)
         echo "CLASS_DATE=${class_date}" >> "$GITHUB_ENV"
         echo "CLASS_TIME=${INPUT_CLASS_TIME}" >> "$GITHUB_ENV"
         echo "CLASS_TYPE=${INPUT_CLASS_TYPE}" >> "$GITHUB_ENV"
+        echo "CALENDAR_EVENT_NAME=${INPUT_CALENDAR_EVENT_NAME}" >> "$GITHUB_ENV"
     - id: enroll
       name: Enroll in class
       shell: bash
@@ -83,10 +88,18 @@ runs:
       run: |
         set -euo pipefail
         log_path="${RUNNER_TEMP}/regybox-enroll.log"
+        args=(
+          "${CLASS_DATE}"
+          "${CLASS_TIME}"
+          "${CLASS_TYPE}"
+          "--timeout-seconds"
+          "${{ inputs.timeout-seconds }}"
+        )
+        if [[ -n "${CALENDAR_EVENT_NAME// }" ]]; then
+          args+=("--calendar-event-name" "${CALENDAR_EVENT_NAME}")
+        fi
         echo "ENROLL_LOG_PATH=${log_path}" >> "$GITHUB_ENV"
-        uv run regybox "${CLASS_DATE}" "${CLASS_TIME}" "${CLASS_TYPE}" \
-          --timeout-seconds "${{ inputs.timeout-seconds }}" \
-          2>&1 | tee "${log_path}"
+        uv run regybox "${args[@]}" 2>&1 | tee "${log_path}"
     - name: Capture enrollment result
       if: always()
       shell: bash

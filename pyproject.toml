@@ -65,7 +65,7 @@ executionEnvironments = [
 ]
 
 [tool.pytest]
-addopts = ["--cov-fail-under=90", "--cov=src"]
+addopts = ["--cov-fail-under=95", "--cov=src"]
 
 [tool.pytest_env]
 REGYBOX_USER = "test-user"

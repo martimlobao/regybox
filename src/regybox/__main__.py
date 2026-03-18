@@ -45,6 +45,11 @@ def run() -> None:
     parser.add_argument("class_time", help="Class start time in HH:MM format.")
     parser.add_argument("class_type", help="Class type name.")
     parser.add_argument(
+        "--calendar-event-name",
+        default=None,
+        help="Calendar event title to match. Defaults to CrossFit.",
+    )
+    parser.add_argument(
         "--timeout-seconds",
         type=int,
         default=900,
@@ -59,6 +64,7 @@ def run() -> None:
             class_date=args.class_date,
             class_time=args.class_time,
             class_type=args.class_type,
+            event_name=args.calendar_event_name,
             timeout=args.timeout_seconds,
         )
     except RegyboxBaseError as e:
