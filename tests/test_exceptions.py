@@ -31,7 +31,11 @@ from regybox.exceptions import (
             "Enrollment window opens later than expected",
         ),
         (
-            UnplannedClassError("2026-02-01T06:30:00"),
+            UnplannedClassError(
+                class_type="WOD Rato",
+                event_name="Crossfit",
+                class_isotime="2026-02-01T06:30:00",
+            ),
             "class_not_in_calendar",
             "Class not found on your calendar",
         ),
@@ -69,6 +73,30 @@ def test_exception_user_payload(error: RegyboxBaseError, error_code: str, title:
 def test_exception_technical_message_is_preserved() -> None:
     timeout_error = RegyboxTimeoutError(120)
     parse_error = UnparseableError("Bad parser state")
+    unplanned_error = UnplannedClassError(
+        class_type="WOD Rato",
+        event_name="Crossfit",
+        class_isotime="2026-02-01T06:30:00",
+    )
 
     assert str(timeout_error) == "Timed out waiting for enrollment to open after 120 seconds"
     assert str(parse_error) == "Bad parser state"
+    assert str(unplanned_error) == (
+        "CrossFit class 'WOD Rato' at 2026-02-01T06:30:00 is not scheduled on personal calendar"
+        " as 'Crossfit'"
+    )
+    assert "WOD Rato" in unplanned_error.user_message
+    assert "Crossfit" in unplanned_error.user_message
+
+
+def test_unplanned_class_error_without_class_type_omits_placeholder() -> None:
+    error = UnplannedClassError(
+        class_type=None,
+        event_name="Crossfit",
+        class_isotime="2026-02-01T06:30:00",
+    )
+
+    assert str(error) == (
+        "CrossFit class at 2026-02-01T06:30:00 is not scheduled on personal calendar as 'Crossfit'"
+    )
+    assert "requested class" not in str(error)

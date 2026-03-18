@@ -146,19 +146,27 @@ class RegyboxTimeoutError(RegyboxBaseError):
 class UnplannedClassError(RegyboxBaseError):
     """Exception raised when a class is not planned on the user's calendar."""
 
-    def __init__(self, class_isotime: str) -> None:
+    def __init__(self, *, class_type: str | None, event_name: str, class_isotime: str) -> None:
         """Initialize a new instance of the UnplannedClassError class."""
+        technical_prefix: str = (
+            f"CrossFit class '{class_type}'" if class_type else "CrossFit class"
+        )
         super().__init__(
-            f"CrossFit class at {class_isotime} is not scheduled on personal calendar",
+            f"{technical_prefix} at {class_isotime} is not scheduled on personal calendar as"
+            f" '{event_name}'",
             error_code="class_not_in_calendar",
             user_title="Class not found on your calendar",
             user_message=(
-                f"The automation expected a CrossFit event at {class_isotime}, but none was "
-                "found in your configured calendar."
+                f"The automation expected {technical_prefix} at {class_isotime} to be scheduled"
+                f" on your personal calendar as '{event_name}', but it was not found."
             ),
             user_next_steps=(
-                "Add or restore the class event in your calendar and retry.",
-                "If you want to skip calendar validation, remove CALENDAR_URL from the workflow.",
+                "Add or restore the calendar event and retry.",
+                (
+                    "If your calendar uses a different title, set calendar-event-name in the"
+                    " workflow."
+                ),
+                "If you want to skip calendar validation, remove calendar-url from the workflow.",
             ),
         )
 

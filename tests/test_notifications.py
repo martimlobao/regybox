@@ -2,7 +2,7 @@
 
 import json
 
-from regybox.exceptions import REGYBOX_USER_ERROR_PREFIX
+from regybox.exceptions import REGYBOX_USER_ERROR_PREFIX, UnplannedClassError
 from regybox.notifications import (
     build_email_content,
     extract_error_signal,
@@ -121,6 +121,29 @@ def test_build_email_content_success() -> None:
     assert subject == "Regybox Auto-enroll: success for WOD Rato on 2026-03-04 at 06:30"
     assert "Your Regybox auto-enrollment completed successfully." in body
     assert "No errors were detected." in body
+
+
+def test_build_email_content_includes_calendar_event_name_for_unplanned_class() -> None:
+    payload = UnplannedClassError(
+        class_type="WOD Rato",
+        event_name="Crossfit",
+        class_isotime="2026-03-04T06:30:00",
+    ).to_user_payload()
+    log_text = (
+        "2026-03-04 00:00:00,000 ERROR [REGYBOX] [__main__.py:10] - "
+        f"{REGYBOX_USER_ERROR_PREFIX}{json.dumps(payload)}"
+    )
+
+    subject, body = build_email_content(
+        enroll_result="failure",
+        class_summary="WOD Rato on 2026-03-04 at 06:30",
+        run_url="",
+        log_text=log_text,
+    )
+
+    assert subject == "Regybox Auto-enroll: failure - Class not found on your calendar"
+    assert "What happened: The automation expected CrossFit class 'WOD Rato'" in body
+    assert "as 'Crossfit'" in body
 
 
 def test_email_appendix_is_trimmed() -> None:

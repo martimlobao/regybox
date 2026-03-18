@@ -10,11 +10,12 @@ import time
 
 from regybox.cal import check_cal
 from regybox.classes import Class, get_classes, pick_class
-from regybox.common import CLASS_TIME, CLASS_TYPE, EVENT_NAME, LOGGER, TIMEZONE
+from regybox.common import LOGGER, TIMEZONE
 from regybox.exceptions import ClassNotOpenError, RegyboxTimeoutError, UserAlreadyEnrolledError
 from regybox.utils.times import secs_to_str
 
 START: datetime.datetime = datetime.datetime.now(TIMEZONE)
+DEFAULT_CALENDAR_EVENT_NAME: str = "CrossFit"
 SHORT_WAIT: int = 1
 MED_WAIT: int = 10
 LONG_WAIT: int = 60
@@ -38,20 +39,22 @@ def snooze(time_left: int) -> int:
 
 def main(
     *,
+    class_time: str,
+    class_type: str,
     class_date: str | None = None,
-    class_time: str = CLASS_TIME,
-    class_type: str = CLASS_TYPE,
+    event_name: str = DEFAULT_CALENDAR_EVENT_NAME,
     check_calendar: bool = True,
     timeout: int = 900,
 ) -> None:
     """Execute the main Regybox application.
 
     Args:
+        class_time: The time of the class in the format 'HH:MM'.
+        class_type: The type of class.
         class_date: The date of the class in the format 'YYYY-MM-DD'. If None,
-            the current date plus 2 days will be used. Defaults to None.
-        class_time: The time of the class in the format 'HH:MM'. Defaults to
-            the value of CLASS_TIME.
-        class_type: The type of class. Defaults to the value of CLASS_TYPE.
+            the current date plus 2 days will be used.
+        event_name: Optional calendar event name override. If omitted,
+            'CrossFit' is used for calendar matching.
         check_calendar: Whether to check a personal calendar for a planned
             class at the given date and time.
             Defaults to True.
@@ -71,10 +74,16 @@ def main(
         date = (datetime.datetime.strptime(class_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE)).date()
 
     if check_calendar:
+        calendar_event_name: str = (
+            event_name.strip()
+            if event_name and event_name.strip()
+            else DEFAULT_CALENDAR_EVENT_NAME
+        )
         check_cal(
             date=date,
             time=datetime.datetime.strptime(class_time, "%H:%M").replace(tzinfo=TIMEZONE).timetz(),
-            event_name=EVENT_NAME,
+            event_name=calendar_event_name,
+            class_type=class_type,
         )
 
     while (datetime.datetime.now(TIMEZONE) - START).total_seconds() < timeout:

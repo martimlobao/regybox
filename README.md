@@ -58,6 +58,7 @@ morning) or trigger it manually.
            with:
              class-time: 06:30 # Class start time in HH:MM (24-hour) format
              class-type: WOD Rato # Exact class name as it appears in Regybox
+             calendar-event-name: Crossfit # Optional calendar title override; defaults to CrossFit
              class-date-offset-days: 2 # Look this many days ahead when booking
              timeout-seconds: 900 # Maximum seconds to wait for enrollment to open
              phpsessid: ${{ secrets.PHPSESSID }}
@@ -116,12 +117,14 @@ automatically in the class.
    In Google Calendar, open **Settings → Settings for my calendars → Integrate calendar** and copy
    the **Secret address in iCal format**.
 2. Store this URL in the repository as the `CALENDAR_URL` secret.
+3. If your calendar uses a different title than `CrossFit`, set `calendar-event-name` in the
+   workflow. If omitted, the action matches the calendar event title against `CrossFit`.
 
 ![Secret Google Calendar address](./static/gcal.png)
 
 > [!IMPORTANT]
-> Ensure the calendar event for the class is titled **“Crossfit”** so the action recognizes it as
-> a session you plan to attend.
+> The calendar match is case-insensitive and ignores leading/trailing spaces. By default, the
+> action looks for an event whose title matches `CrossFit`.
 
 ## Summary of Secrets
 

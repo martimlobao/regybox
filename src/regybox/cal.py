@@ -16,6 +16,20 @@ from regybox.exceptions import UnplannedClassError
 from regybox.utils.singleton import Singleton
 
 
+def _normalize_event_name(event_name: str | None) -> str | None:
+    """Normalize calendar event names for exact, case-insensitive matching.
+
+    Returns:
+        The trimmed event name, or ``None`` when the input is missing or blank.
+    """
+    if event_name is None:
+        return None
+    normalized: str = event_name.strip()
+    if not normalized:
+        return None
+    return normalized
+
+
 class Calendar(metaclass=Singleton):
     """Represent a calendar specified by the .ics URL in CALENDAR_URL.
 
@@ -56,6 +70,7 @@ class Calendar(metaclass=Singleton):
         """
         if not self.calendar:
             return None
+        normalized_event_name: str | None = _normalize_event_name(event_name)
         events = cast(
             "list[icalendar.cal.Event]",
             recurring_ical_events.of(self.calendar).at(when),
@@ -69,9 +84,14 @@ class Calendar(metaclass=Singleton):
                 continue
             if type(event["DTSTART"].dt) is datetime.date and type(when) is datetime.datetime:
                 continue
-            if event_name and not event.get("SUMMARY"):
+            if normalized_event_name and not event.get("SUMMARY"):
                 continue
-            if not event_name or event["SUMMARY"].lower() == event_name.lower():
+            summary: str | None = None
+            if event.get("SUMMARY"):
+                summary = _normalize_event_name(str(event["SUMMARY"]))
+            if normalized_event_name is None or (
+                summary is not None and summary.casefold() == normalized_event_name.casefold()
+            ):
                 LOGGER.debug(dict(event.sorted_items()))
                 return event
         return None
@@ -98,13 +118,19 @@ class Calendar(metaclass=Singleton):
         )
 
 
-def check_cal(date: datetime.date, time: datetime.time, event_name: str | None = None) -> bool:
+def check_cal(
+    date: datetime.date,
+    time: datetime.time,
+    event_name: str | None = None,
+    class_type: str | None = None,
+) -> bool:
     """Check if a calendar event exists at the specified date and time.
 
     Args:
         date: The date to check for the event.
         time: The time to check for the event.
-        event_name: The name of the event to check. Defaults to EVENT_NAME.
+        event_name: The name of the event to check.
+        class_type: The Regybox class type expected at that slot.
 
     Returns:
         True if the event exists, False otherwise.
@@ -114,8 +140,13 @@ def check_cal(date: datetime.date, time: datetime.time, event_name: str | None =
         and time.
     """
     when: datetime.datetime = datetime.datetime.combine(date, time)
+    normalized_event_name: str | None = _normalize_event_name(event_name)
     if not Calendar().calendar:
         return True
-    if not Calendar().find(when=when, event_name=event_name):
-        raise UnplannedClassError(when.isoformat())
+    if not Calendar().find(when=when, event_name=normalized_event_name):
+        raise UnplannedClassError(
+            class_type=class_type,
+            event_name=normalized_event_name or "requested event",
+            class_isotime=when.isoformat(),
+        )
     return True

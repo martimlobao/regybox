@@ -124,7 +124,33 @@ def test_cli_run_calls_main_with_parsed_args(monkeypatch: pytest.MonkeyPatch) ->
         class_date="2026-03-10",
         class_time="06:30",
         class_type="WOD Rato",
+        event_name=None,
         timeout=12,
+    )
+
+
+def test_cli_run_calls_main_with_calendar_event_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "regybox",
+            "2026-03-10",
+            "06:30",
+            "WOD Rato",
+            "--calendar-event-name",
+            "Crossfit",
+        ],
+    )
+    with patch("regybox.__main__.main") as mock_main:
+        cli.run()
+
+    mock_main.assert_called_once_with(
+        class_date="2026-03-10",
+        class_time="06:30",
+        class_type="WOD Rato",
+        event_name="Crossfit",
+        timeout=900,
     )
 
 
@@ -305,7 +331,7 @@ def test_main_uses_today_plus_two_when_class_date_none(
 
 
 def test_main_calls_check_cal_when_check_calendar_true() -> None:
-    """Main() calls check_cal when check_calendar is True."""
+    """Main() uses CrossFit as the default calendar event name."""
     mock_class: MagicMock = MagicMock()
     mock_class.is_open = True
     mock_class.enroll.return_value = "OK"
@@ -324,7 +350,30 @@ def test_main_calls_check_cal_when_check_calendar_true() -> None:
     mock_check_cal.assert_called_once()
     call_kw = mock_check_cal.call_args[1]
     assert call_kw["date"].isoformat() == "2026-03-10"
-    assert call_kw["event_name"] is not None
+    assert call_kw["event_name"] == "CrossFit"
+    assert call_kw["class_type"] == "WOD Rato"
+
+
+def test_main_calls_check_cal_with_explicit_event_name() -> None:
+    mock_class: MagicMock = MagicMock()
+    mock_class.is_open = True
+    mock_class.enroll.return_value = "OK"
+    with (
+        patch("regybox.regybox.check_cal") as mock_check_cal,
+        patch("regybox.regybox.get_classes", return_value=[mock_class]),
+        patch("regybox.regybox.pick_class", return_value=mock_class),
+    ):
+        main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD Rato",
+            event_name="Crossfit",
+            check_calendar=True,
+            timeout=60,
+        )
+
+    assert mock_check_cal.call_args[1]["event_name"] == "Crossfit"
+    assert mock_check_cal.call_args[1]["class_type"] == "WOD Rato"
 
 
 def test_main_waits_then_enrolls_when_class_opens_later(
