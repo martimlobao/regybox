@@ -37,7 +37,7 @@ inputs:
     description: Recipient email address for the confirmation email. Required when send-email is true.
     required: false
   email-from-name:
-    description: Display name to use for the confirmation email.
+    description: Display name to use for the confirmation email. The sender address comes from email-username.
     required: false
     default: Regybox Auto-enroll
   email-username:
@@ -149,7 +149,7 @@ runs:
         subject: ${{ env.EMAIL_SUBJECT }}
         body: ${{ env.EMAIL_BODY }}
         to: ${{ inputs.email-to }}
-        from: ${{ inputs.email-from-name }}
+        from: ${{ inputs.email-username }}
 branding:
   color: blue
   icon: clock
