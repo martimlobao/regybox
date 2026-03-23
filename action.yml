@@ -149,7 +149,7 @@ runs:
         subject: ${{ env.EMAIL_SUBJECT }}
         body: ${{ env.EMAIL_BODY }}
         to: ${{ inputs.email-to }}
-        from: ${{ inputs.email-username }}
+        from: ${{ inputs.email-from-name }} <${{ inputs.email-username }}>
 branding:
   color: blue
   icon: clock
