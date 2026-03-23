@@ -37,7 +37,7 @@ inputs:
     description: Recipient email address for the confirmation email. Required when send-email is true.
     required: false
   email-from-name:
-    description: Display name to use for the confirmation email.
+    description: Display name to use for the confirmation email. The sender address comes from email-username.
     required: false
     default: Regybox Auto-enroll
   email-username:
@@ -140,7 +140,7 @@ runs:
         fi
     - name: Send confirmation email
       if: always() && inputs.send-email != 'false'
-      uses: dawidd6/action-send-mail@ba302ba66e88942841281c984a6b31ca6d6289e6
+      uses: dawidd6/action-send-mail@d38f3f7cd391cdebfe0d38efc3998b935e951c4f
       with:
         server_address: ${{ inputs.email-server }}
         server_port: ${{ inputs.email-port }}
@@ -149,7 +149,7 @@ runs:
         subject: ${{ env.EMAIL_SUBJECT }}
         body: ${{ env.EMAIL_BODY }}
         to: ${{ inputs.email-to }}
-        from: ${{ inputs.email-from-name }}
+        from: ${{ inputs.email-from-name }} <${{ inputs.email-username }}>
 branding:
   color: blue
   icon: clock
