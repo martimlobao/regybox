@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import ClassVar, TypeVar, cast
+
+T = TypeVar("T", bound=object)
 
 
 class Singleton(type):
@@ -20,14 +22,14 @@ class Singleton(type):
         instances.
     """
 
-    _instances: ClassVar[dict[Singleton, Singleton]] = {}
+    _instances: ClassVar[dict[type[object], object]] = {}
 
-    def __call__(cls, *args: object, **kwargs: object) -> Singleton:
+    def __call__(cls: type[T], *args: object, **kwargs: object) -> T:
         """Method for creating or retrieving the instance of the class.
 
         Returns:
             The instance of the class.
         """
-        if cls not in cls._instances:
-            cls._instances[cls] = super().__call__(*args, **kwargs)
-        return cls._instances[cls]
+        if cls not in Singleton._instances:
+            Singleton._instances[cls] = type.__call__(cls, *args, **kwargs)
+        return cast("T", Singleton._instances[cls])
