@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
 
 class Singleton(type):
@@ -20,9 +20,9 @@ class Singleton(type):
         instances.
     """
 
-    _instances: ClassVar[dict[Singleton, Singleton]] = {}
+    _instances: ClassVar[dict[Singleton, Any]] = {}
 
-    def __call__(cls, *args: object, **kwargs: object) -> Singleton:
+    def __call__(cls: Singleton, *args: Any, **kwargs: Any) -> Any:
         """Method for creating or retrieving the instance of the class.
 
         Returns:
