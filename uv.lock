@@ -552,7 +552,7 @@ dev = [
     { name = "tombi", specifier = ">=0.6.42" },
     { name = "ty", specifier = ">=0.0.31" },
     { name = "types-beautifulsoup4", specifier = ">=4.12.0.5" },
-    { name = "types-icalendar", specifier = ">=6.3.2.20260223" },
+    { name = "types-icalendar", specifier = ">=6.3.2.20260408" },
     { name = "types-pytz", specifier = ">=2026.1.1.20260408" },
     { name = "types-requests", specifier = ">=2.33.0.20260408" },
     { name = "yamllint", specifier = ">=1.37.1" },
@@ -757,15 +757,15 @@ wheels = [
 
 [[package]]
 name = "types-icalendar"
-version = "6.3.2.20260402"
+version = "6.3.2.20260408"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "types-python-dateutil" },
     { name = "types-pytz" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a4/62/d6274eb46b32c587bd38273d832e71cace0039741aad6585344a3c7b1703/types_icalendar-6.3.2.20260402.tar.gz", hash = "sha256:3103e096234dc9397a2b3a9f9cfe21b5427f429dbd5fcc0722c372ccd15f35df", size = 18532, upload-time = "2026-04-02T04:21:52.807Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/6c/f6b998136ceb8c2e632467ae1095937bf7970e9a1ee9fd983b59537d9998/types_icalendar-6.3.2.20260408.tar.gz", hash = "sha256:563f9aa3b0101a3d237db9f7aaa3752f0cb319e2df3c35015766bde61fba2f24", size = 18559, upload-time = "2026-04-08T04:35:21.425Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/30/23/50fc65d82b9c75a471ab982ec28a416874093c3821cebda4793593b71de6/types_icalendar-6.3.2.20260402-py3-none-any.whl", hash = "sha256:2ba2b1b911f7991a8f03b8a56f26e792b2bba3c40c1e415a44baa42ffef5487d", size = 23263, upload-time = "2026-04-02T04:21:51.599Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/3d/4678434f928691942a2a2e46901249a4a524f90dc5b8e09c336bf74abaee/types_icalendar-6.3.2.20260408-py3-none-any.whl", hash = "sha256:a33d2aab7971a2f36f9b4d50122cda9d2ceb21a1015e6bdf978f2c883e1f1725", size = 23264, upload-time = "2026-04-08T04:35:20.552Z" },
 ]
 
 [[package]]
