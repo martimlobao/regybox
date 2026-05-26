@@ -174,16 +174,16 @@ wheels = [
 
 [[package]]
 name = "icalendar"
-version = "7.0.3"
+version = "7.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "python-dateutil" },
     { name = "typing-extensions" },
     { name = "tzdata" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b8/60/6b0356a2ed1c9689ae14bd8e44f22eac67c420a0ecca4df8306b70906600/icalendar-7.0.3.tar.gz", hash = "sha256:95027ece087ab87184d765f03761f25875821f74cdd18d3b57e9c868216d8fde", size = 443788, upload-time = "2026-03-03T12:00:10.952Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ac/e2/13c732a8da65961a249f9d745d2da5e06fc34a6c2ff24b13138bdedbf5f9/icalendar-7.1.2.tar.gz", hash = "sha256:ebc43ebeb357be98984b573d975118008dee3410d8df28b054ef2943cf3e367e", size = 471132, upload-time = "2026-05-22T10:42:29.729Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fa/c6/431fbf9063a6a4306d4cedae7823d69baf0979ba6ca57ab24a9d898cd0aa/icalendar-7.0.3-py3-none-any.whl", hash = "sha256:8c9fea6d3a89671bba8b6938d8565b4d0ec465c6a2796ef0f92790dcb9e627cd", size = 442406, upload-time = "2026-03-03T12:00:09.228Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/a0/2929543a1dfe2667e1ce08f2d6af59480d1467c0ee38acb94637965b3de3/icalendar-7.1.2-py3-none-any.whl", hash = "sha256:01c76243c76c549f58bb51510a8f0a4edb7c539726adda1356dfd0dc04fb7a53", size = 474031, upload-time = "2026-05-22T10:42:28.308Z" },
 ]
 
 [[package]]
@@ -545,7 +545,7 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.13.4,<5.0.0" },
     { name = "ftfy", specifier = ">=6.3.1,<7.0.0" },
-    { name = "icalendar", specifier = ">=6.3.1,<8.0.0" },
+    { name = "icalendar", specifier = ">=7.1.2,<8.0.0" },
     { name = "python-dotenv", specifier = ">=1.1.1,<2.0.0" },
     { name = "recurring-ical-events", specifier = ">=3.8.2,<4.0.0" },
     { name = "requests", specifier = ">=2.32.4,<3.0.0" },
