@@ -4,9 +4,9 @@ on: # yamllint disable-line rule:truthy
   workflow_dispatch:
   schedule: # 60 hours in advance for morning classes
     # standard time, will be off on the last week of march
-    - cron: 15 18 * 1-3,11-12 5-6,0-2
+    - cron: 0 18 * 1-3,11-12 5-6,0-2
     # daylight saving time, will be off on the last week of october
-    - cron: 15 17 * 4-10 5-6,0-2
+    - cron: 0 17 * 4-10 5-6,0-2
 
 jobs:
   enroll:
@@ -19,6 +19,7 @@ jobs:
           class-time: 06:30
           class-type: WOD Rato
           class-date-offset-days: 3
+          timeout-seconds: 1800
           phpsessid: ${{ secrets.PHPSESSID }}
           regybox-user: ${{ secrets.REGYBOX_USER }}
           calendar-url: ${{ secrets.CALENDAR_URL }}
