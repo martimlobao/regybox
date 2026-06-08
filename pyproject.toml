@@ -9,7 +9,7 @@ authors = [
   { name = "Martim Lobao", email = "m@rtimlobao.com" },
 ]
 dependencies = [
-  "beautifulsoup4>=4.13.4,<5.0.0",
+  "beautifulsoup4>=4.15.0,<5.0.0",
   "ftfy>=6.3.1,<7.0.0",
   "icalendar>=7.1.2,<8.0.0",
   "python-dotenv>=1.1.1,<2.0.0",
