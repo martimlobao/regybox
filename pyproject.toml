@@ -39,7 +39,7 @@ dev = [
   "ty>=0.0.44",
   "types-beautifulsoup4>=4.12.0.5",
   "types-icalendar>=6.3.2.20260518",
-  "types-pytz>=2026.2.0.20260506",
+  "types-pytz>=2026.2.0.20260518",
   "types-requests>=2.33.0.20260518",
   "yamllint>=1.37.1",
 ]
