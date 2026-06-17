@@ -25,6 +25,7 @@ import sys
 from regybox.common import LOGGER
 from regybox.exceptions import REGYBOX_USER_ERROR_PREFIX, RegyboxBaseError
 from regybox.regybox import list_classes, main
+from regybox.sync import CloudflareKVStore, sync_calendar
 
 
 def _log_user_error(error: RegyboxBaseError) -> None:
@@ -86,6 +87,68 @@ def run_list() -> None:
         sys.exit(1)
     except ValueError as e:
         LOGGER.error(f"Invalid date format. Expected YYYY-MM-DD: {e}")
+        sys.exit(1)
+
+
+def run_sync() -> None:
+    """Run calendar-driven Regybox sync."""
+    parser = argparse.ArgumentParser(
+        prog="regybox-sync",
+        description="Sync Regybox enrollments with mapped calendar events.",
+    )
+    parser.add_argument(
+        "--calendar-event-names",
+        required=True,
+        help=("Comma-separated calendar event titles to sync, e.g. 'CrossFit, Open Gym'."),
+    )
+    parser.add_argument(
+        "--target-class-types",
+        required=True,
+        help=(
+            "Comma-separated Regybox class names that matching calendar events may target, e.g."
+            " 'WOD, Open Gym'."
+        ),
+    )
+    parser.add_argument(
+        "--lookahead-days",
+        type=int,
+        default=3,
+        help="How many days ahead to inspect in the calendar and Regybox.",
+    )
+    parser.add_argument(
+        "--enroll-window-minutes",
+        type=int,
+        default=30,
+        help=(
+            "Only enroll classes that are open or whose enrollment opens within this many minutes."
+        ),
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Log planned changes without enrolling, unenrolling, or writing KV state.",
+    )
+    args = parser.parse_args()
+    if args.lookahead_days <= 0:
+        LOGGER.error("lookahead-days must be a positive integer.")
+        sys.exit(1)
+    if args.enroll_window_minutes <= 0:
+        LOGGER.error("enroll-window-minutes must be a positive integer.")
+        sys.exit(1)
+    try:
+        sync_calendar(
+            store=CloudflareKVStore.from_env(),
+            calendar_event_names=args.calendar_event_names,
+            target_class_types=args.target_class_types,
+            lookahead_days=args.lookahead_days,
+            enroll_window_minutes=args.enroll_window_minutes,
+            dry_run=args.dry_run,
+        )
+    except RegyboxBaseError as e:
+        _log_user_error(e)
+        sys.exit(1)
+    except (TypeError, ValueError) as e:
+        LOGGER.error(e)
         sys.exit(1)
 
 
