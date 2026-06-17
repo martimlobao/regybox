@@ -303,6 +303,65 @@ def test_sync_calendar_unenrolls_mapped_class_without_calendar_event() -> None:
     assert result.unenrolled == 1
 
 
+def test_sync_calendar_waits_and_refetches_class_opening_inside_enroll_window() -> None:
+    now = datetime.datetime(2026, 6, 17, 17, 0, tzinfo=TIMEZONE)
+    event = _CalendarEvent("Crossfit", datetime.datetime(2026, 6, 18, 6, 30, tzinfo=TIMEZONE))
+    pending = _class(is_open=False, time_to_enroll=0, enroll_url=None)
+    opened = _class(is_open=True, time_to_enroll=None)
+    store = MagicMock()
+    store.seen.return_value = False
+
+    with (
+        patch("regybox.sync.Calendar") as calendar_cls,
+        patch("regybox.sync.get_classes", side_effect=[[], [pending], [opened]]),
+        patch("regybox.sync.time.sleep") as sleep,
+    ):
+        calendar_cls.return_value.interval.return_value = [event]
+        result = sync_calendar(
+            store=store,
+            calendar_event_names=CALENDAR_EVENT_NAMES,
+            target_class_types=TARGET_CLASS_TYPES,
+            now=now,
+            lookahead_days=1,
+        )
+
+    sleep.assert_not_called()
+    opened.enroll.assert_called_once_with()
+    pending.enroll.assert_not_called()
+    assert result.enrolled == 1
+    assert result.skipped_not_ready == 0
+
+
+def test_sync_calendar_does_not_unenroll_mapped_class_outside_sync_window() -> None:
+    now = datetime.datetime(2026, 6, 17, 12, 0, tzinfo=TIMEZONE)
+    earlier_today = _class(
+        date="2026-06-17",
+        start="06:30",
+        user_is_enrolled=True,
+        enroll_url=None,
+        unenroll_url=(
+            "https://www.regybox.pt/app/app_nova/php/aulas/cancela_aula.php?"
+            "id_aula=63049&data=2026-06-17&x=0e0e5e2b0fed2e699ba91b3d6506"
+        ),
+    )
+
+    with (
+        patch("regybox.sync.Calendar") as calendar_cls,
+        patch("regybox.sync.get_classes", return_value=[earlier_today]),
+    ):
+        calendar_cls.return_value.interval.return_value = []
+        result = sync_calendar(
+            store=MagicMock(),
+            calendar_event_names=CALENDAR_EVENT_NAMES,
+            target_class_types=TARGET_CLASS_TYPES,
+            now=now,
+            lookahead_days=1,
+        )
+
+    earlier_today.unenroll.assert_not_called()
+    assert result.unenrolled == 0
+
+
 def test_sync_calendar_leaves_unmapped_enrolled_class_alone() -> None:
     now = datetime.datetime(2026, 6, 17, 17, 0, tzinfo=TIMEZONE)
     yoga = _class(name="Yoga", user_is_enrolled=True, enroll_url=None)

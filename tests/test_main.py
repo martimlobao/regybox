@@ -290,6 +290,30 @@ def test_run_sync_exits_on_known_regybox_error(monkeypatch: pytest.MonkeyPatch) 
     assert exc_info.value.code == 1
 
 
+def test_run_sync_exits_on_cloudflare_kv_env_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "regybox-sync",
+            "--calendar-event-names",
+            "Crossfit",
+            "--target-class-types",
+            "WOD Rato",
+        ],
+    )
+    with (
+        patch(
+            "regybox.__main__.CloudflareKVStore.from_env",
+            side_effect=ValueError("CF_ACCOUNT_ID"),
+        ),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        cli.run_sync()
+
+    assert exc_info.value.code == 1
+
+
 def test_run_sync_exits_on_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         sys,

@@ -3,6 +3,7 @@
 import datetime
 import hashlib
 import os
+import time
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import parse_qsl, quote, urlencode, urlparse
@@ -154,7 +155,8 @@ def class_cache_key(enroll_url: str) -> str:
         A stable cache key derived from generic URL parameters.
     """
     parsed_url = urlparse(enroll_url)
-    params = dict(parse_qsl(parsed_url.query, keep_blank_values=True))
+    query_items = parse_qsl(parsed_url.query, keep_blank_values=True)
+    params = dict(query_items)
     if params.get("x"):
         key_parts = [
             f"{name}={params[name]}" for name in ("data", "id_aula", "x") if params.get(name)
@@ -162,9 +164,7 @@ def class_cache_key(enroll_url: str) -> str:
         return f"regybox-sync:v1:enroll:x:{':'.join(key_parts)}"
 
     canonical_params = [
-        (name, value)
-        for name, value in parse_qsl(parsed_url.query, keep_blank_values=True)
-        if name not in VOLATILE_CACHE_PARAMS
+        (name, value) for name, value in query_items if name not in VOLATILE_CACHE_PARAMS
     ]
     canonical_params.sort()
     canonical = f"{parsed_url.path}?{urlencode(canonical_params)}"
@@ -217,7 +217,7 @@ def sync_calendar(
         dry_run=dry_run,
     )
 
-    for class_ in _mapped_enrolled_classes(classes_by_date, class_map):
+    for class_ in _mapped_enrolled_classes(classes_by_date, class_map, started_at, ends_at):
         if _has_matching_calendar_event(class_, planned_classes):
             continue
         LOGGER.info("Unenrolling from %s on %s at %s", class_.name, class_.date, class_.start)
@@ -272,8 +272,22 @@ def _sync_enrollments(
         if enrollment == "already_enrolled":
             continue
         if enrollment == "not_ready":
-            skipped_not_ready += 1
-            continue
+            class_ = _wait_for_enroll_url(
+                class_,
+                planned,
+                classes_by_date,
+                enroll_window_seconds=enroll_window_seconds,
+            )
+            enrollment = _enrollment_decision(
+                class_,
+                store=store,
+                enroll_window_seconds=enroll_window_seconds,
+            )
+            if enrollment == "already_enrolled":
+                continue
+            if enrollment == "not_ready":
+                skipped_not_ready += 1
+                continue
         if enrollment == "cached":
             skipped_cached += 1
             continue
@@ -382,9 +396,57 @@ def _enrollment_decision(
     return cache_key
 
 
+def _wait_for_enroll_url(
+    class_: Class,
+    planned: PlannedClass,
+    classes_by_date: dict[datetime.date, list[Class]],
+    *,
+    enroll_window_seconds: int,
+) -> Class:
+    if (
+        class_.enroll_url is not None
+        or class_.is_open
+        or class_.time_to_enroll is None
+        or class_.time_to_enroll > enroll_window_seconds
+    ):
+        return class_
+    if class_.time_to_enroll > 0:
+        LOGGER.info(
+            "Waiting %s seconds for enrollment to open for %s on %s at %s",
+            class_.time_to_enroll,
+            class_.name,
+            class_.date,
+            class_.start,
+        )
+        time.sleep(class_.time_to_enroll)
+    refreshed_date = planned.starts_at.date()
+    classes_by_date[refreshed_date] = get_classes(
+        refreshed_date.year, refreshed_date.month, refreshed_date.day
+    )
+    return _find_planned_regybox_class(planned, classes_by_date) or class_
+
+
+def _class_starts_in_window(
+    class_: Class, start: datetime.datetime, end: datetime.datetime
+) -> bool:
+    try:
+        class_start = datetime.datetime.fromisoformat(f"{class_.date}T{class_.start}")
+    except ValueError:
+        LOGGER.warning(
+            "Skipping unenrollment window check for class with invalid date/time: %s %s",
+            class_.date,
+            class_.start,
+        )
+        return False
+    class_start = class_start.replace(tzinfo=TIMEZONE)
+    return start <= class_start < end
+
+
 def _mapped_enrolled_classes(
     classes_by_date: dict[datetime.date, list[Class]],
     class_map: dict[str, tuple[str, ...]],
+    start: datetime.datetime,
+    end: datetime.datetime,
 ) -> list[Class]:
     mapped_names = {name.casefold() for names in class_map.values() for name in names}
     enrolled: list[Class] = []
@@ -392,6 +454,8 @@ def _mapped_enrolled_classes(
     for classes in classes_by_date.values():
         for class_ in classes:
             if class_.name.casefold() not in mapped_names:
+                continue
+            if not _class_starts_in_window(class_, start, end):
                 continue
             if class_.user_is_enrolled or class_.user_is_waitlisted:
                 signature = (class_.date, class_.start, class_.name.casefold())

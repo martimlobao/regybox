@@ -193,12 +193,12 @@ is a comma-separated list of exact Regybox class names that any of those calenda
 correspond to:
 
 ```text
-calendar-event-names: "Crossfit"
+calendar-event-names: "CrossFit"
 target-class-types: "WOD"
 ```
 
 You can provide more than one value by separating names with commas, for example
-`calendar-event-names: "Crossfit, Open Gym"` or `target-class-types: "WOD, Weekend WOD"`.
+`calendar-event-names: "CrossFit, Open Gym"` or `target-class-types: "WOD, Weekend WOD"`.
 
 ### Cloudflare Setup
 
@@ -314,7 +314,7 @@ Add these as type **Text**:
 - `GITHUB_REPO` — the name of the GitHub repository containing `calendar_sync.yml`.
 - `GITHUB_WORKFLOW` — workflow file name, usually `calendar_sync.yml`.
 - `GITHUB_REF` — branch or tag to dispatch, usually `main`.
-- `CALENDAR_EVENT_NAMES` — for example `Crossfit`.
+- `CALENDAR_EVENT_NAMES` — for example `CrossFit`.
 - `TARGET_CLASS_TYPES` — for example `WOD`.
 
 Add this as type **Secret**:
