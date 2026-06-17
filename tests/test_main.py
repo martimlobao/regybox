@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from regybox import __main__ as cli
-from regybox.exceptions import REGYBOX_USER_ERROR_PREFIX, RegyboxLoginError
+from regybox.exceptions import REGYBOX_USER_ERROR_PREFIX, ClassNotOpenError, RegyboxLoginError
 
 
 def test_run_calls_main_with_parsed_args(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -139,5 +139,174 @@ def test_run_list_exits_on_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["list", "not-a-date"])
     with pytest.raises(SystemExit) as exc_info:
         cli.run_list()
+
+    assert exc_info.value.code == 1
+
+
+def test_run_sync_requires_calendar_event_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["regybox-sync"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.run_sync()
+
+    assert exc_info.value.code == 2
+
+
+def test_run_sync_requires_target_class_types(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["regybox-sync", "--calendar-event-names", "Crossfit"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.run_sync()
+
+    assert exc_info.value.code == 2
+
+
+def test_run_sync_calls_sync_with_required_mapping_args(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "regybox-sync",
+            "--calendar-event-names",
+            "Crossfit",
+            "--target-class-types",
+            "WOD Rato",
+        ],
+    )
+    with (
+        patch("regybox.__main__.CloudflareKVStore.from_env") as store_from_env,
+        patch("regybox.__main__.sync_calendar") as mock_sync_calendar,
+    ):
+        cli.run_sync()
+
+    mock_sync_calendar.assert_called_once_with(
+        store=store_from_env.return_value,
+        calendar_event_names="Crossfit",
+        target_class_types="WOD Rato",
+        lookahead_days=3,
+        enroll_window_minutes=30,
+        dry_run=False,
+    )
+
+
+def test_run_sync_passes_custom_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "regybox-sync",
+            "--calendar-event-names",
+            "Crossfit, Open Gym",
+            "--target-class-types",
+            "WOD Rato, Weekend WOD Rato",
+            "--lookahead-days",
+            "4",
+            "--enroll-window-minutes",
+            "20",
+            "--dry-run",
+        ],
+    )
+    with (
+        patch("regybox.__main__.CloudflareKVStore.from_env") as store_from_env,
+        patch("regybox.__main__.sync_calendar") as mock_sync_calendar,
+    ):
+        cli.run_sync()
+
+    mock_sync_calendar.assert_called_once_with(
+        store=store_from_env.return_value,
+        calendar_event_names="Crossfit, Open Gym",
+        target_class_types="WOD Rato, Weekend WOD Rato",
+        lookahead_days=4,
+        enroll_window_minutes=20,
+        dry_run=True,
+    )
+
+
+def test_run_sync_exits_on_invalid_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "regybox-sync",
+            "--calendar-event-names",
+            "Crossfit",
+            "--target-class-types",
+            "WOD Rato",
+            "--enroll-window-minutes",
+            "0",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.run_sync()
+
+    assert exc_info.value.code == 1
+
+
+def test_run_sync_exits_on_invalid_lookahead(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "regybox-sync",
+            "--calendar-event-names",
+            "Crossfit",
+            "--target-class-types",
+            "WOD Rato",
+            "--lookahead-days",
+            "0",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.run_sync()
+
+    assert exc_info.value.code == 1
+
+
+def test_run_sync_exits_on_known_regybox_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "regybox-sync",
+            "--calendar-event-names",
+            "Crossfit",
+            "--target-class-types",
+            "WOD Rato",
+        ],
+    )
+    with (
+        patch("regybox.__main__.CloudflareKVStore.from_env"),
+        patch("regybox.__main__.sync_calendar", side_effect=ClassNotOpenError()),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        cli.run_sync()
+
+    assert exc_info.value.code == 1
+
+
+def test_run_sync_exits_on_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "regybox-sync",
+            "--calendar-event-names",
+            "Crossfit",
+            "--target-class-types",
+            "WOD Rato",
+        ],
+    )
+    with (
+        patch("regybox.__main__.CloudflareKVStore.from_env"),
+        patch("regybox.__main__.sync_calendar", side_effect=ValueError("bad mapping")),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        cli.run_sync()
 
     assert exc_info.value.code == 1

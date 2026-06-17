@@ -1,0 +1,64 @@
+---
+name: Sync Regybox Calendar
+on: # yamllint disable-line rule:truthy
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Log planned changes without mutating Regybox or KV.
+        required: false
+        type: boolean
+        default: false
+      lookahead-days:
+        description: Number of days ahead to inspect.
+        required: false
+        default: "3"
+      enroll-window-minutes:
+        description: Enroll classes open now or opening within this many minutes.
+        required: false
+        default: "30"
+      calendar-event-names:
+        description: Comma-separated calendar event titles to sync.
+        required: true
+      target-class-types:
+        description: Comma-separated Regybox class names to target.
+        required: true
+
+jobs:
+  sync:
+    name: Sync calendar-backed enrollments
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Sync Regybox enrollments
+        shell: bash
+        env:
+          PHPSESSID: ${{ secrets.PHPSESSID }}
+          REGYBOX_USER: ${{ secrets.REGYBOX_USER }}
+          CALENDAR_URL: ${{ secrets.CALENDAR_URL }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
+          CF_KV_API_TOKEN: ${{ secrets.CF_KV_API_TOKEN }}
+          INPUT_DRY_RUN: ${{ inputs.dry-run }}
+          INPUT_LOOKAHEAD_DAYS: ${{ inputs.lookahead-days }}
+          INPUT_ENROLL_WINDOW_MINUTES: ${{ inputs.enroll-window-minutes }}
+          INPUT_CALENDAR_EVENT_NAMES: ${{ inputs.calendar-event-names }}
+          INPUT_TARGET_CLASS_TYPES: ${{ inputs.target-class-types }}
+        run: |
+          set -euo pipefail
+          args=(
+            "--calendar-event-names"
+            "${INPUT_CALENDAR_EVENT_NAMES}"
+            "--target-class-types"
+            "${INPUT_TARGET_CLASS_TYPES}"
+            "--lookahead-days"
+            "${INPUT_LOOKAHEAD_DAYS}"
+            "--enroll-window-minutes"
+            "${INPUT_ENROLL_WINDOW_MINUTES}"
+          )
+          if [[ "${INPUT_DRY_RUN}" == "true" ]]; then
+            args+=("--dry-run")
+          fi
+          uv run regybox-sync "${args[@]}"
