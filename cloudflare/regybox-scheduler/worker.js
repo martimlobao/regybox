@@ -8,8 +8,8 @@ export function normalizeList(value) {
 }
 
 export function defaultLookaheadHours(env) {
-  const parsed = Number.parseInt(env.LOOKAHEAD_HOURS ?? "72", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 72;
+  const parsed = Number.parseInt(env.LOOKAHEAD_HOURS ?? "73", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 73;
 }
 
 function unfoldLines(text) {

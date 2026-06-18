@@ -38,17 +38,17 @@ function makeKv(existing = new Map()) {
   };
 }
 
-test("default lookahead is 72 hours", () => {
+test("default lookahead is 73 hours", () => {
   // defaults when not set
-  assert.equal(defaultLookaheadHours({}), 72);
+  assert.equal(defaultLookaheadHours({}), 73);
 
   // valid positive numeric override
   assert.equal(defaultLookaheadHours({ LOOKAHEAD_HOURS: "96" }), 96);
 
   // non-positive or non-numeric values fall back to default
-  assert.equal(defaultLookaheadHours({ LOOKAHEAD_HOURS: "0" }), 72);
-  assert.equal(defaultLookaheadHours({ LOOKAHEAD_HOURS: "-5" }), 72);
-  assert.equal(defaultLookaheadHours({ LOOKAHEAD_HOURS: "not-a-number" }), 72);
+  assert.equal(defaultLookaheadHours({ LOOKAHEAD_HOURS: "0" }), 73);
+  assert.equal(defaultLookaheadHours({ LOOKAHEAD_HOURS: "-5" }), 73);
+  assert.equal(defaultLookaheadHours({ LOOKAHEAD_HOURS: "not-a-number" }), 73);
 });
 
 test("normalizeList accepts comma-separated values", () => {

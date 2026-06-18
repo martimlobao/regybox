@@ -1,3 +1,4 @@
+import logging
 from importlib import resources
 from unittest.mock import patch
 
@@ -254,6 +255,19 @@ def test_enroll_returns_message() -> None:
     assert result == "Inscrito com sucesso"
 
 
+def test_enroll_fixes_badly_encoded_message() -> None:
+    """Enroll() returns a fixed response message when accents are mojibake."""
+    class_: Class = extract_class("open.html")
+    enroll_html = (
+        "<html><body><script>"
+        'parent.msg_toast_icon("InscriÃ§Ã£o efetuada com sucesso", "ok");'
+        "</script></body></html>"
+    )
+    with patch("regybox.classes.get_url_html", return_value=enroll_html):
+        result = class_.enroll()
+    assert result == "Inscrição efetuada com sucesso"
+
+
 def test_enroll_sets_waitlisted_when_lista_espera_in_response() -> None:
     """Enroll() sets user_is_waitlisted when response contains lista_espera."""
     class_: Class = extract_class("open.html")
@@ -287,6 +301,46 @@ def test_unenroll_returns_message() -> None:
     with patch("regybox.classes.get_url_html", return_value=unenroll_html):
         result = class_.unenroll()
     assert result == "Cancelado"
+
+
+def test_unenroll_fixes_badly_encoded_message() -> None:
+    """Unenroll() fixes mojibake in response messages."""
+    class_: Class = extract_class("registered.html")
+    unenroll_html = (
+        '<html><body><script>parent.msg_toast_icon("InscriÃ§Ã£o cancelada com sucesso",'
+        '"ok");</script></body></html>'
+    )
+    with patch("regybox.classes.get_url_html", return_value=unenroll_html):
+        result = class_.unenroll()
+    assert result == "Inscrição cancelada com sucesso"
+
+
+def test_unenroll_does_not_log_sensitive_response_at_info(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Unenroll() keeps sensitive details out of info logs."""
+    class_: Class = extract_class("registered.html")
+    unenroll_html = (
+        '<iframe id="feed_sms" name="feed_sms"></iframe>'
+        '<script>window.open("../../../../internal/notify.php?member=*7429*&class_id=91857",'
+        '"feed_sms");</script>'
+        '<script>parent.msg_toast_icon("Inscrição cancelada com sucesso",3000,'
+        '"checkmark_circle_fill");</script>'
+    )
+    sensitive_url = "https://example.invalid/cancel-registration"
+    class_.unenroll_url = f"{sensitive_url}?cancel_token=8f6e2d19c4b7530a"
+
+    with (
+        caplog.at_level(logging.INFO, logger="REGYBOX"),
+        patch("regybox.classes.get_url_html", return_value=unenroll_html),
+    ):
+        class_.unenroll()
+
+    assert "Inscrição cancelada com sucesso" in caplog.text
+    assert sensitive_url not in caplog.text
+    assert "cancel_token" not in caplog.text
+    assert "notify.php" not in caplog.text
+    assert "window.open" not in caplog.text
 
 
 def test_unenroll_raises_unparseable_when_no_response_script() -> None:

@@ -303,8 +303,9 @@ class Class:
         )
         if len(responses) != 1:
             raise UnparseableError(f"Couldn't parse response for enrollment: {res_html}")
-        LOGGER.info(f"Enrolled with response '{responses[0]}'")
-        return responses[0]
+        response = ftfy.fix_text(responses[0])
+        LOGGER.info(f"Enrolled with response '{response}'")
+        return response
 
     def unenroll(self) -> str:
         """Unenroll the student from the CrossFit class.
@@ -323,7 +324,7 @@ class Class:
             raise RuntimeError("Not enrolled in class")
 
         res_html: str = get_url_html(self.unenroll_url)
-        LOGGER.info(f"Unenrolled at {self.unenroll_url} with response: '{res_html}'")
+        LOGGER.debug(f"Unenrolled at {self.unenroll_url} with response: '{res_html}'")
         self.user_is_enrolled = False
         soup = BeautifulSoup(res_html, "html.parser")
         response_script = _find_script_containing(soup.find_all("script"), "msg_toast_icon")
@@ -335,8 +336,9 @@ class Class:
         )
         if len(responses) != 1:
             raise UnparseableError(f"Couldn't parse response for unenrollment: {res_html}")
-        LOGGER.info(responses[0])
-        return responses[0]
+        response = ftfy.fix_text(responses[0])
+        LOGGER.info(f"Unenrolled with response '{response}'")
+        return response
 
 
 def _find_script_containing(scripts: list[Tag], needle: str) -> str | None:
