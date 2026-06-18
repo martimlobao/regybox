@@ -40,8 +40,8 @@ jobs:
           class-date: ${{ inputs.class-date }}
           class-time: ${{ inputs.class-time }}
           class-type: ${{ inputs.class-type }}
-          timeout-seconds: 60
-          not-open-is-noop: true
+          timeout-seconds: 900
+          not-open-is-noop: false
           cache-key: ${{ inputs.cache-key }}
           calendar-fingerprint: ${{ inputs.calendar-fingerprint }}
           cf-account-id: ${{ secrets.CF_ACCOUNT_ID }}

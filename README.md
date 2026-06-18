@@ -35,9 +35,8 @@ morning) or trigger it manually.
    ![Repository secrets list.](./static/repo-secrets.png)
 
    > [!NOTE]
-   > If you want your calendar to drive enrollments and unenrollments on a 30-minute Cloudflare
-   > schedule, use the [Cloudflare calendar sync](#calendar-driven-sync-with-cloudflare)
-   > approach
+   > If you want your calendar to drive enrollments and unenrollments at `:28` and `:58`, use the
+   > [Cloudflare calendar sync](#calendar-driven-sync-with-cloudflare) approach
    > instead of a fixed-class GitHub schedule.
 
 3. Add the workflow file at `.github/workflows/regybox.yml` using the example below.
@@ -138,12 +137,17 @@ automatically in the class.
 ## Calendar-Driven Sync with Cloudflare
 
 GitHub scheduled workflows can run late. For calendar-driven scheduling, use a Cloudflare Worker
-Cron Trigger to check your calendar every 30 minutes and dispatch a GitHub workflow only when a
-specific class needs to be enrolled or unenrolled.
+Cron Trigger to check your calendar at `:28` and `:58` every hour and dispatch a GitHub workflow
+only when a specific class needs to be enrolled or unenrolled.
+
+The `:28` and `:58` trigger minutes are intentional. They give Cloudflare and GitHub a small
+startup lead before classes or enrollment windows that open exactly on the hour or half-hour. For
+example, a `06:30` enrollment window is discovered by the `06:28` trigger, so the GitHub Action has
+time to queue, start the runner, log in, and reach Regybox closer to `06:30`.
 
 This approach is different from a fixed GitHub schedule:
 
-- The Worker reads your calendar for the next `LOOKAHEAD_HOURS`, default `72`.
+- The Worker reads your calendar for the next `LOOKAHEAD_HOURS`, default `73`.
 - The Worker stores state in Cloudflare KV, so it does not trigger a GitHub Action when the class
   is already cached as enrolled.
 - GitHub Actions still performs the Regybox login, enrollment, unenrollment, KV update, and email
@@ -255,8 +259,10 @@ Add these as type **Text**:
 - `GITHUB_REF` — branch or tag to dispatch, usually `main`.
 - `CALENDAR_EVENT_NAMES` — for example `CrossFit`.
 - `CLASS_TYPE` — for example `WOD`.
-- `LOOKAHEAD_HOURS` — optional; defaults to `72`. Set this to another integer to scan farther
-  ahead.
+- `LOOKAHEAD_HOURS` — optional; defaults to `73`. This is one hour longer than a typical 72-hour
+  booking window so the `:28`/`:58` trigger can start before enrollment opens. For example, if
+  enrollment opens exactly 72 hours before a `06:30` class, the `06:28` trigger sees that class 72
+  hours and 2 minutes ahead. A 72-hour lookahead would miss it until the next `:58` run.
 - `TIMEZONE` — optional; defaults to `Europe/Lisbon`. Set this if your calendar timestamps should
   be converted to a different local class timezone.
 
@@ -278,7 +284,7 @@ After all variables and secrets are set, click **Deploy**.
 
 #### 7. Add the Cron Trigger
 
-Cloudflare Cron Triggers use UTC. To run every 30 minutes:
+Cloudflare Cron Triggers use UTC. To run every 30 minutes at `:28` and `:58`:
 
 1. Open the Worker in Cloudflare.
 2. Stay in the **Settings** tab.
@@ -286,7 +292,7 @@ Cloudflare Cron Triggers use UTC. To run every 30 minutes:
 4. Open the **Cron expression** tab and paste:
 
    ```cron
-   */30 * * * *
+   28,58 * * * *
    ```
 
 5. Click **Add**.
@@ -294,13 +300,19 @@ Cloudflare Cron Triggers use UTC. To run every 30 minutes:
 Cloudflare says Cron Trigger changes can take several minutes to propagate. Wait up to 15 minutes
 before assuming the trigger is broken.
 
+The class operation workflow waits up to 15 minutes (`timeout-seconds: 900`) after it starts. That
+timeout pairs with the 73-hour lookahead: the Worker may dispatch slightly before the exact opening
+minute, and the GitHub Action has enough time to queue, start, and wait for Regybox enrollment to
+become available. The calendar-driven workflow keeps `not-open-is-noop` disabled so this wait is
+used instead of exiting immediately when enrollment is not open yet.
+
 #### 8. Test the Setup
 
 1. In Cloudflare, open the Worker logs.
 2. Click **Workers & Pages → regybox-scheduler → Logs**.
 3. Temporarily change the Worker variable `GITHUB_REF` only if you want to dispatch a test branch.
-4. Either wait for the next 30-minute tick or use Cloudflare's Worker testing tools to invoke the
-   scheduled handler.
+4. Either wait for the next `:28` or `:58` tick or use Cloudflare's Worker testing tools to invoke
+   the scheduled handler.
 5. In GitHub, open **Actions → Regybox Class Operation** and confirm a new run appears only when
    KV says a class needs action.
 
