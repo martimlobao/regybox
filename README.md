@@ -252,7 +252,7 @@ Add these as type **Text**:
 - `GITHUB_REPO` — the name of the GitHub repository containing `class_operation.yml`.
 - `GITHUB_WORKFLOW` — workflow file name, usually `class_operation.yml`.
 - `GITHUB_REF` — branch or tag to dispatch, usually `main`.
-- `CALENDAR_EVENT_NAMES` — for example `Crossfit`.
+- `CALENDAR_EVENT_NAMES` — for example `CrossFit`.
 - `CLASS_TYPE` — for example `WOD`.
 - `LOOKAHEAD_HOURS` — optional; defaults to `72`. Set this to another integer to scan farther
   ahead.

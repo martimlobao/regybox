@@ -39,8 +39,16 @@ function makeKv(existing = new Map()) {
 }
 
 test("default lookahead is 72 hours", () => {
+  // defaults when not set
   assert.equal(defaultLookaheadHours({}), 72);
+
+  // valid positive numeric override
   assert.equal(defaultLookaheadHours({ LOOKAHEAD_HOURS: "96" }), 96);
+
+  // non-positive or non-numeric values fall back to default
+  assert.equal(defaultLookaheadHours({ LOOKAHEAD_HOURS: "0" }), 72);
+  assert.equal(defaultLookaheadHours({ LOOKAHEAD_HOURS: "-5" }), 72);
+  assert.equal(defaultLookaheadHours({ LOOKAHEAD_HOURS: "not-a-number" }), 72);
 });
 
 test("normalizeList accepts comma-separated values", () => {
@@ -55,6 +63,32 @@ test("recurring calendar events expand inside the lookahead window", () => {
     "SUMMARY:Crossfit",
     "DTSTART:20260618T063000Z",
     "RRULE:FREQ=DAILY;COUNT=4",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const events = expandCalendarEvents({
+    icsText: ics,
+    now: new Date("2026-06-18T00:00:00Z"),
+    lookaheadHours: 72,
+    calendarEventNames: ["Crossfit"],
+  });
+
+  assert.deepEqual(
+    events.map((event) => event.classDate),
+    ["2026-06-18", "2026-06-19", "2026-06-20"],
+  );
+});
+
+test("recurring calendar events beyond lookahead window are excluded", () => {
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:daily-class-beyond-window",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260618T063000Z",
+    // Five daily occurrences; only the first three fall within a 72-hour window
+    "RRULE:FREQ=DAILY;COUNT=5",
     "END:VEVENT",
     "END:VCALENDAR",
   ].join("\r\n");
