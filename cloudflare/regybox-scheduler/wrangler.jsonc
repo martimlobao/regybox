@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "regybox-scheduler",
+  "main": "worker.js",
+  "compatibility_date": "2026-06-18",
+  "kv_namespaces": [
+    {
+      "binding": "REGYBOX_STATE",
+      "id": "replace-with-your-kv-namespace-id"
+    }
+  ],
+  "triggers": {
+    "crons": ["*/30 * * * *"]
+  }
+}

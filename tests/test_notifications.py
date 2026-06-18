@@ -18,6 +18,7 @@ from regybox.notifications import (
     extract_traceback,
     extract_user_error_payload,
     read_log_text,
+    should_send_email,
     write_multiline_env,
 )
 
@@ -131,6 +132,25 @@ def test_build_email_content_success() -> None:
     assert subject == "Regybox Auto-enroll: success for WOD Rato on 2026-03-04 at 06:30"
     assert "Your Regybox auto-enrollment completed successfully." in body
     assert "No errors were detected." in body
+
+
+def test_build_email_content_unenroll_success() -> None:
+    subject, body = build_email_content(
+        operation="unenroll",
+        enroll_result="success",
+        class_summary="WOD on 2026-03-04 at 06:30",
+        run_url="",
+        log_text="",
+    )
+
+    assert subject == "Regybox Auto-unenroll: success for WOD on 2026-03-04 at 06:30"
+    assert "Your Regybox auto-unenrollment completed successfully." in body
+
+
+def test_should_send_email_skips_noop_results() -> None:
+    assert not should_send_email("noop")
+    assert should_send_email("success")
+    assert should_send_email("failure")
 
 
 def test_build_email_content_includes_calendar_event_name_for_unplanned_class() -> None:

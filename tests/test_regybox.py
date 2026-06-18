@@ -1,3 +1,4 @@
+import datetime
 import logging
 import tomllib
 from importlib import resources
@@ -11,12 +12,24 @@ from hypothesis.strategies import integers
 
 from regybox import __version__
 from regybox.exceptions import (
+    ClassNotFoundError,
     ClassNotOpenError,
     NoClassesFoundError,
     RegyboxTimeoutError,
     UserAlreadyEnrolledError,
 )
-from regybox.regybox import LONG_WAIT, MED_WAIT, SHORT_WAIT, list_classes, main, snooze
+from regybox.regybox import (
+    LONG_WAIT,
+    MED_WAIT,
+    SHORT_WAIT,
+    OperationOptions,
+    OperationResult,
+    list_classes,
+    main,
+    parse_class_types,
+    pick_first_class,
+    snooze,
+)
 from regybox.utils.times import secs_to_str
 
 from . import html_examples
@@ -119,7 +132,7 @@ def test_main_enrolls_when_class_open(
         patch("regybox.regybox.get_classes", return_value=[mock_class]),
         patch("regybox.regybox.pick_class", return_value=mock_class),
     ):
-        main(
+        result = main(
             class_date="2026-03-10",
             class_time="06:30",
             class_type="WOD Rato",
@@ -127,7 +140,73 @@ def test_main_enrolls_when_class_open(
             timeout=60,
         )
     mock_class.enroll.assert_called_once()
+    assert result == OperationResult(operation="enroll", status="success", class_type="WOD Rato")
     assert "Inscrito" in caplog.text or "Runtime:" in caplog.text
+
+
+def test_parse_class_types_supports_comma_separated_candidates() -> None:
+    assert parse_class_types(" WOD, Weekend WOD ,, Open Gym ") == [
+        "WOD",
+        "Weekend WOD",
+        "Open Gym",
+    ]
+
+
+def test_pick_first_class_raises_last_candidate_error() -> None:
+    with pytest.raises(ClassNotFoundError, match="Weekend WOD"):
+        pick_first_class(
+            [],
+            class_time="06:30",
+            class_types=["WOD", "Weekend WOD"],
+            class_date="2026-03-10",
+        )
+
+
+def test_pick_first_class_rejects_empty_candidates() -> None:
+    with pytest.raises(ClassNotFoundError):
+        pick_first_class(
+            [],
+            class_time="06:30",
+            class_types=[],
+            class_date="2026-03-10",
+        )
+
+
+def test_main_rejects_empty_class_type() -> None:
+    with pytest.raises(ValueError, match="class_type"):
+        main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type=" , ",
+            check_calendar=False,
+        )
+
+
+def test_main_tries_comma_separated_class_types_in_order() -> None:
+    first_class: MagicMock = MagicMock()
+    first_class.name = "Weekend WOD"
+    first_class.start = "06:30"
+    first_class.date = "2026-03-10"
+    first_class.is_open = True
+    first_class.enroll.return_value = "Inscrito"
+    with (
+        patch("regybox.regybox.check_cal"),
+        patch("regybox.regybox.get_classes", return_value=[first_class]),
+    ):
+        result = main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD, Weekend WOD",
+            check_calendar=False,
+            timeout=60,
+        )
+
+    first_class.enroll.assert_called_once()
+    assert result == OperationResult(
+        operation="enroll",
+        status="success",
+        class_type="Weekend WOD",
+    )
 
 
 def test_main_raises_class_not_open_when_time_to_enroll_none() -> None:
@@ -185,14 +264,132 @@ def test_main_logs_when_already_enrolled(
         patch("regybox.regybox.get_classes", return_value=[mock_class]),
         patch("regybox.regybox.pick_class", return_value=mock_class),
     ):
-        main(
+        result = main(
             class_date="2026-03-10",
             class_time="06:30",
             class_type="WOD Rato",
             check_calendar=False,
             timeout=60,
         )
+    assert result == OperationResult(operation="enroll", status="noop", class_type="WOD Rato")
     assert "Already enrolled" in caplog.text
+
+
+def test_main_treats_not_open_as_noop_when_requested() -> None:
+    mock_class: MagicMock = MagicMock()
+    mock_class.name = "WOD Rato"
+    mock_class.is_open = False
+    mock_class.time_to_enroll = 1000
+    with (
+        patch("regybox.regybox.check_cal"),
+        patch("regybox.regybox.get_classes", return_value=[mock_class]),
+        patch("regybox.regybox.pick_class", return_value=mock_class),
+    ):
+        result = main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD Rato",
+            check_calendar=False,
+            timeout=60,
+            operation_options=OperationOptions(not_open_is_noop=True),
+        )
+
+    assert result == OperationResult(operation="enroll", status="noop", class_type="WOD Rato")
+
+
+def test_main_treats_not_open_without_timer_as_noop_when_requested() -> None:
+    mock_class: MagicMock = MagicMock()
+    mock_class.name = "WOD Rato"
+    mock_class.is_open = False
+    mock_class.time_to_enroll = None
+    with (
+        patch("regybox.regybox.check_cal"),
+        patch("regybox.regybox.get_classes", return_value=[mock_class]),
+        patch("regybox.regybox.pick_class", return_value=mock_class),
+    ):
+        result = main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD Rato",
+            check_calendar=False,
+            timeout=60,
+            operation_options=OperationOptions(not_open_is_noop=True),
+        )
+
+    assert result == OperationResult(operation="enroll", status="noop", class_type="WOD Rato")
+
+
+def test_main_timeout_is_noop_when_requested() -> None:
+    with patch("regybox.regybox.START", datetime.datetime.now(datetime.UTC)):
+        result = main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD Rato",
+            check_calendar=False,
+            timeout=0,
+            operation_options=OperationOptions(not_open_is_noop=True),
+        )
+
+    assert result == OperationResult(operation="enroll", status="noop", class_type="WOD Rato")
+
+
+def test_main_unenrolls_when_enrolled() -> None:
+    mock_class: MagicMock = MagicMock()
+    mock_class.name = "WOD Rato"
+    mock_class.user_is_enrolled = True
+    mock_class.unenroll.return_value = "Desmarcado"
+    with (
+        patch("regybox.regybox.check_cal"),
+        patch("regybox.regybox.get_classes", return_value=[mock_class]),
+        patch("regybox.regybox.pick_class", return_value=mock_class),
+    ):
+        result = main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD Rato",
+            check_calendar=False,
+            operation_options=OperationOptions(operation="unenroll"),
+        )
+
+    mock_class.unenroll.assert_called_once()
+    assert result == OperationResult(operation="unenroll", status="success", class_type="WOD Rato")
+
+
+def test_main_unenroll_noops_when_not_enrolled() -> None:
+    mock_class: MagicMock = MagicMock()
+    mock_class.name = "WOD Rato"
+    mock_class.user_is_enrolled = False
+    with (
+        patch("regybox.regybox.check_cal"),
+        patch("regybox.regybox.get_classes", return_value=[mock_class]),
+        patch("regybox.regybox.pick_class", return_value=mock_class),
+    ):
+        result = main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD Rato",
+            check_calendar=False,
+            operation_options=OperationOptions(operation="unenroll"),
+        )
+
+    mock_class.unenroll.assert_not_called()
+    assert result == OperationResult(operation="unenroll", status="noop", class_type="WOD Rato")
+
+
+def test_main_unenroll_noops_when_class_is_missing() -> None:
+    with (
+        patch("regybox.regybox.check_cal"),
+        patch("regybox.regybox.get_classes", return_value=[]),
+    ):
+        result = main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD Rato",
+            check_calendar=False,
+            operation_options=OperationOptions(operation="unenroll"),
+        )
+
+    assert result == OperationResult(operation="unenroll", status="noop", class_type="WOD Rato")
 
 
 def test_main_uses_today_plus_two_when_class_date_none(

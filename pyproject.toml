@@ -21,7 +21,6 @@ dependencies = [
 [project.scripts]
 list = "regybox.__main__:run_list"
 regybox = "regybox.__main__:run"
-regybox-sync = "regybox.__main__:run_sync"
 
 [dependency-groups]
 dev = [

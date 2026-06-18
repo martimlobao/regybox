@@ -7,11 +7,18 @@ class based on criteria, and enrolls in the class.
 
 import datetime
 import time
+from dataclasses import dataclass
+from typing import Literal
 
 from regybox.cal import check_cal
 from regybox.classes import Class, get_classes, pick_class
 from regybox.common import LOGGER, TIMEZONE
-from regybox.exceptions import ClassNotOpenError, RegyboxTimeoutError, UserAlreadyEnrolledError
+from regybox.exceptions import (
+    ClassNotFoundError,
+    ClassNotOpenError,
+    RegyboxTimeoutError,
+    UserAlreadyEnrolledError,
+)
 from regybox.utils.times import secs_to_str
 
 START: datetime.datetime = datetime.datetime.now(TIMEZONE)
@@ -19,6 +26,175 @@ DEFAULT_CALENDAR_EVENT_NAME: str = "CrossFit"
 SHORT_WAIT: int = 1
 MED_WAIT: int = 10
 LONG_WAIT: int = 60
+OperationName = Literal["enroll", "unenroll"]
+OperationStatus = Literal["success", "noop"]
+
+
+@dataclass(frozen=True)
+class OperationResult:
+    """Result of one enrollment operation."""
+
+    operation: OperationName
+    status: OperationStatus
+    class_type: str
+
+
+@dataclass(frozen=True)
+class OperationOptions:
+    """Options controlling the requested class operation."""
+
+    operation: OperationName = "enroll"
+    not_open_is_noop: bool = False
+
+
+def parse_class_types(class_type: str) -> list[str]:
+    """Split a comma-separated class type input into ordered candidates.
+
+    Returns:
+        Ordered non-empty class type names.
+    """
+    return [part.strip() for part in class_type.split(",") if part.strip()]
+
+
+def pick_first_class(
+    classes: list[Class], *, class_time: str, class_types: list[str], class_date: str
+) -> Class:
+    """Pick the first matching class from ordered class type candidates.
+
+    Returns:
+        The first matching Regybox class.
+
+    Raises:
+        ClassNotFoundError: If none of the candidates match.
+    """
+    last_error: ClassNotFoundError | None = None
+    for candidate in class_types:
+        try:
+            return pick_class(
+                classes,
+                class_time=class_time,
+                class_type=candidate,
+                class_date=class_date,
+            )
+        except ClassNotFoundError as e:
+            last_error = e
+    if last_error is not None:
+        raise last_error
+    raise ClassNotFoundError(class_type="", class_time=class_time, class_date=class_date)
+
+
+def _operation_result(
+    *, operation: OperationName, status: OperationStatus, class_type: str
+) -> OperationResult:
+    LOGGER.info(f"REGYBOX_RESULT={status} operation={operation} class_type={class_type}")
+    return OperationResult(operation=operation, status=status, class_type=class_type)
+
+
+def _unenroll_class(class_: Class, resolved_class_type: str) -> OperationResult:
+    if not class_.user_is_enrolled:
+        LOGGER.info("Already unenrolled from class")
+        return _operation_result(
+            operation="unenroll",
+            status="noop",
+            class_type=resolved_class_type,
+        )
+    class_.unenroll()
+    return _operation_result(
+        operation="unenroll",
+        status="success",
+        class_type=resolved_class_type,
+    )
+
+
+def _closed_enrollment_result(
+    *, options: OperationOptions, resolved_class_type: str
+) -> OperationResult | None:
+    if not options.not_open_is_noop:
+        return None
+    LOGGER.info("Enrollment is not open; returning no-op result")
+    return _operation_result(
+        operation="enroll",
+        status="noop",
+        class_type=resolved_class_type,
+    )
+
+
+def _resolved_class_type(class_: Class, fallback: str) -> str:
+    raw_name = getattr(class_, "name", fallback)
+    return raw_name if isinstance(raw_name, str) else fallback
+
+
+def _pick_requested_class(
+    *,
+    date: datetime.date,
+    class_time: str,
+    class_types: list[str],
+    options: OperationOptions,
+) -> Class | OperationResult:
+    classes: list[Class] = get_classes(date.year, date.month, date.day)
+    try:
+        return pick_first_class(
+            classes,
+            class_time=class_time,
+            class_types=class_types,
+            class_date=date.isoformat(),
+        )
+    except ClassNotFoundError:
+        if options.operation == "unenroll":
+            LOGGER.info("Class not found for unenroll; treating as no-op")
+            return _operation_result(
+                operation="unenroll",
+                status="noop",
+                class_type=class_types[0],
+            )
+        raise
+
+
+def _wait_for_enrollable_class(
+    *,
+    date: datetime.date,
+    class_time: str,
+    class_types: list[str],
+    timeout: int,
+    options: OperationOptions,
+) -> Class | OperationResult:
+    while (datetime.datetime.now(TIMEZONE) - START).total_seconds() < timeout:
+        picked = _pick_requested_class(
+            date=date,
+            class_time=class_time,
+            class_types=class_types,
+            options=options,
+        )
+        if isinstance(picked, OperationResult):
+            return picked
+        resolved_class_type = _resolved_class_type(picked, class_types[0])
+        if picked.is_open:
+            return picked
+        closed_result = _closed_enrollment_result(
+            options=options,
+            resolved_class_type=resolved_class_type,
+        )
+        if closed_result is not None:
+            return closed_result
+        if picked.time_to_enroll is None:
+            raise ClassNotOpenError
+        if picked.time_to_enroll > timeout:
+            raise RegyboxTimeoutError(timeout, time_to_enroll=secs_to_str(picked.time_to_enroll))
+
+        wait: int = snooze(picked.time_to_enroll)
+        LOGGER.info(
+            f"Waiting for {resolved_class_type} on {date.isoformat()} at {class_time} to be"
+            f" available, ETA in {secs_to_str(picked.time_to_enroll)}. Retrying in {wait} seconds."
+        )
+        time.sleep(wait)
+    if options.not_open_is_noop:
+        LOGGER.info("Enrollment did not open before timeout; returning no-op result")
+        return _operation_result(
+            operation="enroll",
+            status="noop",
+            class_type=class_types[0],
+        )
+    raise RegyboxTimeoutError(timeout)
 
 
 def snooze(time_left: int) -> int:
@@ -45,7 +221,8 @@ def main(
     event_name: str = DEFAULT_CALENDAR_EVENT_NAME,
     check_calendar: bool = True,
     timeout: int = 900,
-) -> None:
+    operation_options: OperationOptions | None = None,
+) -> OperationResult:
     """Execute the main Regybox application.
 
     Args:
@@ -60,13 +237,19 @@ def main(
             Defaults to True.
         timeout: Maximum number of seconds to wait for enrollment to open.
             Defaults to 900 seconds (15 minutes).
+        operation_options: Options for enroll or unenroll behavior.
+
+    Returns:
+        The operation result.
 
     Raises:
-        ClassNotOpenError: If the class is not open for enrollment.
-        RegyboxTimeoutError: If the timeout is reached while waiting for the
-            class to be available.
+        ValueError: If the class type input is empty.
     """
+    options = operation_options or OperationOptions()
     class_time = class_time.zfill(5)  # needs leading zeros
+    class_types: list[str] = parse_class_types(class_type)
+    if not class_types:
+        raise ValueError("class_type must include at least one class name.")
     LOGGER.info(f"Started at {START.isoformat()}")
     if not class_date:
         date: datetime.date = (datetime.datetime.now(TIMEZONE) + datetime.timedelta(days=2)).date()
@@ -83,39 +266,46 @@ def main(
             date=date,
             time=datetime.datetime.strptime(class_time, "%H:%M").replace(tzinfo=TIMEZONE).timetz(),
             event_name=calendar_event_name,
-            class_type=class_type,
+            class_type=class_types[0],
         )
 
-    while (datetime.datetime.now(TIMEZONE) - START).total_seconds() < timeout:
-        classes: list[Class] = get_classes(date.year, date.month, date.day)
-        class_: Class = pick_class(
-            classes,
+    if options.operation == "unenroll":
+        picked = _pick_requested_class(
+            date=date,
             class_time=class_time,
-            class_type=class_type,
-            class_date=date.isoformat(),
+            class_types=class_types,
+            options=options,
         )
-        if class_.is_open:
-            break
+        if isinstance(picked, OperationResult):
+            return picked
+        return _unenroll_class(picked, _resolved_class_type(picked, class_types[0]))
 
-        if class_.time_to_enroll is None:
-            raise ClassNotOpenError
-
-        if class_.time_to_enroll > timeout:
-            raise RegyboxTimeoutError(timeout, time_to_enroll=secs_to_str(class_.time_to_enroll))
-
-        wait: int = snooze(class_.time_to_enroll)  # seconds between calls
-        LOGGER.info(
-            f"Waiting for {class_type} on {date.isoformat()} at {class_time} to be available, ETA"
-            f" in {secs_to_str(class_.time_to_enroll)}. Retrying in {wait} seconds."
-        )
-        time.sleep(wait)
-    else:
-        raise RegyboxTimeoutError(timeout)
+    picked = _wait_for_enrollable_class(
+        date=date,
+        class_time=class_time,
+        class_types=class_types,
+        timeout=timeout,
+        options=options,
+    )
+    if isinstance(picked, OperationResult):
+        return picked
+    class_ = picked
+    resolved_class_type = _resolved_class_type(class_, class_types[0])
     try:
         class_.enroll()
     except UserAlreadyEnrolledError:
         LOGGER.info("Already enrolled in class")
+        return _operation_result(
+            operation="enroll",
+            status="noop",
+            class_type=resolved_class_type,
+        )
     LOGGER.info(f"Runtime: {(datetime.datetime.now(TIMEZONE) - START).total_seconds():.3f}")
+    return _operation_result(
+        operation="enroll",
+        status="success",
+        class_type=resolved_class_type,
+    )
 
 
 def list_classes(class_date: str) -> None:

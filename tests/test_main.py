@@ -8,7 +8,8 @@ from unittest.mock import patch
 import pytest
 
 from regybox import __main__ as cli
-from regybox.exceptions import REGYBOX_USER_ERROR_PREFIX, ClassNotOpenError, RegyboxLoginError
+from regybox.exceptions import REGYBOX_USER_ERROR_PREFIX, RegyboxLoginError
+from regybox.regybox import OperationOptions
 
 
 def test_run_calls_main_with_parsed_args(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -26,6 +27,7 @@ def test_run_calls_main_with_parsed_args(monkeypatch: pytest.MonkeyPatch) -> Non
         class_type="WOD Rato",
         event_name=None,
         timeout=12,
+        operation_options=OperationOptions(operation="enroll", not_open_is_noop=False),
     )
 
 
@@ -51,6 +53,7 @@ def test_run_calls_main_with_calendar_event_name(monkeypatch: pytest.MonkeyPatch
         class_type="WOD Rato",
         event_name="Crossfit",
         timeout=900,
+        operation_options=OperationOptions(operation="enroll", not_open_is_noop=False),
     )
 
 
@@ -78,6 +81,36 @@ def test_run_calls_main_with_whitespace_calendar_event_name(
         class_type="WOD Rato",
         event_name="   ",
         timeout=900,
+        operation_options=OperationOptions(operation="enroll", not_open_is_noop=False),
+    )
+
+
+def test_run_passes_unenroll_operation_and_not_open_noop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "regybox",
+            "2026-03-10",
+            "06:30",
+            "WOD,Weekend WOD",
+            "--operation",
+            "unenroll",
+            "--not-open-is-noop",
+        ],
+    )
+    with patch("regybox.__main__.main") as mock_main:
+        cli.run()
+
+    mock_main.assert_called_once_with(
+        class_date="2026-03-10",
+        class_time="06:30",
+        class_type="WOD,Weekend WOD",
+        event_name=None,
+        timeout=900,
+        operation_options=OperationOptions(operation="unenroll", not_open_is_noop=True),
     )
 
 
@@ -139,198 +172,5 @@ def test_run_list_exits_on_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["list", "not-a-date"])
     with pytest.raises(SystemExit) as exc_info:
         cli.run_list()
-
-    assert exc_info.value.code == 1
-
-
-def test_run_sync_requires_calendar_event_names(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["regybox-sync"])
-
-    with pytest.raises(SystemExit) as exc_info:
-        cli.run_sync()
-
-    assert exc_info.value.code == 2
-
-
-def test_run_sync_requires_target_class_types(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["regybox-sync", "--calendar-event-names", "Crossfit"],
-    )
-
-    with pytest.raises(SystemExit) as exc_info:
-        cli.run_sync()
-
-    assert exc_info.value.code == 2
-
-
-def test_run_sync_calls_sync_with_required_mapping_args(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "regybox-sync",
-            "--calendar-event-names",
-            "Crossfit",
-            "--target-class-types",
-            "WOD Rato",
-        ],
-    )
-    with (
-        patch("regybox.__main__.CloudflareKVStore.from_env") as store_from_env,
-        patch("regybox.__main__.sync_calendar") as mock_sync_calendar,
-    ):
-        cli.run_sync()
-
-    mock_sync_calendar.assert_called_once_with(
-        store=store_from_env.return_value,
-        calendar_event_names="Crossfit",
-        target_class_types="WOD Rato",
-        lookahead_days=3,
-        enroll_window_minutes=30,
-        dry_run=False,
-    )
-
-
-def test_run_sync_passes_custom_options(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "regybox-sync",
-            "--calendar-event-names",
-            "Crossfit, Open Gym",
-            "--target-class-types",
-            "WOD Rato, Weekend WOD Rato",
-            "--lookahead-days",
-            "4",
-            "--enroll-window-minutes",
-            "20",
-            "--dry-run",
-        ],
-    )
-    with (
-        patch("regybox.__main__.CloudflareKVStore.from_env") as store_from_env,
-        patch("regybox.__main__.sync_calendar") as mock_sync_calendar,
-    ):
-        cli.run_sync()
-
-    mock_sync_calendar.assert_called_once_with(
-        store=store_from_env.return_value,
-        calendar_event_names="Crossfit, Open Gym",
-        target_class_types="WOD Rato, Weekend WOD Rato",
-        lookahead_days=4,
-        enroll_window_minutes=20,
-        dry_run=True,
-    )
-
-
-def test_run_sync_exits_on_invalid_window(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "regybox-sync",
-            "--calendar-event-names",
-            "Crossfit",
-            "--target-class-types",
-            "WOD Rato",
-            "--enroll-window-minutes",
-            "0",
-        ],
-    )
-
-    with pytest.raises(SystemExit) as exc_info:
-        cli.run_sync()
-
-    assert exc_info.value.code == 1
-
-
-def test_run_sync_exits_on_invalid_lookahead(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "regybox-sync",
-            "--calendar-event-names",
-            "Crossfit",
-            "--target-class-types",
-            "WOD Rato",
-            "--lookahead-days",
-            "0",
-        ],
-    )
-
-    with pytest.raises(SystemExit) as exc_info:
-        cli.run_sync()
-
-    assert exc_info.value.code == 1
-
-
-def test_run_sync_exits_on_known_regybox_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "regybox-sync",
-            "--calendar-event-names",
-            "Crossfit",
-            "--target-class-types",
-            "WOD Rato",
-        ],
-    )
-    with (
-        patch("regybox.__main__.CloudflareKVStore.from_env"),
-        patch("regybox.__main__.sync_calendar", side_effect=ClassNotOpenError()),
-        pytest.raises(SystemExit) as exc_info,
-    ):
-        cli.run_sync()
-
-    assert exc_info.value.code == 1
-
-
-def test_run_sync_exits_on_cloudflare_kv_env_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "regybox-sync",
-            "--calendar-event-names",
-            "Crossfit",
-            "--target-class-types",
-            "WOD Rato",
-        ],
-    )
-    with (
-        patch(
-            "regybox.__main__.CloudflareKVStore.from_env",
-            side_effect=ValueError("CF_ACCOUNT_ID"),
-        ),
-        pytest.raises(SystemExit) as exc_info,
-    ):
-        cli.run_sync()
-
-    assert exc_info.value.code == 1
-
-
-def test_run_sync_exits_on_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "regybox-sync",
-            "--calendar-event-names",
-            "Crossfit",
-            "--target-class-types",
-            "WOD Rato",
-        ],
-    )
-    with (
-        patch("regybox.__main__.CloudflareKVStore.from_env"),
-        patch("regybox.__main__.sync_calendar", side_effect=ValueError("bad mapping")),
-        pytest.raises(SystemExit) as exc_info,
-    ):
-        cli.run_sync()
 
     assert exc_info.value.code == 1
