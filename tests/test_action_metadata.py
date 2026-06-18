@@ -11,13 +11,33 @@ def test_email_sender_preserves_display_name_with_valid_address() -> None:
     assert "from: ${{ inputs.email-from-name }} <${{ inputs.email-username }}>" in action_text
 
 
-def test_calendar_sync_workflow_exposes_dispatch_and_kv_inputs() -> None:
-    workflow_text = (REPO_ROOT / ".github/workflows/calendar_sync.yml").read_text(encoding="utf-8")
+def test_class_operation_workflow_exposes_dispatch_and_kv_inputs() -> None:
+    workflow_text = (REPO_ROOT / ".github/workflows/class_operation.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "workflow_dispatch:" in workflow_text
-    assert "uv run regybox-sync" in workflow_text
-    assert "calendar-event-names:" in workflow_text
-    assert "target-class-types:" in workflow_text
-    assert "CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}" in workflow_text
-    assert "CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}" in workflow_text
-    assert "CF_KV_API_TOKEN: ${{ secrets.CF_KV_API_TOKEN }}" in workflow_text
+    assert "operation:" in workflow_text
+    assert "class-date:" in workflow_text
+    assert "class-time:" in workflow_text
+    assert "class-type:" in workflow_text
+    assert "cache-key:" in workflow_text
+    assert "calendar-fingerprint:" in workflow_text
+    assert "cf-account-id: ${{ secrets.CF_ACCOUNT_ID }}" in workflow_text
+    assert "cf-kv-namespace-id: ${{ secrets.CF_KV_NAMESPACE_ID }}" in workflow_text
+    assert "cf-kv-api-token: ${{ secrets.CF_KV_API_TOKEN }}" in workflow_text
+
+
+def test_fixed_github_schedule_workflows_keep_manual_dispatch() -> None:
+    for workflow in ("scheduled_runs.yml", "scheduled_holiday_runs.yml"):
+        workflow_text = (REPO_ROOT / ".github/workflows" / workflow).read_text(encoding="utf-8")
+
+        assert "workflow_dispatch:" in workflow_text
+
+
+def test_make_test_runs_cloudflare_worker_tests() -> None:
+    makefile_text = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "test-worker" in makefile_text
+    assert "cloudflare/regybox-scheduler" in makefile_text
+    assert "npm test" in makefile_text

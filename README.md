@@ -36,7 +36,8 @@ morning) or trigger it manually.
 
    > [!NOTE]
    > If you want your calendar to drive enrollments and unenrollments on a 30-minute Cloudflare
-   > schedule, use the [Cloudflare calendar sync](#calendar-driven-sync-with-cloudflare) approach
+   > schedule, use the [Cloudflare calendar sync](#calendar-driven-sync-with-cloudflare)
+   > approach
    > instead of a fixed-class GitHub schedule.
 
 3. Add the workflow file at `.github/workflows/regybox.yml` using the example below.
@@ -62,7 +63,7 @@ morning) or trigger it manually.
            uses: martimlobao/regybox@v2
            with:
              class-time: 06:30 # Class start time in HH:MM (24-hour) format
-             class-type: WOD Rato # Exact class name as it appears in Regybox
+             class-type: WOD # Exact class name as it appears in Regybox
              calendar-event-name: CrossFit # Optional calendar title override; defaults to CrossFit
              class-date-offset-days: 2 # Look this many days ahead when booking
              timeout-seconds: 900 # Maximum seconds to wait for enrollment to open
@@ -88,6 +89,9 @@ morning) or trigger it manually.
     - Days of the week use numbers (`0` or `7` for Sunday, `1` for Monday, …, `6` for Saturday).
       Use ranges like `1-5` for weekdays.
     - Use [crontab.guru](https://crontab.guru/) to preview the schedule before saving.
+
+`class-type` can also be a comma-separated fallback list. For example, `WOD,Weekend WOD` tries
+`WOD` first and then `Weekend WOD` if the first class name is not found at that date and time.
 
 ### 3. Set Up Email Notifications
 
@@ -133,94 +137,55 @@ automatically in the class.
 
 ## Calendar-Driven Sync with Cloudflare
 
-GitHub scheduled workflows can run late. For calendar-driven syncing, use a Cloudflare Worker
-Cron Trigger to dispatch the GitHub workflow every 30 minutes instead of relying on GitHub's
-schedule queue.
+GitHub scheduled workflows can run late. For calendar-driven scheduling, use a Cloudflare Worker
+Cron Trigger to check your calendar every 30 minutes and dispatch a GitHub workflow only when a
+specific class needs to be enrolled or unenrolled.
 
-Calendar sync is different from the single-class auto-enroller:
+This approach is different from a fixed GitHub schedule:
 
-- It looks at your calendar over the next 3 days.
-- It maps calendar event titles to Regybox class names using required comma-separated lists that
-  you provide.
-- It enrolls in mapped classes that are open now or whose enrollment opens in the next 30 minutes.
-- It unenrolls from mapped Regybox classes that no longer have a matching calendar event.
-- It stores successful enrollments and waitlist placements in Cloudflare KV for 30 days. If you
-  manually unenroll from a class, the sync job will not re-enroll you while that cache entry exists.
+- The Worker reads your calendar for the next `LOOKAHEAD_HOURS`, default `72`.
+- The Worker stores state in Cloudflare KV, so it does not trigger a GitHub Action when the class
+  is already cached as enrolled.
+- GitHub Actions still performs the Regybox login, enrollment, unenrollment, KV update, and email
+  notification.
+- Emails are sent only for successful enrollments, successful unenrollments, or real errors. No-op
+  runs such as already enrolled or enrollment not open yet do not send email.
+- If you manually unenroll from a class, the KV entry suppresses re-enrollment while the calendar
+  event remains present.
 
-Add a workflow like this at `.github/workflows/calendar_sync.yml` in the repository that owns your
-automation:
-
-```yaml
-name: Sync Regybox Calendar
-
-on:
-  workflow_dispatch:
-    inputs:
-      dry-run:
-        type: boolean
-        default: false
-      lookahead-days:
-        default: "3"
-      enroll-window-minutes:
-        default: "30"
-      calendar-event-names:
-        required: true
-      target-class-types:
-        required: true
-
-jobs:
-  sync:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
-      - name: Sync Regybox enrollments
-        env:
-          PHPSESSID: ${{ secrets.PHPSESSID }}
-          REGYBOX_USER: ${{ secrets.REGYBOX_USER }}
-          CALENDAR_URL: ${{ secrets.CALENDAR_URL }}
-          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
-          CF_KV_API_TOKEN: ${{ secrets.CF_KV_API_TOKEN }}
-        run: >
-          uv run regybox-sync
-          --calendar-event-names '${{ inputs.calendar-event-names }}'
-          --target-class-types '${{ inputs.target-class-types }}'
-```
-
-`calendar-event-names` is a comma-separated list of calendar titles to sync. `target-class-types`
-is a comma-separated list of exact Regybox class names that any of those calendar events may
-correspond to:
+Calendar event names and Regybox class names are configured separately:
 
 ```text
-calendar-event-names: "CrossFit"
-target-class-types: "WOD"
+CALENDAR_EVENT_NAMES=Crossfit
+CLASS_TYPE=WOD
 ```
 
 You can provide more than one value by separating names with commas, for example
-`calendar-event-names: "CrossFit, Open Gym"` or `target-class-types: "WOD, Weekend WOD"`.
+`CALENDAR_EVENT_NAMES=Crossfit,Strength` or `CLASS_TYPE=WOD,Weekend WOD`.
 
 ### Cloudflare Setup
 
-You will configure two separate things:
+You will configure three separate things:
 
-- GitHub Actions runs the actual Regybox sync and reads/writes Cloudflare KV.
-- Cloudflare Workers Cron Triggers only wake up every 30 minutes and dispatch the GitHub workflow.
+- A GitHub workflow that performs one exact class operation.
+- A Cloudflare KV namespace for 30-day scheduler state.
+- A Cloudflare Worker that reads your calendar and dispatches GitHub only when needed.
 
 #### 1. Create the GitHub Workflow
 
-Commit `.github/workflows/calendar_sync.yml` in your automation repository. The workflow in this
+Commit `.github/workflows/class_operation.yml` in your automation repository. The workflow in this
 repository can be used as-is if your automation repository is this repo.
 
-After the workflow exists on the default branch, open **GitHub → Actions → Sync Regybox Calendar →
-Run workflow** once and enter:
+After the workflow exists on the default branch, open **GitHub → Actions → Regybox Class Operation
+→ Run workflow** once and enter:
 
-- `calendar-event-names`: the calendar titles to sync, for example `CrossFit`.
-- `target-class-types`: the exact Regybox class names those calendar events may target, for
-  example `WOD` or `WOD, Weekend WOD`.
-- `dry-run`: `true` for the first manual run.
+- `operation`: `enroll`.
+- `class-date`: a test class date in `YYYY-MM-DD` format.
+- `class-time`: a test class time in `HH:MM` format.
+- `class-type`: the exact Regybox class name, for example `WOD`.
+- `cache-key`: a temporary value such as `regybox:v1:test`.
 
-The dry run should start the workflow without enrolling or unenrolling anything.
+If enrollment is not open yet, the workflow should no-op without sending an email.
 
 #### 2. Create a Cloudflare KV Namespace
 
@@ -233,7 +198,8 @@ The dry run should start the workflow without enrolling or unenrolling anything.
 
 #### 3. Create a Cloudflare API Token for GitHub Actions
 
-The GitHub sync workflow uses Cloudflare's REST API to read and write KV cache keys.
+The GitHub workflow uses Cloudflare's REST API to write KV cache keys after successful state
+changes.
 
 1. In Cloudflare, go to **Manage account → Account API tokens**.
 2. Click **Create Token**.
@@ -257,7 +223,7 @@ The Worker needs a GitHub token that can call the workflow dispatch endpoint.
 2. Click **Generate new token**.
 3. Give the token a clear name, such as `regybox-cloudflare-dispatch`.
 4. Choose an expiration. Use **No expiration** if you do not want to rotate this token later.
-5. Set **Repository access** to only the repository containing `calendar_sync.yml`.
+5. Set **Repository access** to only the repository containing `class_operation.yml`.
 6. Under repository permissions, set **Actions** to **Read and write**.
 7. Generate the token and copy it.
 
@@ -269,40 +235,13 @@ The Worker needs a GitHub token that can call the workflow dispatch endpoint.
 4. Rename the Worker to `regybox-scheduler`.
 5. Click **Deploy**.
 6. Click **Edit code**.
-7. Paste this code into the `worker.js` tab:
-
-```js
-export default {
-  async scheduled(_event, env, _ctx) {
-    const url = `https://api.github.com/repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/actions/workflows/${env.GITHUB_WORKFLOW}/dispatches`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "regybox-cloudflare-scheduler",
-      },
-      body: JSON.stringify({
-        ref: env.GITHUB_REF || "main",
-        inputs: {
-          "dry-run": "false",
-          "lookahead-days": "3",
-          "enroll-window-minutes": "30",
-          "calendar-event-names": env.CALENDAR_EVENT_NAMES,
-          "target-class-types": env.TARGET_CLASS_TYPES,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`GitHub dispatch failed: ${response.status} ${await response.text()}`);
-    }
-  },
-};
-```
-
+7. Paste the contents of
+   [`cloudflare/regybox-scheduler/worker.js`](cloudflare/regybox-scheduler/worker.js) from this
+   repository into the `worker.js` tab.
 8. Click **Deploy**.
+
+If you deploy with Wrangler instead, copy `cloudflare/regybox-scheduler/wrangler.jsonc`, replace
+`replace-with-your-kv-namespace-id`, and run the Worker package from that directory.
 
 #### 6. Add Worker Variables and Secrets
 
@@ -311,15 +250,29 @@ Go back to the Worker dashboard and open **Settings → Variables**.
 Add these as type **Text**:
 
 - `GITHUB_OWNER` — your GitHub account or organization name.
-- `GITHUB_REPO` — the name of the GitHub repository containing `calendar_sync.yml`.
-- `GITHUB_WORKFLOW` — workflow file name, usually `calendar_sync.yml`.
+- `GITHUB_REPO` — the name of the GitHub repository containing `class_operation.yml`.
+- `GITHUB_WORKFLOW` — workflow file name, usually `class_operation.yml`.
 - `GITHUB_REF` — branch or tag to dispatch, usually `main`.
 - `CALENDAR_EVENT_NAMES` — for example `CrossFit`.
-- `TARGET_CLASS_TYPES` — for example `WOD`.
+- `CLASS_TYPE` — for example `WOD`.
+- `LOOKAHEAD_HOURS` — optional; defaults to `72`. Set this to another integer to scan farther
+  ahead.
+- `TIMEZONE` — optional; defaults to `Europe/Lisbon`. Set this if your calendar timestamps should
+  be converted to a different local class timezone.
 
 Add this as type **Secret**:
 
 - `GITHUB_TOKEN` — the GitHub fine-grained token from step 4.
+- `CALENDAR_URL` — the secret `.ics` feed URL for your calendar.
+
+Bind the KV namespace to the Worker:
+
+1. Click the **Bindings** tab.
+2. Click **Add binding**.
+3. Select **KV namespace** and click **Add Binding**.
+4. Set **Variable name** to `REGYBOX_STATE`.
+5. Set **KV namespace** to the KV instance from step 2, usually `regybox-sync-state`.
+6. Click **Add Binding**.
 
 After all variables and secrets are set, click **Deploy**.
 
@@ -348,8 +301,8 @@ before assuming the trigger is broken.
 3. Temporarily change the Worker variable `GITHUB_REF` only if you want to dispatch a test branch.
 4. Either wait for the next 30-minute tick or use Cloudflare's Worker testing tools to invoke the
    scheduled handler.
-5. In GitHub, open **Actions → Sync Regybox Calendar** and confirm a new run appears.
-6. Start with `dry-run: true` until you see the expected classes in the logs.
+5. In GitHub, open **Actions → Regybox Class Operation** and confirm a new run appears only when
+   KV says a class needs action.
 
 Useful references:
 
@@ -367,10 +320,10 @@ Useful references:
 | `EMAIL_USERNAME`     |  Yes\*   | Email address that sends confirmations. Required if `send-email` is `true`.        |
 | `EMAIL_PASSWORD`     |  Yes\*   | Password or app password for `EMAIL_USERNAME`. Required if `send-email` is `true`. |
 | `EMAIL_TO`           |  Yes\*   | Email address that receives confirmations. Required if `send-email` is `true`.     |
-| `CALENDAR_URL`       |    No    | Secret `.ics` feed URL for your calendar. Enables calendar sync.                   |
-| `CF_ACCOUNT_ID`      |   Sync   | Cloudflare account ID used by calendar-driven sync.                                |
-| `CF_KV_NAMESPACE_ID` |   Sync   | Cloudflare KV namespace ID used by calendar-driven sync.                           |
-| `CF_KV_API_TOKEN`    |   Sync   | Cloudflare API token with read/write access to the sync KV namespace.              |
+| `CALENDAR_URL`       |    No    | Secret `.ics` feed URL for GitHub calendar checks or the Cloudflare Worker.        |
+| `CF_ACCOUNT_ID`      |  Worker  | Cloudflare account ID used by GitHub to update scheduler KV state.                 |
+| `CF_KV_NAMESPACE_ID` |  Worker  | Cloudflare KV namespace ID used by GitHub to update scheduler KV state.            |
+| `CF_KV_API_TOKEN`    |  Worker  | Cloudflare API token with edit access to the scheduler KV namespace.               |
 
 > [!TIP]
 > After committing the workflow, open the **Actions** tab and run it once with **Run workflow** to

@@ -1,0 +1,55 @@
+---
+name: Regybox Class Operation
+on: # yamllint disable-line rule:truthy
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Operation to perform.
+        required: true
+        default: enroll
+        type: choice
+        options:
+          - enroll
+          - unenroll
+      class-date:
+        description: Exact class date in YYYY-MM-DD format.
+        required: true
+      class-time:
+        description: Exact class start time in HH:MM format.
+        required: true
+      class-type:
+        description: Exact Regybox class name, or comma-separated fallback class names.
+        required: true
+      cache-key:
+        description: Cloudflare KV cache key to update after a successful state change.
+        required: true
+      calendar-fingerprint:
+        description: Stable calendar event identity used for debugging/cache value payloads.
+        required: false
+        default: ""
+
+jobs:
+  class-operation:
+    name: Regybox class operation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Regybox class operation
+        uses: martimlobao/regybox@main
+        with:
+          operation: ${{ inputs.operation }}
+          class-date: ${{ inputs.class-date }}
+          class-time: ${{ inputs.class-time }}
+          class-type: ${{ inputs.class-type }}
+          timeout-seconds: 60
+          not-open-is-noop: true
+          cache-key: ${{ inputs.cache-key }}
+          calendar-fingerprint: ${{ inputs.calendar-fingerprint }}
+          cf-account-id: ${{ secrets.CF_ACCOUNT_ID }}
+          cf-kv-namespace-id: ${{ secrets.CF_KV_NAMESPACE_ID }}
+          cf-kv-api-token: ${{ secrets.CF_KV_API_TOKEN }}
+          phpsessid: ${{ secrets.PHPSESSID }}
+          regybox-user: ${{ secrets.REGYBOX_USER }}
+          send-email: true
+          email-to: ${{ secrets.EMAIL_TO }}
+          email-username: ${{ secrets.EMAIL_USERNAME }}
+          email-password: ${{ secrets.EMAIL_PASSWORD }}

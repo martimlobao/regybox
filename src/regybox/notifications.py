@@ -287,6 +287,7 @@ def build_email_content(
     class_summary: str,
     run_url: str | None,
     log_text: str,
+    operation: str = "enroll",
 ) -> tuple[str, str]:
     """Create email subject and body from run context.
 
@@ -294,12 +295,15 @@ def build_email_content(
         A ``(subject, body)`` tuple ready for SMTP dispatch.
     """
     normalized_result: str = enroll_result.strip().lower()
+    normalized_operation: str = operation.strip().lower() or "enroll"
+    operation_label: str = "unenroll" if normalized_operation == "unenroll" else "enroll"
+    operation_noun: str = "unenrollment" if operation_label == "unenroll" else "enrollment"
     resolved_run_url: str = _build_run_url(run_url)
 
     if normalized_result == "success":
-        subject = f"Regybox Auto-enroll: success for {class_summary}"
+        subject = f"Regybox Auto-{operation_label}: success for {class_summary}"
         body_lines: list[str] = [
-            "Your Regybox auto-enrollment completed successfully.",
+            f"Your Regybox auto-{operation_noun} completed successfully.",
             "",
             f"Class: {class_summary}",
             "",
@@ -319,9 +323,9 @@ def build_email_content(
     ]
     appendix: str = build_technical_appendix(log_text, payload["technical_message"])
 
-    subject = f"Regybox Auto-enroll: failure - {payload['user_title']}"
+    subject = f"Regybox Auto-{operation_label}: failure - {payload['user_title']}"
     body_lines = [
-        "We could not complete your Regybox auto-enrollment.",
+        f"We could not complete your Regybox auto-{operation_noun}.",
         "",
         f"Class: {class_summary}",
         "",
@@ -335,6 +339,11 @@ def build_email_content(
     if resolved_run_url:
         body_lines.extend(["", f"Workflow run (optional): {resolved_run_url}"])
     return subject, "\n".join(body_lines)
+
+
+def should_send_email(enroll_result: str) -> bool:
+    """Return whether an action result should trigger an email."""
+    return enroll_result.strip().lower() in {"success", "failure"}
 
 
 def write_multiline_env(*, name: str, value: str, github_env_path: str) -> None:
@@ -367,9 +376,15 @@ def main() -> None:
         class_summary=class_summary,
         run_url=os.environ.get("ACTION_RUN_URL"),
         log_text=log_text,
+        operation=os.environ.get("REGYBOX_OPERATION", "enroll"),
     )
     write_multiline_env(name="EMAIL_SUBJECT", value=subject, github_env_path=github_env_path)
     write_multiline_env(name="EMAIL_BODY", value=body, github_env_path=github_env_path)
+    write_multiline_env(
+        name="SHOULD_SEND_EMAIL",
+        value="true" if should_send_email(os.environ.get("ENROLL_RESULT", "failure")) else "false",
+        github_env_path=github_env_path,
+    )
 
 
 if __name__ == "__main__":
