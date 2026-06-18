@@ -36,7 +36,7 @@ morning) or trigger it manually.
 
    > [!NOTE]
    > If you want your calendar to drive enrollments and unenrollments on a 30-minute Cloudflare
-   > schedule, use the [Cloudflare calendar scheduling](#calendar-driven-scheduling-with-cloudflare)
+   > schedule, use the [Cloudflare calendar sync](#calendar-driven-sync-with-cloudflare)
    > approach
    > instead of a fixed-class GitHub schedule.
 
@@ -135,7 +135,7 @@ automatically in the class.
 > The calendar match is case-insensitive and ignores leading/trailing spaces. By default, the
 > action looks for an event whose title matches `CrossFit`.
 
-## Calendar-Driven Scheduling with Cloudflare
+## Calendar-Driven Sync with Cloudflare
 
 GitHub scheduled workflows can run late. For calendar-driven scheduling, use a Cloudflare Worker
 Cron Trigger to check your calendar every 30 minutes and dispatch a GitHub workflow only when a
@@ -192,7 +192,7 @@ If enrollment is not open yet, the workflow should no-op without sending an emai
 1. Open the [Cloudflare dashboard](https://dash.cloudflare.com/).
 2. Go to **Storage & databases → Workers KV**.
 3. Click **Create Instance**.
-4. Name it something like `regybox-scheduler-state`.
+4. Name it something like `regybox-sync-state`.
 5. Open the new KV instance and go to the **Metrics** tab.
 6. Copy the namespace ID. You will store it in GitHub as `CF_KV_NAMESPACE_ID`.
 
@@ -235,8 +235,9 @@ The Worker needs a GitHub token that can call the workflow dispatch endpoint.
 4. Rename the Worker to `regybox-scheduler`.
 5. Click **Deploy**.
 6. Click **Edit code**.
-7. Paste the contents of `cloudflare/regybox-scheduler/worker.js` from this repository into the
-   `worker.js` tab.
+7. Paste the contents of
+   [`cloudflare/regybox-scheduler/worker.js`](cloudflare/regybox-scheduler/worker.js) from this
+   repository into the `worker.js` tab.
 8. Click **Deploy**.
 
 If you deploy with Wrangler instead, copy `cloudflare/regybox-scheduler/wrangler.jsonc`, replace
@@ -266,8 +267,12 @@ Add this as type **Secret**:
 
 Bind the KV namespace to the Worker:
 
-- Binding name: `REGYBOX_STATE`.
-- Namespace: the KV instance created in step 2.
+1. Click the **Bindings** tab.
+2. Click **Add binding**.
+3. Select **KV namespace** and click **Add Binding**.
+4. Set **Variable name** to `REGYBOX_STATE`.
+5. Set **KV namespace** to the KV instance from step 2, usually `regybox-sync-state`.
+6. Click **Add Binding**.
 
 After all variables and secrets are set, click **Deploy**.
 
