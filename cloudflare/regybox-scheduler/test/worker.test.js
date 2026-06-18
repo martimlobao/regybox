@@ -172,3 +172,132 @@ test("stale enrolled KV entry dispatches unenroll", async () => {
   assert.equal(plan.dispatches[0].operation, "unenroll");
   assert.equal(plan.dispatches[0].inputs["class-date"], "2026-06-18");
 });
+
+test("weekly RRULE without BYDAY recurs on DTSTART weekday only", () => {
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:weekly-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260618T063000Z",
+    "RRULE:FREQ=WEEKLY;COUNT=2",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const events = expandCalendarEvents({
+    icsText: ics,
+    now: new Date("2026-06-18T00:00:00Z"),
+    lookaheadHours: 24 * 8,
+    calendarEventNames: ["Crossfit"],
+  });
+
+  assert.deepEqual(
+    events.map((event) => event.classDate),
+    ["2026-06-18", "2026-06-25"],
+  );
+});
+
+test("recurring calendar events respect EXDATE exclusions", () => {
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:excluded-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260618T063000Z",
+    "RRULE:FREQ=DAILY;COUNT=3",
+    "EXDATE:20260619T063000Z",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const events = expandCalendarEvents({
+    icsText: ics,
+    now: new Date("2026-06-18T00:00:00Z"),
+    lookaheadHours: 72,
+    calendarEventNames: ["Crossfit"],
+  });
+
+  assert.deepEqual(
+    events.map((event) => event.classDate),
+    ["2026-06-18", "2026-06-20"],
+  );
+});
+
+test("unsupported monthly RRULEs are ignored", () => {
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:monthly-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260618T063000Z",
+    "RRULE:FREQ=MONTHLY;COUNT=3",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const events = expandCalendarEvents({
+    icsText: ics,
+    now: new Date("2026-06-18T00:00:00Z"),
+    lookaheadHours: 72,
+    calendarEventNames: ["Crossfit"],
+  });
+
+  assert.deepEqual(events, []);
+});
+
+test("past stale enrolled KV entries do not dispatch unenroll", async () => {
+  const key = "regybox:v1:calendar:old-class:2026-06-17T06:30:00.000Z";
+  const kv = makeKv(
+    new Map([
+      [
+        key,
+        JSON.stringify({
+          state: "enrolled",
+          classDate: "2026-06-17",
+          classTime: "06:30",
+          classType: "WOD",
+          calendarFingerprint: "old-class:2026-06-17T06:30:00.000Z",
+        }),
+      ],
+    ]),
+  );
+
+  const plan = await buildPlan({
+    env: baseEnv,
+    kv,
+    icsText: "BEGIN:VCALENDAR\r\nEND:VCALENDAR",
+    now: new Date("2026-06-18T00:00:00Z"),
+  });
+
+  assert.deepEqual(plan.dispatches, []);
+});
+
+test("missing calendar event names fail before stale KV sweep", async () => {
+  const key = "regybox:v1:calendar:old-class:2026-06-18T06:30:00.000Z";
+  const kv = makeKv(
+    new Map([
+      [
+        key,
+        JSON.stringify({
+          state: "enrolled",
+          classDate: "2026-06-18",
+          classTime: "06:30",
+          classType: "WOD",
+          calendarFingerprint: "old-class:2026-06-18T06:30:00.000Z",
+        }),
+      ],
+    ]),
+  );
+
+  await assert.rejects(
+    () =>
+      buildPlan({
+        env: { ...baseEnv, CALENDAR_EVENT_NAMES: " , " },
+        kv,
+        icsText: "BEGIN:VCALENDAR\r\nEND:VCALENDAR",
+        now: new Date("2026-06-18T00:00:00Z"),
+      }),
+    /CALENDAR_EVENT_NAMES/,
+  );
+});

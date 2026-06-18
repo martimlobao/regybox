@@ -149,19 +149,28 @@ runs:
         ENROLL_OUTCOME: ${{ steps.enroll.outcome }}
       run: |
         set -euo pipefail
+        cache_should_update=false
         if [[ "${ENROLL_OUTCOME}" == "success" ]]; then
           if grep -q "REGYBOX_RESULT=noop" "${ENROLL_LOG_PATH}"; then
             result=noop
+            if ! grep -Eq "Enrollment (is not open|did not open)" "${ENROLL_LOG_PATH}"; then
+              cache_should_update=true
+            fi
           else
             result=success
+            cache_should_update=true
           fi
         else
           result=failure
         fi
         echo "ENROLL_RESULT=${result}" >> "$GITHUB_ENV"
+        echo "CACHE_SHOULD_UPDATE=${cache_should_update}" >> "$GITHUB_ENV"
     - id: update-cache
       name: Update Cloudflare KV cache
-      if: env.ENROLL_RESULT == 'success' && env.CACHE_KEY != ''
+      if: >-
+        env.CACHE_SHOULD_UPDATE == 'true' &&
+        (env.ENROLL_RESULT == 'success' || env.ENROLL_RESULT == 'noop') &&
+        env.CACHE_KEY != ''
       shell: bash
       working-directory: ${{ github.action_path }}
       env:
@@ -175,10 +184,6 @@ runs:
         CLASS_TYPE: ${{ env.CLASS_TYPE }}
         CALENDAR_FINGERPRINT: ${{ env.CALENDAR_FINGERPRINT }}
       run: uv run python -m regybox.cloudflare_kv
-    - name: Capture cache update failure
-      if: always() && steps.update-cache.outcome == 'failure'
-      shell: bash
-      run: echo "ENROLL_RESULT=failure" >> "$GITHUB_ENV"
     - name: Compose confirmation email
       if: always() && inputs.send-email != 'false'
       shell: bash

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.parse
 from dataclasses import dataclass
 
 import requests
@@ -66,7 +67,7 @@ def write_state(
         (
             "https://api.cloudflare.com/client/v4/accounts/"
             f"{config.account_id}/storage/kv/namespaces/{config.namespace_id}/values/"
-            f"{cache_key}"
+            f"{urllib.parse.quote(cache_key, safe='')}"
         ),
         headers={"Authorization": f"Bearer {config.api_token}"},
         params={"expiration_ttl": str(KV_TTL_SECONDS)},
@@ -77,21 +78,30 @@ def write_state(
 
 
 def main() -> None:
-    """Entry point used by the composite action after successful operations."""
+    """Entry point used by the composite action after terminal operations.
+
+    Raises:
+        ValueError: If ``REGYBOX_OPERATION`` is not supported.
+    """
     cache_key = os.environ.get("CACHE_KEY", "").strip()
     if not cache_key:
         return
     operation = os.environ.get("REGYBOX_OPERATION", "enroll").strip()
+    if operation not in {"enroll", "unenroll"}:
+        raise ValueError("REGYBOX_OPERATION must be either 'enroll' or 'unenroll'.")
     state = "unenrolled" if operation == "unenroll" else "enrolled"
-    write_state(
-        config=CloudflareKVConfig.from_env(),
-        cache_key=cache_key,
-        state=state,
-        class_date=os.environ.get("CLASS_DATE", "").strip(),
-        class_time=os.environ.get("CLASS_TIME", "").strip(),
-        class_type=os.environ.get("CLASS_TYPE", "").strip(),
-        calendar_fingerprint=os.environ.get("CALENDAR_FINGERPRINT", "").strip(),
-    )
+    try:
+        write_state(
+            config=CloudflareKVConfig.from_env(),
+            cache_key=cache_key,
+            state=state,
+            class_date=os.environ.get("CLASS_DATE", "").strip(),
+            class_time=os.environ.get("CLASS_TIME", "").strip(),
+            class_type=os.environ.get("CLASS_TYPE", "").strip(),
+            calendar_fingerprint=os.environ.get("CALENDAR_FINGERPRINT", "").strip(),
+        )
+    except (ValueError, requests.RequestException) as exc:
+        print(f"Warning: Cloudflare KV cache update failed: {exc}")
 
 
 if __name__ == "__main__":

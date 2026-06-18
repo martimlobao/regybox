@@ -6,6 +6,7 @@ class based on criteria, and enrolls in the class.
 """
 
 import datetime
+import math
 import time
 from dataclasses import dataclass
 from typing import Literal
@@ -150,6 +151,38 @@ def _pick_requested_class(
         raise
 
 
+def _pick_unenroll_class(
+    *,
+    date: datetime.date,
+    class_time: str,
+    class_types: list[str],
+) -> Class | OperationResult:
+    classes: list[Class] = get_classes(date.year, date.month, date.day)
+    first_match: Class | None = None
+    for class_type in class_types:
+        try:
+            candidate = pick_class(
+                classes,
+                class_time=class_time,
+                class_type=class_type,
+                class_date=date.isoformat(),
+            )
+        except ClassNotFoundError:
+            continue
+        if first_match is None:
+            first_match = candidate
+        if candidate.user_is_enrolled:
+            return candidate
+    if first_match is not None:
+        return first_match
+    LOGGER.info("Class not found for unenroll; treating as no-op")
+    return _operation_result(
+        operation="unenroll",
+        status="noop",
+        class_type=class_types[0],
+    )
+
+
 def _wait_for_enrollable_class(
     *,
     date: datetime.date,
@@ -158,7 +191,8 @@ def _wait_for_enrollable_class(
     timeout: int,
     options: OperationOptions,
 ) -> Class | OperationResult:
-    while (datetime.datetime.now(TIMEZONE) - START).total_seconds() < timeout:
+    start = time.monotonic()
+    while (elapsed := time.monotonic() - start) < timeout:
         picked = _pick_requested_class(
             date=date,
             class_time=class_time,
@@ -178,8 +212,12 @@ def _wait_for_enrollable_class(
             return closed_result
         if picked.time_to_enroll is None:
             raise ClassNotOpenError
-        if picked.time_to_enroll > timeout:
-            raise RegyboxTimeoutError(timeout, time_to_enroll=secs_to_str(picked.time_to_enroll))
+        remaining_timeout = max(0, math.ceil(timeout - elapsed))
+        if picked.time_to_enroll > remaining_timeout:
+            raise RegyboxTimeoutError(
+                remaining_timeout,
+                time_to_enroll=secs_to_str(picked.time_to_enroll),
+            )
 
         wait: int = snooze(picked.time_to_enroll)
         LOGGER.info(
@@ -270,11 +308,10 @@ def main(
         )
 
     if options.operation == "unenroll":
-        picked = _pick_requested_class(
+        picked = _pick_unenroll_class(
             date=date,
             class_time=class_time,
             class_types=class_types,
-            options=options,
         )
         if isinstance(picked, OperationResult):
             return picked

@@ -30,6 +30,27 @@ def test_cloudflare_kv_config_requires_values(monkeypatch: pytest.MonkeyPatch) -
         CloudflareKVConfig.from_env()
 
 
+def test_write_state_url_encodes_cache_key() -> None:
+    response = Mock()
+    with patch("regybox.cloudflare_kv.requests.put", return_value=response) as put:
+        write_state(
+            config=CloudflareKVConfig(
+                account_id="account",
+                namespace_id="namespace",
+                api_token=FAKE_CREDENTIAL,
+            ),
+            cache_key="regybox:v1:uid/with?reserved#chars",
+            state="enrolled",
+            class_date="2026-06-18",
+            class_time="06:30",
+            class_type="WOD",
+            calendar_fingerprint="uid:start",
+        )
+
+    url = put.call_args.args[0]
+    assert url.endswith("regybox%3Av1%3Auid%2Fwith%3Freserved%23chars")
+
+
 def test_write_state_sends_ttl_and_payload() -> None:
     response = Mock()
     with patch("regybox.cloudflare_kv.requests.put", return_value=response) as put:
@@ -91,3 +112,24 @@ def test_cloudflare_kv_main_writes_unenrolled_state(monkeypatch: pytest.MonkeyPa
         class_type="WOD",
         calendar_fingerprint="uid:start",
     )
+
+
+def test_cloudflare_kv_main_rejects_unknown_operation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CACHE_KEY", "regybox:v1:key")
+    monkeypatch.setenv("REGYBOX_OPERATION", "pause")
+
+    with pytest.raises(ValueError, match="REGYBOX_OPERATION"):
+        cloudflare_kv.main()
+
+
+def test_cloudflare_kv_main_warns_on_missing_config(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("CACHE_KEY", "regybox:v1:key")
+    monkeypatch.delenv("CF_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("CF_KV_NAMESPACE_ID", raising=False)
+    monkeypatch.delenv("CF_KV_API_TOKEN", raising=False)
+
+    cloudflare_kv.main()
+
+    assert "Warning: Cloudflare KV cache update failed" in capsys.readouterr().out

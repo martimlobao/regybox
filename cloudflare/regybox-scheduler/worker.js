@@ -72,6 +72,17 @@ function parseRrule(value) {
   );
 }
 
+function parseDateList(value) {
+  return String(value ?? "")
+    .split(",")
+    .filter(Boolean)
+    .map((part) => parseDate(part));
+}
+
+function sameUtcInstant(left, right) {
+  return left.getTime() === right.getTime();
+}
+
 function addDays(date, days) {
   const next = new Date(date);
   next.setUTCDate(next.getUTCDate() + days);
@@ -82,26 +93,45 @@ function weekdayCode(date) {
   return ["SU", "MO", "TU", "WE", "TH", "FR", "SA"][date.getUTCDay()];
 }
 
-function recurrenceInstances(start, rrule, windowStart, windowEnd) {
+function validateCalendarEventNames(calendarEventNames) {
+  if (!Array.isArray(calendarEventNames) || calendarEventNames.length === 0) {
+    throw new Error("CALENDAR_EVENT_NAMES must include at least one calendar event name.");
+  }
+}
+
+function recurrenceInstances(start, rrule, windowStart, windowEnd, excludedDates = []) {
   const freq = rrule.FREQ;
+  if (!["DAILY", "WEEKLY"].includes(freq)) {
+    return [];
+  }
   const interval = Number.parseInt(rrule.INTERVAL ?? "1", 10);
   const count = rrule.COUNT ? Number.parseInt(rrule.COUNT, 10) : null;
   const until = rrule.UNTIL ? parseDate(rrule.UNTIL) : null;
   const byday = rrule.BYDAY ? rrule.BYDAY.split(",") : null;
+  const startWeekday = weekdayCode(start);
   const instances = [];
   let cursor = new Date(start);
   let generated = 0;
-  const stepDays = freq === "WEEKLY" ? 1 : interval;
+  const stepDays = freq === "WEEKLY" ? (byday === null ? 7 * interval : 1) : interval;
   const maxIterations = 4000;
 
   for (let index = 0; index < maxIterations; index += 1) {
     const dayOffset = Math.floor((cursor - start) / 86_400_000);
     const intervalMatch =
       freq === "WEEKLY" ? Math.floor(dayOffset / 7) % interval === 0 : true;
-    const bydayMatch = !byday || byday.includes(weekdayCode(cursor));
+    const cursorWeekday = weekdayCode(cursor);
+    const bydayMatch =
+      byday === null
+        ? freq !== "WEEKLY" || cursorWeekday === startWeekday
+        : byday.includes(cursorWeekday);
     if (intervalMatch && bydayMatch) {
       generated += 1;
-      if ((!until || cursor <= until) && cursor >= windowStart && cursor < windowEnd) {
+      if (
+        (!until || cursor <= until) &&
+        cursor >= windowStart &&
+        cursor < windowEnd &&
+        !excludedDates.some((excluded) => sameUtcInstant(excluded, cursor))
+      ) {
         instances.push(new Date(cursor));
       }
       if (count !== null && generated >= count) {
@@ -116,7 +146,7 @@ function recurrenceInstances(start, rrule, windowStart, windowEnd) {
         break;
       }
     }
-    cursor = addDays(cursor, freq === "DAILY" || freq === "WEEKLY" ? stepDays : 1);
+    cursor = addDays(cursor, stepDays);
   }
   return instances;
 }
@@ -186,6 +216,7 @@ export function expandCalendarEvents({
   calendarEventNames,
   timeZone = "Europe/Lisbon",
 }) {
+  validateCalendarEventNames(calendarEventNames);
   const normalizedNames = new Set(calendarEventNames.map((name) => name.toLowerCase()));
   const windowEnd = new Date(now.getTime() + lookaheadHours * 60 * 60 * 1000);
   const events = [];
@@ -197,9 +228,15 @@ export function expandCalendarEvents({
       continue;
     }
     const start = parseDate(props.DTSTART);
+    const excludedDates = parseDateList(props.EXDATE);
     const starts = props.RRULE
-      ? recurrenceInstances(start, parseRrule(props.RRULE), now, windowEnd)
-      : [start].filter((candidate) => candidate >= now && candidate < windowEnd);
+      ? recurrenceInstances(start, parseRrule(props.RRULE), now, windowEnd, excludedDates)
+      : [start].filter(
+          (candidate) =>
+            candidate >= now &&
+            candidate < windowEnd &&
+            !excludedDates.some((excluded) => sameUtcInstant(excluded, candidate)),
+        );
     events.push(
       ...starts.map((instanceStart) => eventDetails(props, instanceStart, timeZone)),
     );
@@ -227,6 +264,13 @@ async function readJson(kv, key) {
   }
 }
 
+function cachedEventIsFuture(cached, now) {
+  if (!cached?.classDate || !cached?.classTime) {
+    return true;
+  }
+  return new Date(`${cached.classDate}T${cached.classTime}:00Z`) >= now;
+}
+
 function dispatchPayload({ env, operation, event, cacheKey, cached }) {
   const classDate = event?.classDate ?? cached.classDate;
   const classTime = event?.classTime ?? cached.classTime;
@@ -248,6 +292,7 @@ function dispatchPayload({ env, operation, event, cacheKey, cached }) {
 export async function buildPlan({ env, kv, icsText, now = new Date() }) {
   const lookaheadHours = defaultLookaheadHours(env);
   const calendarEventNames = normalizeList(env.CALENDAR_EVENT_NAMES);
+  validateCalendarEventNames(calendarEventNames);
   const events = expandCalendarEvents({
     icsText,
     now,
@@ -258,8 +303,11 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
   const activeKeys = new Set(events.map((event) => event.cacheKey));
   const dispatches = [];
 
-  for (const event of events) {
-    const cached = await readJson(kv, event.cacheKey);
+  const eventCacheEntries = await Promise.all(
+    events.map(async (event) => [event, await readJson(kv, event.cacheKey)]),
+  );
+
+  for (const [event, cached] of eventCacheEntries) {
     if (!cached || cached.state !== "enrolled") {
       dispatches.push(
         dispatchPayload({
@@ -273,12 +321,13 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
     }
   }
 
-  for (const { name } of await listKvEntries(kv)) {
-    if (activeKeys.has(name)) {
-      continue;
-    }
-    const cached = await readJson(kv, name);
-    if (cached?.state === "enrolled") {
+  const staleKvEntries = (await listKvEntries(kv)).filter(({ name }) => !activeKeys.has(name));
+  const staleCacheEntries = await Promise.all(
+    staleKvEntries.map(async ({ name }) => [name, await readJson(kv, name)]),
+  );
+
+  for (const [name, cached] of staleCacheEntries) {
+    if (cached?.state === "enrolled" && cachedEventIsFuture(cached, now)) {
       dispatches.push(
         dispatchPayload({
           env,

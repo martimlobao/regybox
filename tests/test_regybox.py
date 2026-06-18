@@ -376,6 +376,40 @@ def test_main_unenroll_noops_when_not_enrolled() -> None:
     assert result == OperationResult(operation="unenroll", status="noop", class_type="WOD Rato")
 
 
+def test_main_unenroll_checks_later_fallback_when_first_match_is_not_enrolled() -> None:
+    first_class: MagicMock = MagicMock()
+    first_class.name = "WOD"
+    first_class.user_is_enrolled = False
+    second_class: MagicMock = MagicMock()
+    second_class.name = "Weekend WOD"
+    second_class.user_is_enrolled = True
+
+    def pick_side_effect(
+        classes: list[MagicMock], *, class_time: str, class_type: str, class_date: str
+    ) -> MagicMock:
+        _ = (classes, class_time, class_date)
+        return {"WOD": first_class, "Weekend WOD": second_class}[class_type]
+
+    with (
+        patch("regybox.regybox.check_cal"),
+        patch("regybox.regybox.get_classes", return_value=[first_class, second_class]),
+        patch("regybox.regybox.pick_class", side_effect=pick_side_effect),
+    ):
+        result = main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD, Weekend WOD",
+            check_calendar=False,
+            operation_options=OperationOptions(operation="unenroll"),
+        )
+
+    first_class.unenroll.assert_not_called()
+    second_class.unenroll.assert_called_once()
+    assert result == OperationResult(
+        operation="unenroll", status="success", class_type="Weekend WOD"
+    )
+
+
 def test_main_unenroll_noops_when_class_is_missing() -> None:
     with (
         patch("regybox.regybox.check_cal"),

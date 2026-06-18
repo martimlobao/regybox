@@ -147,6 +147,20 @@ def test_build_email_content_unenroll_success() -> None:
     assert "Your Regybox auto-unenrollment completed successfully." in body
 
 
+def test_build_email_content_unenroll_failure() -> None:
+    subject, body = build_email_content(
+        operation="unenroll",
+        enroll_result="failure",
+        class_summary="WOD on 2026-03-04 at 06:30",
+        run_url="https://example.com/run",
+        log_text="Error details here",
+    )
+
+    assert subject == "Regybox Auto-unenroll: failure - Unexpected enrollment failure"
+    assert "We could not complete your Regybox auto-unenrollment." in body
+    assert "Error details here" in body
+
+
 def test_should_send_email_skips_noop_results() -> None:
     assert not should_send_email("noop")
     assert should_send_email("success")
@@ -370,3 +384,22 @@ def test_notifications_module_main_writes_email_content(
     assert "EMAIL_SUBJECT<<REGYBOX_EMAIL_SUBJECT_EOF" in env_text
     assert "Regybox Auto-enroll: success for WOD Rato on 2026-03-04 at 06:30" in env_text
     assert "EMAIL_BODY<<REGYBOX_EMAIL_BODY_EOF" in env_text
+
+
+def test_notifications_main_sets_should_send_email_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for result, expected in [("success", "true"), ("failure", "true"), ("noop", "false")]:
+        env_file = tmp_path / f"env_{result}"
+        monkeypatch.setenv("GITHUB_ENV", str(env_file))
+        monkeypatch.setenv("ENROLL_RESULT", result)
+        monkeypatch.setenv("CLASS_TYPE", "WOD")
+        monkeypatch.setenv("CLASS_DATE", "2026-03-04")
+        monkeypatch.setenv("CLASS_TIME", "06:30")
+
+        notifications_module.main()
+
+        assert (
+            f"SHOULD_SEND_EMAIL<<REGYBOX_SHOULD_SEND_EMAIL_EOF\n{expected}"
+            in env_file.read_text(encoding="utf-8")
+        )
