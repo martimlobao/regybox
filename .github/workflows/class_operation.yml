@@ -46,7 +46,7 @@ jobs:
           class-type: ${{ inputs.class-type }}
           calendar-event-name: ${{ inputs.calendar-event-name }}
           timeout-seconds: 900
-          not-open-is-noop: false
+          not-open-is-noop: true
           cache-key: ${{ inputs.cache-key }}
           calendar-fingerprint: ${{ inputs.calendar-fingerprint }}
           cf-account-id: ${{ secrets.CF_ACCOUNT_ID }}

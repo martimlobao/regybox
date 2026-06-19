@@ -303,8 +303,8 @@ before assuming the trigger is broken.
 The class operation workflow waits up to 15 minutes (`timeout-seconds: 900`) after it starts. That
 timeout pairs with the 73-hour lookahead: the Worker may dispatch slightly before the exact opening
 minute, and the GitHub Action has enough time to queue, start, and wait for Regybox enrollment to
-become available. The calendar-driven workflow keeps `not-open-is-noop` disabled so this wait is
-used instead of exiting immediately when enrollment is not open yet.
+become available. If Regybox still reports that enrollment is not open yet, the workflow exits as a
+no-op without sending email.
 
 #### 8. Test the Setup
 
