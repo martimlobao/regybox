@@ -38,7 +38,7 @@ def test_class_operation_workflow_exposes_dispatch_and_kv_inputs() -> None:
     assert "calendar-fingerprint:" in workflow_text
     assert "calendar-event-name: ${{ inputs.calendar-event-name }}" in workflow_text
     assert "timeout-seconds: 900" in workflow_text
-    assert "not-open-is-noop: false" in workflow_text
+    assert "not-open-is-noop: true" in workflow_text
     assert "cf-account-id: ${{ secrets.CF_ACCOUNT_ID }}" in workflow_text
     assert "cf-kv-namespace-id: ${{ secrets.CF_KV_NAMESPACE_ID }}" in workflow_text
     assert "cf-kv-api-token: ${{ secrets.CF_KV_API_TOKEN }}" in workflow_text
