@@ -45,29 +45,38 @@ class CloudflareKVConfig:
         )
 
 
+@dataclass(frozen=True)
+class SchedulerState:
+    """One Regybox scheduler state payload."""
+
+    cache_key: str
+    state: str
+    class_date: str
+    class_time: str
+    class_type: str
+    calendar_event_name: str
+    calendar_fingerprint: str
+
+
 def write_state(
     *,
     config: CloudflareKVConfig,
-    cache_key: str,
-    state: str,
-    class_date: str,
-    class_time: str,
-    class_type: str,
-    calendar_fingerprint: str,
+    scheduler_state: SchedulerState,
 ) -> None:
     """Write one scheduler state entry to Cloudflare KV."""
     payload = {
-        "state": state,
-        "classDate": class_date,
-        "classTime": class_time,
-        "classType": class_type,
-        "calendarFingerprint": calendar_fingerprint,
+        "state": scheduler_state.state,
+        "classDate": scheduler_state.class_date,
+        "classTime": scheduler_state.class_time,
+        "classType": scheduler_state.class_type,
+        "calendarEventName": scheduler_state.calendar_event_name,
+        "calendarFingerprint": scheduler_state.calendar_fingerprint,
     }
     response = requests.put(
         (
             "https://api.cloudflare.com/client/v4/accounts/"
             f"{config.account_id}/storage/kv/namespaces/{config.namespace_id}/values/"
-            f"{urllib.parse.quote(cache_key, safe='')}"
+            f"{urllib.parse.quote(scheduler_state.cache_key, safe='')}"
         ),
         headers={"Authorization": f"Bearer {config.api_token}"},
         params={"expiration_ttl": str(KV_TTL_SECONDS)},
@@ -93,12 +102,15 @@ def main() -> None:
     try:
         write_state(
             config=CloudflareKVConfig.from_env(),
-            cache_key=cache_key,
-            state=state,
-            class_date=os.environ.get("CLASS_DATE", "").strip(),
-            class_time=os.environ.get("CLASS_TIME", "").strip(),
-            class_type=os.environ.get("CLASS_TYPE", "").strip(),
-            calendar_fingerprint=os.environ.get("CALENDAR_FINGERPRINT", "").strip(),
+            scheduler_state=SchedulerState(
+                cache_key=cache_key,
+                state=state,
+                class_date=os.environ.get("CLASS_DATE", "").strip(),
+                class_time=os.environ.get("CLASS_TIME", "").strip(),
+                class_type=os.environ.get("CLASS_TYPE", "").strip(),
+                calendar_event_name=os.environ.get("CALENDAR_EVENT_NAME", "").strip(),
+                calendar_fingerprint=os.environ.get("CALENDAR_FINGERPRINT", "").strip(),
+            ),
         )
     except (ValueError, requests.RequestException) as exc:
         print(f"Warning: Cloudflare KV cache update failed: {exc}")

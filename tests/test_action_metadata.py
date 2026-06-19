@@ -11,6 +11,18 @@ def test_email_sender_preserves_display_name_with_valid_address() -> None:
     assert "from: ${{ inputs.email-from-name }} <${{ inputs.email-username }}>" in action_text
 
 
+def test_action_defaults_not_open_enrollment_to_noop() -> None:
+    action_lines = (REPO_ROOT / "action.yml").read_text(encoding="utf-8").splitlines()
+    input_start = action_lines.index("  not-open-is-noop:")
+    next_input = next(
+        index
+        for index, line in enumerate(action_lines[input_start + 1 :], start=input_start + 1)
+        if line.startswith("  ") and not line.startswith("    ")
+    )
+
+    assert '    default: "true"' in action_lines[input_start:next_input]
+
+
 def test_class_operation_workflow_exposes_dispatch_and_kv_inputs() -> None:
     workflow_text = (REPO_ROOT / ".github/workflows/class_operation.yml").read_text(
         encoding="utf-8"
@@ -21,8 +33,10 @@ def test_class_operation_workflow_exposes_dispatch_and_kv_inputs() -> None:
     assert "class-date:" in workflow_text
     assert "class-time:" in workflow_text
     assert "class-type:" in workflow_text
+    assert "calendar-event-name:" in workflow_text
     assert "cache-key:" in workflow_text
     assert "calendar-fingerprint:" in workflow_text
+    assert "calendar-event-name: ${{ inputs.calendar-event-name }}" in workflow_text
     assert "timeout-seconds: 900" in workflow_text
     assert "not-open-is-noop: false" in workflow_text
     assert "cf-account-id: ${{ secrets.CF_ACCOUNT_ID }}" in workflow_text
