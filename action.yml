@@ -182,6 +182,7 @@ runs:
         CLASS_DATE: ${{ env.CLASS_DATE }}
         CLASS_TIME: ${{ env.CLASS_TIME }}
         CLASS_TYPE: ${{ env.CLASS_TYPE }}
+        CALENDAR_EVENT_NAME: ${{ env.CALENDAR_EVENT_NAME }}
         CALENDAR_FINGERPRINT: ${{ env.CALENDAR_FINGERPRINT }}
       run: uv run python -m regybox.cloudflare_kv
     - name: Compose confirmation email

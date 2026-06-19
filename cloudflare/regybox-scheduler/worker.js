@@ -271,11 +271,27 @@ function cachedEventIsFuture(cached, now) {
   return new Date(`${cached.classDate}T${cached.classTime}:00Z`) >= now;
 }
 
+function classSlotKey(classDate, classTime, classType) {
+  if (!classDate || !classTime || !classType) {
+    return null;
+  }
+  return `${classDate}T${classTime}:${classType}`;
+}
+
+function eventSlotKey(event, env) {
+  return classSlotKey(event.classDate, event.classTime, env.CLASS_TYPE);
+}
+
+function cachedSlotKey(cached) {
+  return classSlotKey(cached?.classDate, cached?.classTime, cached?.classType);
+}
+
 function dispatchPayload({ env, operation, event, cacheKey, cached }) {
   const classDate = event?.classDate ?? cached.classDate;
   const classTime = event?.classTime ?? cached.classTime;
-  const classType = env.CLASS_TYPE || cached.classType;
+  const classType = event ? env.CLASS_TYPE : cached.classType;
   const fingerprint = event?.fingerprint ?? cached.calendarFingerprint ?? "";
+  const calendarEventName = event?.summary ?? cached.calendarEventName ?? "";
   return {
     operation,
     inputs: {
@@ -283,6 +299,7 @@ function dispatchPayload({ env, operation, event, cacheKey, cached }) {
       "class-date": classDate,
       "class-time": classTime,
       "class-type": classType,
+      "calendar-event-name": calendarEventName,
       "cache-key": cacheKey,
       "calendar-fingerprint": fingerprint,
     },
@@ -301,14 +318,25 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
     timeZone: env.TIMEZONE || "Europe/Lisbon",
   });
   const activeKeys = new Set(events.map((event) => event.cacheKey));
+  const activeSlots = new Set(events.map((event) => eventSlotKey(event, env)).filter(Boolean));
   const dispatches = [];
+  const kvEntries = await listKvEntries(kv);
+  const cachedKvEntries = await Promise.all(
+    kvEntries.map(async ({ name }) => [name, await readJson(kv, name)]),
+  );
+  const enrolledSlots = new Set(
+    cachedKvEntries
+      .filter(([, cached]) => cached?.state === "enrolled" && cachedEventIsFuture(cached, now))
+      .map(([, cached]) => cachedSlotKey(cached))
+      .filter(Boolean),
+  );
 
   const eventCacheEntries = await Promise.all(
     events.map(async (event) => [event, await readJson(kv, event.cacheKey)]),
   );
 
   for (const [event, cached] of eventCacheEntries) {
-    if (!cached || cached.state !== "enrolled") {
+    if ((!cached || cached.state !== "enrolled") && !enrolledSlots.has(eventSlotKey(event, env))) {
       dispatches.push(
         dispatchPayload({
           env,
@@ -321,13 +349,13 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
     }
   }
 
-  const staleKvEntries = (await listKvEntries(kv)).filter(({ name }) => !activeKeys.has(name));
-  const staleCacheEntries = await Promise.all(
-    staleKvEntries.map(async ({ name }) => [name, await readJson(kv, name)]),
-  );
-
-  for (const [name, cached] of staleCacheEntries) {
-    if (cached?.state === "enrolled" && cachedEventIsFuture(cached, now)) {
+  for (const [name, cached] of cachedKvEntries) {
+    if (
+      !activeKeys.has(name) &&
+      !activeSlots.has(cachedSlotKey(cached)) &&
+      cached?.state === "enrolled" &&
+      cachedEventIsFuture(cached, now)
+    ) {
       dispatches.push(
         dispatchPayload({
           env,

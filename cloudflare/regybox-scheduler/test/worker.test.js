@@ -151,6 +151,7 @@ test("missing KV entry dispatches enroll", async () => {
   assert.equal(plan.dispatches.length, 1);
   assert.equal(plan.dispatches[0].operation, "enroll");
   assert.equal(plan.dispatches[0].inputs["class-type"], "WOD");
+  assert.equal(plan.dispatches[0].inputs["calendar-event-name"], "Crossfit");
   assert.equal(plan.dispatches[0].inputs["class-date"], "2026-06-18");
   assert.equal(plan.dispatches[0].inputs["class-time"], "06:30");
 });
@@ -189,6 +190,7 @@ test("stale enrolled KV entry dispatches unenroll", async () => {
           classDate: "2026-06-18",
           classTime: "06:30",
           classType: "WOD",
+          calendarEventName: "Crossfit",
           calendarFingerprint: "old-class:2026-06-18T06:30:00.000Z",
         }),
       ],
@@ -205,6 +207,91 @@ test("stale enrolled KV entry dispatches unenroll", async () => {
   assert.equal(plan.dispatches.length, 1);
   assert.equal(plan.dispatches[0].operation, "unenroll");
   assert.equal(plan.dispatches[0].inputs["class-date"], "2026-06-18");
+  assert.equal(plan.dispatches[0].inputs["calendar-event-name"], "Crossfit");
+});
+
+test("renamed calendar event uid does not dispatch unenroll for same class slot", async () => {
+  const oldKey = "regybox:v1:calendar:old-google-uid:2026-06-19T06:30:00.000Z";
+  const kv = makeKv(
+    new Map([
+      [
+        oldKey,
+        JSON.stringify({
+          state: "enrolled",
+          classDate: "2026-06-19",
+          classTime: "06:30",
+          classType: "WOD",
+          calendarFingerprint: "old-google-uid:2026-06-19T06:30:00.000Z",
+        }),
+      ],
+    ]),
+  );
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:new-google-uid",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260619T063000",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const plan = await buildPlan({
+    env: baseEnv,
+    kv,
+    icsText: ics,
+    now: new Date("2026-06-18T00:00:00Z"),
+  });
+
+  assert.deepEqual(plan.dispatches, []);
+});
+
+test("same-time cached entry for different class does not cover active event", async () => {
+  const oldKey = "regybox:v1:calendar:old-google-uid:2026-06-19T06:30:00.000Z";
+  const kv = makeKv(
+    new Map([
+      [
+        oldKey,
+        JSON.stringify({
+          state: "enrolled",
+          classDate: "2026-06-19",
+          classTime: "06:30",
+          classType: "WOD",
+          calendarEventName: "Crossfit",
+          calendarFingerprint: "old-google-uid:2026-06-19T06:30:00.000Z",
+        }),
+      ],
+    ]),
+  );
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:new-google-uid",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260619T063000",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const plan = await buildPlan({
+    env: { ...baseEnv, CLASS_TYPE: "Weekend WOD" },
+    kv,
+    icsText: ics,
+    now: new Date("2026-06-18T00:00:00Z"),
+  });
+
+  assert.deepEqual(
+    plan.dispatches.map((dispatch) => [
+      dispatch.operation,
+      dispatch.inputs["class-type"],
+      dispatch.inputs["class-date"],
+      dispatch.inputs["class-time"],
+    ]),
+    [
+      ["enroll", "Weekend WOD", "2026-06-19", "06:30"],
+      ["unenroll", "WOD", "2026-06-19", "06:30"],
+    ],
+  );
 });
 
 test("weekly RRULE without BYDAY recurs on DTSTART weekday only", () => {

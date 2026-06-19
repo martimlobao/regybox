@@ -21,8 +21,10 @@ def test_class_operation_workflow_exposes_dispatch_and_kv_inputs() -> None:
     assert "class-date:" in workflow_text
     assert "class-time:" in workflow_text
     assert "class-type:" in workflow_text
+    assert "calendar-event-name:" in workflow_text
     assert "cache-key:" in workflow_text
     assert "calendar-fingerprint:" in workflow_text
+    assert "calendar-event-name: ${{ inputs.calendar-event-name }}" in workflow_text
     assert "timeout-seconds: 900" in workflow_text
     assert "not-open-is-noop: false" in workflow_text
     assert "cf-account-id: ${{ secrets.CF_ACCOUNT_ID }}" in workflow_text
