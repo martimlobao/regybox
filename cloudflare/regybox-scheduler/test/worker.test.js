@@ -294,6 +294,41 @@ test("same-time cached entry for different class does not cover active event", a
   );
 });
 
+test("same-slot active events dispatch one enroll per plan", async () => {
+  const kv = makeKv();
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:first-google-uid",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260619T063000",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "UID:second-google-uid",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260619T063000",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const plan = await buildPlan({
+    env: baseEnv,
+    kv,
+    icsText: ics,
+    now: new Date("2026-06-18T00:00:00Z"),
+  });
+
+  assert.deepEqual(
+    plan.dispatches.map((dispatch) => [
+      dispatch.operation,
+      dispatch.inputs["class-type"],
+      dispatch.inputs["class-date"],
+      dispatch.inputs["class-time"],
+    ]),
+    [["enroll", "WOD", "2026-06-19", "06:30"]],
+  );
+});
+
 test("weekly RRULE without BYDAY recurs on DTSTART weekday only", () => {
   const ics = [
     "BEGIN:VCALENDAR",

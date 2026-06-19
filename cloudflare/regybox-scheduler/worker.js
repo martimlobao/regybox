@@ -334,9 +334,15 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
   const eventCacheEntries = await Promise.all(
     events.map(async (event) => [event, await readJson(kv, event.cacheKey)]),
   );
+  const plannedEnrollmentSlots = new Set();
 
   for (const [event, cached] of eventCacheEntries) {
-    if ((!cached || cached.state !== "enrolled") && !enrolledSlots.has(eventSlotKey(event, env))) {
+    const slotKey = eventSlotKey(event, env);
+    if (
+      (!cached || cached.state !== "enrolled") &&
+      !enrolledSlots.has(slotKey) &&
+      !plannedEnrollmentSlots.has(slotKey)
+    ) {
       dispatches.push(
         dispatchPayload({
           env,
@@ -346,6 +352,7 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
           cached: {},
         }),
       );
+      plannedEnrollmentSlots.add(slotKey);
     }
   }
 
