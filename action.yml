@@ -23,7 +23,7 @@ inputs:
   not-open-is-noop:
     description: Set to true to treat enrollment-not-open as a no-op instead of a failure.
     required: false
-    default: "false"
+    default: "true"
   cache-key:
     description: Optional Cloudflare KV cache key to update after a successful state change.
     required: false
