@@ -25,8 +25,9 @@ on: # yamllint disable-line rule:truthy
         required: false
         default: ""
       cache-key:
-        description: Cloudflare KV cache key to update after a successful state change.
-        required: true
+        description: Optional Cloudflare KV cache key to update after a successful state change.
+        required: false
+        default: ""
       calendar-fingerprint:
         description: Stable calendar event identity used for debugging/cache value payloads.
         required: false
