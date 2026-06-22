@@ -28,6 +28,10 @@ def extract_class(filename: str) -> Class:
     html: str = resources.files(html_examples).joinpath(filename).read_text()
     if not html:
         raise FileNotFoundError(f"HTML file {filename} is empty")
+    return extract_class_from_html(html, filename=filename)
+
+
+def extract_class_from_html(html: str, *, filename: str = "<inline>") -> Class:
     element: PageElement = BeautifulSoup(html, "html.parser").contents[0]
     if not isinstance(element, Tag):
         raise TypeError(f"HTML in {filename} resolved to {type(element)}, expected Tag")
@@ -119,7 +123,7 @@ def test_closed_starting_soon() -> None:
     class_: Class = extract_class("closed_starting_soon.html")
     assert class_.is_open is False
     # class_.is_full may be True or False
-    assert class_.is_overbooked is False
+    # class_.is_overbooked may be True or False
     assert class_.is_over is False
     # class_.user_is_blocked may be True or False
     # class_.user_is_enrolled may be True or False
@@ -128,6 +132,21 @@ def test_closed_starting_soon() -> None:
     assert class_.time_to_enroll is None
     assert class_.enroll_url is None
     assert class_.unenroll_url is None
+
+
+def test_closed_starting_soon_takes_precedence_over_full_capacity() -> None:
+    html = (
+        resources
+        .files(html_examples)
+        .joinpath("closed_starting_soon.html")
+        .read_text()
+        .replace("2 of 15", "18 of 14")
+    )
+
+    class_: Class = extract_class_from_html(html)
+
+    assert class_.is_full is True
+    assert class_.is_overbooked is False
 
 
 def test_full() -> None:
