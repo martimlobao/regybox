@@ -134,7 +134,7 @@ def test_closed_starting_soon() -> None:
     assert class_.unenroll_url is None
 
 
-def test_closed_starting_soon_takes_precedence_over_full_capacity() -> None:
+def test_closed_starting_soon_can_also_be_overbooked() -> None:
     html = (
         resources
         .files(html_examples)
@@ -146,7 +146,8 @@ def test_closed_starting_soon_takes_precedence_over_full_capacity() -> None:
     class_: Class = extract_class_from_html(html)
 
     assert class_.is_full is True
-    assert class_.is_overbooked is False
+    assert class_.is_overbooked is True
+    assert class_.enrollment_deadline_expired is True
 
 
 def test_full() -> None:

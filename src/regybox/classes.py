@@ -65,6 +65,8 @@ class Class:
             but may still be accepting users on the waitlist.
         is_overbooked: Indicates if the class and its waitlist cannot accept
             any more users.
+        enrollment_deadline_expired: Indicates if enrollment is closed because
+            the class is starting soon.
         is_over: Indicates if the class is over.
         user_is_blocked: Indicates if the user is blocked from enrolling in the
             class.
@@ -87,6 +89,7 @@ class Class:
     is_open: bool = False
     is_full: bool = False
     is_overbooked: bool = False
+    enrollment_deadline_expired: bool = False
     is_over: bool = False
     user_is_blocked: bool = False
     user_is_enrolled: bool = False
@@ -141,7 +144,8 @@ class Class:
             self.is_full = False
         error: Tag | NavigableString | None = self._tag.find("span", attrs={"class": "erro_color"})
         error_text = error.text.strip().lower() if isinstance(error, Tag) else ""
-        self.is_overbooked = self.is_full and error_text in {"class full", "vagas esgotadas"}
+        self.is_overbooked = self.is_full and bool(error)
+        self.enrollment_deadline_expired = "deadline expired" in error_text
         self.user_is_waitlisted = bool(
             self._tag.find("div", attrs={"class": re.compile(r"preloader\s*color-orange")})
         )

@@ -272,17 +272,21 @@ def _wait_for_enrollable_class(
         resolved_class_type = _resolved_class_type(picked, class_types[0])
         if picked.is_open:
             return picked
+        closed_result = _closed_enrollment_result(
+            options=options,
+            resolved_class_type=resolved_class_type,
+            time_to_enroll=picked.time_to_enroll,
+        )
+        if _class_bool(picked, "enrollment_deadline_expired"):
+            if closed_result is not None:
+                return closed_result
+            raise ClassNotOpenError
         if _class_is_overbooked(picked):
             _raise_overbooked(
                 resolved_class_type=resolved_class_type,
                 date=date,
                 class_time=class_time,
             )
-        closed_result = _closed_enrollment_result(
-            options=options,
-            resolved_class_type=resolved_class_type,
-            time_to_enroll=picked.time_to_enroll,
-        )
         if closed_result is not None:
             return closed_result
         if picked.time_to_enroll is None:
