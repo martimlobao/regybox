@@ -116,8 +116,11 @@ def _closed_enrollment_result(
 ) -> OperationResult | None:
     if not options.not_open_is_noop:
         return None
-    LOGGER.info("Enrollment is not open; returning no-op result")
     if time_to_enroll is not None:
+        LOGGER.info(
+            f"Enrollment is not open; opens in {secs_to_str(time_to_enroll)}; "
+            "returning no-op result"
+        )
         last_checked_at = datetime.datetime.now(TIMEZONE)
         enrollment_opens_at = last_checked_at + datetime.timedelta(seconds=time_to_enroll)
         LOGGER.info(
@@ -125,6 +128,8 @@ def _closed_enrollment_result(
             f"enrollment_opens_at={enrollment_opens_at.isoformat()} "
             f"last_checked_at={last_checked_at.isoformat()}"
         )
+    else:
+        LOGGER.info("Enrollment is not open; returning no-op result")
     return _operation_result(
         operation="enroll",
         status="noop",

@@ -480,6 +480,7 @@ def test_main_logs_not_open_cache_metadata_when_time_to_enroll_known(
         )
 
     assert result == OperationResult(operation="enroll", status="noop", class_type="WOD Rato")
+    assert "Enrollment is not open; opens in 1:00:00; returning no-op result" in caplog.text
     assert "REGYBOX_CACHE_STATE=not_open" in caplog.text
     assert "enrollment_opens_at=" in caplog.text
     assert "last_checked_at=" in caplog.text
