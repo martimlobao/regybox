@@ -119,7 +119,7 @@ def test_closed_starting_soon() -> None:
     class_: Class = extract_class("closed_starting_soon.html")
     assert class_.is_open is False
     # class_.is_full may be True or False
-    # class_.is_overbooked may be True or False
+    assert class_.is_overbooked is False
     assert class_.is_over is False
     # class_.user_is_blocked may be True or False
     # class_.user_is_enrolled may be True or False

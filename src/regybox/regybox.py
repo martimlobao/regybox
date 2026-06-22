@@ -142,6 +142,15 @@ def _class_bool(class_: Class, attr: str) -> bool:
     return value if isinstance(value, bool) else False
 
 
+def _class_is_overbooked(class_: Class) -> bool:
+    return _class_bool(class_, "is_overbooked") and _class_bool(class_, "is_full")
+
+
+def _raise_overbooked(*, resolved_class_type: str, date: datetime.date, class_time: str) -> None:
+    LOGGER.info(f"{resolved_class_type} on {date.isoformat()} at {class_time} is overbooked")
+    raise ClassIsOverbookedError
+
+
 def _pick_requested_class(
     *,
     date: datetime.date,
@@ -214,9 +223,12 @@ def _enroll_selected_class(
             status="noop",
             class_type=resolved_class_type,
         )
-    if _class_bool(class_, "is_overbooked"):
-        LOGGER.info(f"{resolved_class_type} on {date.isoformat()} at {class_time} is overbooked")
-        raise ClassIsOverbookedError
+    if _class_is_overbooked(class_):
+        _raise_overbooked(
+            resolved_class_type=resolved_class_type,
+            date=date,
+            class_time=class_time,
+        )
     if _class_bool(class_, "is_full") and getattr(class_, "enroll_url", None):
         LOGGER.info(
             f"{resolved_class_type} on {date.isoformat()} at {class_time} is full; attempting"
@@ -260,11 +272,12 @@ def _wait_for_enrollable_class(
         resolved_class_type = _resolved_class_type(picked, class_types[0])
         if picked.is_open:
             return picked
-        if _class_bool(picked, "is_overbooked"):
-            LOGGER.info(
-                f"{resolved_class_type} on {date.isoformat()} at {class_time} is overbooked"
+        if _class_is_overbooked(picked):
+            _raise_overbooked(
+                resolved_class_type=resolved_class_type,
+                date=date,
+                class_time=class_time,
             )
-            raise ClassIsOverbookedError
         closed_result = _closed_enrollment_result(
             options=options,
             resolved_class_type=resolved_class_type,

@@ -139,7 +139,9 @@ class Class:
             self.is_full = self.cur_capacity >= self.max_capacity
         else:
             self.is_full = False
-        self.is_overbooked = bool(self._tag.find("span", attrs={"class": "erro_color"}))
+        self.is_overbooked = self.is_full and bool(
+            self._tag.find("span", attrs={"class": "erro_color"})
+        )
         self.user_is_waitlisted = bool(
             self._tag.find("div", attrs={"class": re.compile(r"preloader\s*color-orange")})
         )
