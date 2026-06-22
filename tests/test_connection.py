@@ -6,6 +6,7 @@ import pytest
 import requests
 
 from regybox.connection import (
+    DEFAULT_TIMEOUT_SECONDS,
     HEADERS,
     RegyboxSession,
     get_classes_html,
@@ -50,6 +51,12 @@ def test_get_url_html_returns_text_on_success() -> None:
         mock_session_cls.return_value = mock_session
         result = get_url_html("https://example.com/page")
     assert result == "<html>classes</html>"
+    mock_session.get.assert_called_once_with(
+        "https://example.com/page",
+        headers=HEADERS,
+        params={},
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+    )
 
 
 def test_get_classes_html_calls_get_url_html_with_params() -> None:
@@ -101,8 +108,35 @@ def test_regybox_session_set_session_calls_get(monkeypatch: pytest.MonkeyPatch) 
         "https://www.regybox.pt/app/app_nova/set_session.php",
         headers=HEADERS,
         params=RegyboxSession.get_session_params(user="testuser"),
+        timeout=DEFAULT_TIMEOUT_SECONDS,
     )
     response.raise_for_status.assert_called_once_with()
+
+
+def test_regybox_session_retry_adapter_retries_transient_statuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_session_init(_self: requests.Session) -> None:
+        return None
+
+    monkeypatch.setattr(requests.Session, "__init__", fake_session_init)
+    mount = MagicMock()
+    monkeypatch.setattr(RegyboxSession, "mount", mount)
+    monkeypatch.setattr(RegyboxSession, "set_session", MagicMock())
+    if RegyboxSession in Singleton._instances:
+        del Singleton._instances[RegyboxSession]
+    try:
+        RegyboxSession(user="testuser")
+    finally:
+        if RegyboxSession in Singleton._instances:
+            del Singleton._instances[RegyboxSession]
+
+    adapter = mount.call_args_list[1].args[1]
+    retries = adapter.max_retries
+    assert retries.total >= 3
+    assert retries.connect >= 3
+    assert retries.read >= 3
+    assert {429, 500, 502, 503, 504}.issubset(retries.status_forcelist)
 
 
 def test_regybox_session_get_session_params() -> None:

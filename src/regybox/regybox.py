@@ -15,6 +15,7 @@ from regybox.cal import check_cal
 from regybox.classes import Class, get_classes, pick_class
 from regybox.common import LOGGER, TIMEZONE
 from regybox.exceptions import (
+    ClassIsOverbookedError,
     ClassNotFoundError,
     ClassNotOpenError,
     RegyboxTimeoutError,
@@ -108,11 +109,22 @@ def _unenroll_class(class_: Class, resolved_class_type: str) -> OperationResult:
 
 
 def _closed_enrollment_result(
-    *, options: OperationOptions, resolved_class_type: str
+    *,
+    options: OperationOptions,
+    resolved_class_type: str,
+    time_to_enroll: int | None,
 ) -> OperationResult | None:
     if not options.not_open_is_noop:
         return None
     LOGGER.info("Enrollment is not open; returning no-op result")
+    if time_to_enroll is not None:
+        last_checked_at = datetime.datetime.now(TIMEZONE)
+        enrollment_opens_at = last_checked_at + datetime.timedelta(seconds=time_to_enroll)
+        LOGGER.info(
+            "REGYBOX_CACHE_STATE=not_open "
+            f"enrollment_opens_at={enrollment_opens_at.isoformat()} "
+            f"last_checked_at={last_checked_at.isoformat()}"
+        )
     return _operation_result(
         operation="enroll",
         status="noop",
@@ -123,6 +135,11 @@ def _closed_enrollment_result(
 def _resolved_class_type(class_: Class, fallback: str) -> str:
     raw_name = getattr(class_, "name", fallback)
     return raw_name if isinstance(raw_name, str) else fallback
+
+
+def _class_bool(class_: Class, attr: str) -> bool:
+    value = getattr(class_, attr, False)
+    return value if isinstance(value, bool) else False
 
 
 def _pick_requested_class(
@@ -183,6 +200,44 @@ def _pick_unenroll_class(
     )
 
 
+def _enroll_selected_class(
+    *,
+    class_: Class,
+    resolved_class_type: str,
+    date: datetime.date,
+    class_time: str,
+) -> OperationResult:
+    if _class_bool(class_, "user_is_enrolled"):
+        LOGGER.info("Already enrolled in class")
+        return _operation_result(
+            operation="enroll",
+            status="noop",
+            class_type=resolved_class_type,
+        )
+    if _class_bool(class_, "is_overbooked"):
+        raise ClassIsOverbookedError
+    if _class_bool(class_, "is_full") and getattr(class_, "enroll_url", None):
+        LOGGER.info(
+            f"{resolved_class_type} on {date.isoformat()} at {class_time} is full; attempting"
+            " waitlist enrollment"
+        )
+    try:
+        class_.enroll()
+    except UserAlreadyEnrolledError:
+        LOGGER.info("Already enrolled in class")
+        return _operation_result(
+            operation="enroll",
+            status="noop",
+            class_type=resolved_class_type,
+        )
+    LOGGER.info(f"Runtime: {(datetime.datetime.now(TIMEZONE) - START).total_seconds():.3f}")
+    return _operation_result(
+        operation="enroll",
+        status="success",
+        class_type=resolved_class_type,
+    )
+
+
 def _wait_for_enrollable_class(
     *,
     date: datetime.date,
@@ -207,6 +262,7 @@ def _wait_for_enrollable_class(
         closed_result = _closed_enrollment_result(
             options=options,
             resolved_class_type=resolved_class_type,
+            time_to_enroll=picked.time_to_enroll,
         )
         if closed_result is not None:
             return closed_result
@@ -308,6 +364,9 @@ def main(
         )
 
     if options.operation == "unenroll":
+        LOGGER.info(
+            f"Attempting to unenroll from {class_types[0]} on {date.isoformat()} at {class_time}"
+        )
         picked = _pick_unenroll_class(
             date=date,
             class_time=class_time,
@@ -315,8 +374,15 @@ def main(
         )
         if isinstance(picked, OperationResult):
             return picked
-        return _unenroll_class(picked, _resolved_class_type(picked, class_types[0]))
+        resolved_class_type = _resolved_class_type(picked, class_types[0])
+        if resolved_class_type != class_types[0]:
+            LOGGER.info(
+                f"Attempting to unenroll from {resolved_class_type} on {date.isoformat()} at"
+                f" {class_time}"
+            )
+        return _unenroll_class(picked, resolved_class_type)
 
+    LOGGER.info(f"Attempting to enroll in {class_types[0]} on {date.isoformat()} at {class_time}")
     picked = _wait_for_enrollable_class(
         date=date,
         class_time=class_time,
@@ -328,20 +394,15 @@ def main(
         return picked
     class_ = picked
     resolved_class_type = _resolved_class_type(class_, class_types[0])
-    try:
-        class_.enroll()
-    except UserAlreadyEnrolledError:
-        LOGGER.info("Already enrolled in class")
-        return _operation_result(
-            operation="enroll",
-            status="noop",
-            class_type=resolved_class_type,
+    if resolved_class_type != class_types[0]:
+        LOGGER.info(
+            f"Attempting to enroll in {resolved_class_type} on {date.isoformat()} at {class_time}"
         )
-    LOGGER.info(f"Runtime: {(datetime.datetime.now(TIMEZONE) - START).total_seconds():.3f}")
-    return _operation_result(
-        operation="enroll",
-        status="success",
-        class_type=resolved_class_type,
+    return _enroll_selected_class(
+        class_=class_,
+        resolved_class_type=resolved_class_type,
+        date=date,
+        class_time=class_time,
     )
 
 

@@ -153,7 +153,15 @@ runs:
         if [[ "${ENROLL_OUTCOME}" == "success" ]]; then
           if grep -q "REGYBOX_RESULT=noop" "${ENROLL_LOG_PATH}"; then
             result=noop
-            if ! grep -Eq "Enrollment (is not open|did not open)" "${ENROLL_LOG_PATH}"; then
+            if grep -q "REGYBOX_CACHE_STATE=not_open" "${ENROLL_LOG_PATH}"; then
+              cache_should_update=true
+              cache_line="$(grep "REGYBOX_CACHE_STATE=not_open" "${ENROLL_LOG_PATH}" | tail -n 1)"
+              echo "CACHE_STATE=not_open" >> "$GITHUB_ENV"
+              enrollment_opens_at="$(sed -n 's/.*enrollment_opens_at=\([^ ]*\).*/\1/p' <<< "${cache_line}")"
+              last_checked_at="$(sed -n 's/.*last_checked_at=\([^ ]*\).*/\1/p' <<< "${cache_line}")"
+              echo "ENROLLMENT_OPENS_AT=${enrollment_opens_at}" >> "$GITHUB_ENV"
+              echo "LAST_CHECKED_AT=${last_checked_at}" >> "$GITHUB_ENV"
+            elif ! grep -Eq "Enrollment (is not open|did not open)" "${ENROLL_LOG_PATH}"; then
               cache_should_update=true
             fi
           else
@@ -178,12 +186,15 @@ runs:
         CF_KV_NAMESPACE_ID: ${{ inputs.cf-kv-namespace-id }}
         CF_KV_API_TOKEN: ${{ inputs.cf-kv-api-token }}
         CACHE_KEY: ${{ env.CACHE_KEY }}
+        CACHE_STATE: ${{ env.CACHE_STATE }}
         REGYBOX_OPERATION: ${{ env.REGYBOX_OPERATION }}
         CLASS_DATE: ${{ env.CLASS_DATE }}
         CLASS_TIME: ${{ env.CLASS_TIME }}
         CLASS_TYPE: ${{ env.CLASS_TYPE }}
         CALENDAR_EVENT_NAME: ${{ env.CALENDAR_EVENT_NAME }}
         CALENDAR_FINGERPRINT: ${{ env.CALENDAR_FINGERPRINT }}
+        ENROLLMENT_OPENS_AT: ${{ env.ENROLLMENT_OPENS_AT }}
+        LAST_CHECKED_AT: ${{ env.LAST_CHECKED_AT }}
       run: uv run python -m regybox.cloudflare_kv
     - name: Compose confirmation email
       if: always() && inputs.send-email != 'false'
@@ -197,6 +208,10 @@ runs:
         REGYBOX_OPERATION: ${{ env.REGYBOX_OPERATION }}
         ENROLL_LOG_PATH: ${{ env.ENROLL_LOG_PATH }}
         ACTION_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        CACHE_KEY: ${{ env.CACHE_KEY }}
+        CF_ACCOUNT_ID: ${{ inputs.cf-account-id }}
+        CF_KV_NAMESPACE_ID: ${{ inputs.cf-kv-namespace-id }}
+        CF_KV_API_TOKEN: ${{ inputs.cf-kv-api-token }}
       run: uv run python -m regybox.notifications
     - name: Validate email inputs
       if: always() && inputs.send-email != 'false' && env.SHOULD_SEND_EMAIL == 'true'
@@ -223,6 +238,22 @@ runs:
         body: ${{ env.EMAIL_BODY }}
         to: ${{ inputs.email-to }}
         from: ${{ inputs.email-from-name }} <${{ inputs.email-username }}>
+    - name: Cache delivered failure notification
+      if: >-
+        inputs.send-email != 'false' &&
+        env.SHOULD_SEND_EMAIL == 'true' &&
+        env.ENROLL_RESULT == 'failure' &&
+        env.CACHE_KEY != ''
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        CACHE_KEY: ${{ env.CACHE_KEY }}
+        FAILURE_NOTIFICATION_FINGERPRINT: ${{ env.FAILURE_NOTIFICATION_FINGERPRINT }}
+        CF_ACCOUNT_ID: ${{ inputs.cf-account-id }}
+        CF_KV_NAMESPACE_ID: ${{ inputs.cf-kv-namespace-id }}
+        CF_KV_API_TOKEN: ${{ inputs.cf-kv-api-token }}
+        REGYBOX_RECORD_DELIVERED_FAILURE: "true"
+      run: uv run python -m regybox.notifications
 branding:
   color: blue
   icon: clock

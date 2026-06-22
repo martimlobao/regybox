@@ -56,6 +56,8 @@ class SchedulerState:
     class_type: str
     calendar_event_name: str
     calendar_fingerprint: str
+    enrollment_opens_at: str = ""
+    last_checked_at: str = ""
 
 
 def write_state(
@@ -72,6 +74,10 @@ def write_state(
         "calendarEventName": scheduler_state.calendar_event_name,
         "calendarFingerprint": scheduler_state.calendar_fingerprint,
     }
+    if scheduler_state.enrollment_opens_at:
+        payload["enrollmentOpensAt"] = scheduler_state.enrollment_opens_at
+    if scheduler_state.last_checked_at:
+        payload["lastCheckedAt"] = scheduler_state.last_checked_at
     response = requests.put(
         (
             "https://api.cloudflare.com/client/v4/accounts/"
@@ -98,7 +104,10 @@ def main() -> None:
     operation = os.environ.get("REGYBOX_OPERATION", "enroll").strip()
     if operation not in {"enroll", "unenroll"}:
         raise ValueError("REGYBOX_OPERATION must be either 'enroll' or 'unenroll'.")
-    state = "unenrolled" if operation == "unenroll" else "enrolled"
+    cache_state = os.environ.get("CACHE_STATE", "").strip()
+    if cache_state and cache_state not in {"enrolled", "unenrolled", "not_open"}:
+        raise ValueError("CACHE_STATE must be enrolled, unenrolled, or not_open.")
+    state = cache_state or ("unenrolled" if operation == "unenroll" else "enrolled")
     try:
         write_state(
             config=CloudflareKVConfig.from_env(),
@@ -110,6 +119,8 @@ def main() -> None:
                 class_type=os.environ.get("CLASS_TYPE", "").strip(),
                 calendar_event_name=os.environ.get("CALENDAR_EVENT_NAME", "").strip(),
                 calendar_fingerprint=os.environ.get("CALENDAR_FINGERPRINT", "").strip(),
+                enrollment_opens_at=os.environ.get("ENROLLMENT_OPENS_AT", "").strip(),
+                last_checked_at=os.environ.get("LAST_CHECKED_AT", "").strip(),
             ),
         )
     except (ValueError, requests.RequestException) as exc:

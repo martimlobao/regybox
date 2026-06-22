@@ -273,12 +273,12 @@ class Class:
         """
         if self.user_is_enrolled:
             raise UserAlreadyEnrolledError
+        if self.is_overbooked:
+            raise ClassIsOverbookedError
         if self.enroll_url is None:
             raise ValueError("Enroll URL is not set")
         if not self.is_open:
             raise ClassNotOpenError
-        if self.is_overbooked:
-            raise ClassIsOverbookedError
 
         res_html: str = get_url_html(self.enroll_url)
         LOGGER.debug(f"Enrolled at {self.enroll_url} with response: '{res_html}'")

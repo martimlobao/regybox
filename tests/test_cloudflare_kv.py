@@ -89,6 +89,34 @@ def test_write_state_sends_ttl_and_payload() -> None:
     response.raise_for_status.assert_called_once()
 
 
+def test_write_state_includes_not_open_metadata() -> None:
+    response = Mock()
+    with patch("regybox.cloudflare_kv.requests.put", return_value=response) as put:
+        write_state(
+            config=CloudflareKVConfig(
+                account_id="account",
+                namespace_id="namespace",
+                api_token=FAKE_CREDENTIAL,
+            ),
+            scheduler_state=SchedulerState(
+                cache_key="regybox:v1:key",
+                state="not_open",
+                class_date="2026-06-18",
+                class_time="06:30",
+                class_type="WOD",
+                calendar_event_name="Crossfit",
+                calendar_fingerprint="uid:start",
+                enrollment_opens_at="2026-06-18T05:30:00+00:00",
+                last_checked_at="2026-06-18T00:30:00+00:00",
+            ),
+        )
+
+    payload = json.loads(put.call_args.kwargs["data"])
+    assert payload["state"] == "not_open"
+    assert payload["enrollmentOpensAt"] == "2026-06-18T05:30:00+00:00"
+    assert payload["lastCheckedAt"] == "2026-06-18T00:30:00+00:00"
+
+
 def test_cloudflare_kv_main_skips_empty_cache_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CACHE_KEY", raising=False)
     with patch("regybox.cloudflare_kv.write_state") as mock_write_state:
@@ -125,11 +153,53 @@ def test_cloudflare_kv_main_writes_unenrolled_state(monkeypatch: pytest.MonkeyPa
     )
 
 
+def test_cloudflare_kv_main_writes_not_open_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CACHE_KEY", "regybox:v1:key")
+    monkeypatch.setenv("REGYBOX_OPERATION", "enroll")
+    monkeypatch.setenv("CACHE_STATE", "not_open")
+    monkeypatch.setenv("CLASS_DATE", "2026-06-18")
+    monkeypatch.setenv("CLASS_TIME", "06:30")
+    monkeypatch.setenv("CLASS_TYPE", "WOD")
+    monkeypatch.setenv("CALENDAR_EVENT_NAME", "Crossfit")
+    monkeypatch.setenv("CALENDAR_FINGERPRINT", "uid:start")
+    monkeypatch.setenv("ENROLLMENT_OPENS_AT", "2026-06-18T05:30:00+00:00")
+    monkeypatch.setenv("LAST_CHECKED_AT", "2026-06-18T00:30:00+00:00")
+    with (
+        patch("regybox.cloudflare_kv.CloudflareKVConfig.from_env") as from_env,
+        patch("regybox.cloudflare_kv.write_state") as mock_write_state,
+    ):
+        cloudflare_kv.main()
+
+    mock_write_state.assert_called_once_with(
+        config=from_env.return_value,
+        scheduler_state=SchedulerState(
+            cache_key="regybox:v1:key",
+            state="not_open",
+            class_date="2026-06-18",
+            class_time="06:30",
+            class_type="WOD",
+            calendar_event_name="Crossfit",
+            calendar_fingerprint="uid:start",
+            enrollment_opens_at="2026-06-18T05:30:00+00:00",
+            last_checked_at="2026-06-18T00:30:00+00:00",
+        ),
+    )
+
+
 def test_cloudflare_kv_main_rejects_unknown_operation(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CACHE_KEY", "regybox:v1:key")
     monkeypatch.setenv("REGYBOX_OPERATION", "pause")
 
     with pytest.raises(ValueError, match="REGYBOX_OPERATION"):
+        cloudflare_kv.main()
+
+
+def test_cloudflare_kv_main_rejects_unknown_cache_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CACHE_KEY", "regybox:v1:key")
+    monkeypatch.setenv("REGYBOX_OPERATION", "enroll")
+    monkeypatch.setenv("CACHE_STATE", "paused")
+
+    with pytest.raises(ValueError, match="CACHE_STATE"):
         cloudflare_kv.main()
 
 
