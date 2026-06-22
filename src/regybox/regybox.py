@@ -295,12 +295,14 @@ def _wait_for_enrollable_class(
                 date=date,
                 class_time=class_time,
             )
-        if closed_result is not None:
-            return closed_result
         if picked.time_to_enroll is None:
+            if closed_result is not None:
+                return closed_result
             raise ClassNotOpenError
         remaining_timeout = max(0, math.ceil(timeout - elapsed))
         if picked.time_to_enroll > remaining_timeout:
+            if closed_result is not None:
+                return closed_result
             raise RegyboxTimeoutError(
                 remaining_timeout,
                 time_to_enroll=secs_to_str(picked.time_to_enroll),
