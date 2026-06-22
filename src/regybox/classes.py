@@ -2,6 +2,7 @@
 
 import datetime
 import re
+import time
 from dataclasses import dataclass, field
 from urllib.parse import urljoin
 
@@ -10,7 +11,13 @@ from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
 
 from regybox.common import LOGGER, TIMEZONE
-from regybox.connection import DOMAIN, get_classes_html, get_url_html
+from regybox.connection import (
+    DOMAIN,
+    RETRY_BACKOFF_FACTOR,
+    RETRY_TOTAL,
+    get_classes_html,
+    get_url_html,
+)
 from regybox.exceptions import (
     ClassIsOverbookedError,
     ClassNotFoundError,
@@ -358,6 +365,30 @@ def _find_script_containing(scripts: list[Tag], needle: str) -> str | None:
     return None
 
 
+def _get_classes_tags_with_retry(timestamp: int) -> list[Tag]:
+    """Fetch class tags, retrying when no classes are found.
+
+    Args:
+        timestamp: The class date timestamp in milliseconds.
+
+    Returns:
+        The parsed class tags, or an empty list for a valid response with no
+        classes.
+    """
+    for attempt in range(RETRY_TOTAL + 1):
+        res_html = get_classes_html(timestamp)
+        soup: BeautifulSoup = BeautifulSoup(res_html, "html.parser")
+        classes: list[Tag] = soup.find_all("div", attrs={"class": "filtro0"})
+        if classes:
+            return classes
+        if attempt == RETRY_TOTAL:
+            break
+        wait = RETRY_BACKOFF_FACTOR * (2**attempt)
+        LOGGER.warning(f"No classes found in response; retrying in {wait:.2f} seconds.")
+        time.sleep(wait)
+    return []
+
+
 def get_classes_tags(year: int, month: int, day: int) -> list[Tag]:
     """Fetch all class tags for a specific date.
 
@@ -374,9 +405,7 @@ def get_classes_tags(year: int, month: int, day: int) -> list[Tag]:
         NoClassesFoundError: If no classes are found for the specified date.
     """
     timestamp: int = int(datetime.datetime(year, month, day, tzinfo=TIMEZONE).timestamp() * 1000)
-    res_html = get_classes_html(timestamp)
-    soup: BeautifulSoup = BeautifulSoup(res_html, "html.parser")
-    classes: list[Tag] = soup.find_all("div", attrs={"class": "filtro0"})
+    classes = _get_classes_tags_with_retry(timestamp)
     if not classes:
         raise NoClassesFoundError(class_date=f"{year}-{month}-{day}")
     return classes

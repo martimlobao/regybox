@@ -377,13 +377,36 @@ def test_pick_class_raises_when_not_found() -> None:
         )
 
 
-def test_get_classes_tags_raises_when_no_classes() -> None:
-    """get_classes_tags raises NoClassesFoundError when HTML has no filtro0."""
+def test_get_classes_tags_raises_when_no_classes_after_retries() -> None:
+    """get_classes_tags raises NoClassesFoundError after empty retries."""
     with (
-        patch("regybox.classes.get_classes_html", return_value="<html><body></body></html>"),
+        patch(
+            "regybox.classes.get_classes_html", return_value="<html><body></body></html>"
+        ) as mock_get,
+        patch("regybox.classes.time.sleep") as mock_sleep,
         pytest.raises(NoClassesFoundError),
     ):
         get_classes_tags(2024, 7, 1)
+
+    assert mock_get.call_count == 5
+    assert mock_sleep.call_count == 4
+
+
+def test_get_classes_tags_retries_empty_class_response() -> None:
+    """get_classes_tags retries an empty class response before returning."""
+    open_html = resources.files(html_examples).joinpath("open.html").read_text()
+    with (
+        patch(
+            "regybox.classes.get_classes_html",
+            side_effect=["<html><body></body></html>", open_html],
+        ) as mock_get,
+        patch("regybox.classes.time.sleep") as mock_sleep,
+    ):
+        classes = get_classes_tags(2024, 7, 1)
+
+    assert len(classes) == 1
+    assert mock_get.call_count == 2
+    mock_sleep.assert_called_once_with(0.75)
 
 
 def test_get_classes_returns_list_of_classes() -> None:
