@@ -148,6 +148,13 @@ def test_full() -> None:
 
 def test_overbooked() -> None:
     class_: Class = extract_class("overbooked.html")
+    assert class_.name == "WOD Rato"
+    assert class_.details == "Rato"
+    assert class_.date == "2026-06-23"
+    assert class_.start == "06:30"
+    assert class_.end == "07:20"
+    assert class_.cur_capacity == 18
+    assert class_.max_capacity == 14
     assert class_.is_open is False
     assert class_.is_full is True
     assert class_.is_overbooked is True
