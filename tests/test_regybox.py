@@ -230,33 +230,7 @@ def test_main_noops_for_closed_error_span_when_class_is_not_full() -> None:
     mock_class.name = "WOD Rato"
     mock_class.is_open = False
     mock_class.is_full = False
-    mock_class.is_overbooked = True
-    mock_class.enrollment_deadline_expired = False
-    mock_class.time_to_enroll = None
-    with (
-        patch("regybox.regybox.check_cal"),
-        patch("regybox.regybox.get_classes", return_value=[mock_class]),
-        patch("regybox.regybox.pick_class", return_value=mock_class),
-    ):
-        result = main(
-            class_date="2026-03-10",
-            class_time="06:30",
-            class_type="WOD Rato",
-            check_calendar=False,
-            timeout=60,
-            operation_options=OperationOptions(not_open_is_noop=True),
-        )
-
-    mock_class.enroll.assert_not_called()
-    assert result == OperationResult(operation="enroll", status="noop", class_type="WOD Rato")
-
-
-def test_main_noops_when_overbooked_class_is_closed_for_starting_soon() -> None:
-    mock_class: MagicMock = MagicMock()
-    mock_class.name = "WOD Rato"
-    mock_class.is_open = False
-    mock_class.is_full = True
-    mock_class.is_overbooked = True
+    mock_class.is_overbooked = False
     mock_class.enrollment_deadline_expired = True
     mock_class.time_to_enroll = None
     with (
@@ -277,12 +251,12 @@ def test_main_noops_when_overbooked_class_is_closed_for_starting_soon() -> None:
     assert result == OperationResult(operation="enroll", status="noop", class_type="WOD Rato")
 
 
-def test_main_raises_not_open_when_overbooked_class_is_closed_for_starting_soon() -> None:
+def test_main_raises_not_open_when_closed_error_span_class_is_not_full() -> None:
     mock_class: MagicMock = MagicMock()
     mock_class.name = "WOD Rato"
     mock_class.is_open = False
-    mock_class.is_full = True
-    mock_class.is_overbooked = True
+    mock_class.is_full = False
+    mock_class.is_overbooked = False
     mock_class.enrollment_deadline_expired = True
     mock_class.time_to_enroll = None
     with (

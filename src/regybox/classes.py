@@ -143,9 +143,8 @@ class Class:
         else:
             self.is_full = False
         error: Tag | NavigableString | None = self._tag.find("span", attrs={"class": "erro_color"})
-        error_text = error.text.strip().lower() if isinstance(error, Tag) else ""
         self.is_overbooked = self.is_full and bool(error)
-        self.enrollment_deadline_expired = "deadline expired" in error_text
+        self.enrollment_deadline_expired = bool(error) and not self.is_full
         self.user_is_waitlisted = bool(
             self._tag.find("div", attrs={"class": re.compile(r"preloader\s*color-orange")})
         )

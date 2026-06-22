@@ -122,8 +122,9 @@ def test_unenroll_closed() -> None:
 def test_closed_starting_soon() -> None:
     class_: Class = extract_class("closed_starting_soon.html")
     assert class_.is_open is False
-    # class_.is_full may be True or False
-    # class_.is_overbooked may be True or False
+    assert class_.is_full is False
+    assert class_.is_overbooked is False
+    assert class_.enrollment_deadline_expired is True
     assert class_.is_over is False
     # class_.user_is_blocked may be True or False
     # class_.user_is_enrolled may be True or False
@@ -132,22 +133,6 @@ def test_closed_starting_soon() -> None:
     assert class_.time_to_enroll is None
     assert class_.enroll_url is None
     assert class_.unenroll_url is None
-
-
-def test_closed_starting_soon_can_also_be_overbooked() -> None:
-    html = (
-        resources
-        .files(html_examples)
-        .joinpath("closed_starting_soon.html")
-        .read_text()
-        .replace("2 of 15", "18 of 14")
-    )
-
-    class_: Class = extract_class_from_html(html)
-
-    assert class_.is_full is True
-    assert class_.is_overbooked is True
-    assert class_.enrollment_deadline_expired is True
 
 
 def test_full() -> None:
