@@ -238,6 +238,22 @@ runs:
         body: ${{ env.EMAIL_BODY }}
         to: ${{ inputs.email-to }}
         from: ${{ inputs.email-from-name }} <${{ inputs.email-username }}>
+    - name: Cache delivered failure notification
+      if: >-
+        inputs.send-email != 'false' &&
+        env.SHOULD_SEND_EMAIL == 'true' &&
+        env.ENROLL_RESULT == 'failure' &&
+        env.CACHE_KEY != ''
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        CACHE_KEY: ${{ env.CACHE_KEY }}
+        FAILURE_NOTIFICATION_FINGERPRINT: ${{ env.FAILURE_NOTIFICATION_FINGERPRINT }}
+        CF_ACCOUNT_ID: ${{ inputs.cf-account-id }}
+        CF_KV_NAMESPACE_ID: ${{ inputs.cf-kv-namespace-id }}
+        CF_KV_API_TOKEN: ${{ inputs.cf-kv-api-token }}
+        REGYBOX_RECORD_DELIVERED_FAILURE: "true"
+      run: uv run python -m regybox.notifications
 branding:
   color: blue
   icon: clock

@@ -343,19 +343,32 @@ def _should_send_email_with_cache(
 
     cached_fingerprint = cached_payload.get("failureNotificationFingerprint")
     cached_fingerprint_str = cached_fingerprint if isinstance(cached_fingerprint, str) else None
-    send_email = should_send_email_for_state(
+    return should_send_email_for_state(
         enroll_result=enroll_result,
         current_failure_fingerprint=current_fingerprint,
         cached_failure_fingerprint=cached_fingerprint_str,
     )
-    if not send_email:
-        return False
-    cached_payload["failureNotificationFingerprint"] = current_fingerprint
+
+
+def record_delivered_failure_notification(*, cache_key: str, fingerprint: str) -> None:
+    """Record a failure notification after email delivery."""
+    if not cache_key or not fingerprint:
+        return
+    config = CloudflareKVConfig.from_env()
+    cached_payload = read_kv_json(config=config, cache_key=cache_key)
+    cached_payload["failureNotificationFingerprint"] = fingerprint
+    write_kv_json(config=config, cache_key=cache_key, payload=cached_payload)
+
+
+def record_delivered_failure_notification_from_env() -> None:
+    """Record delivered failure notification state from action environment."""
     try:
-        write_kv_json(config=config, cache_key=cache_key, payload=cached_payload)
-    except requests.RequestException:
-        return should_send_email(enroll_result)
-    return True
+        record_delivered_failure_notification(
+            cache_key=os.environ.get("CACHE_KEY", "").strip(),
+            fingerprint=os.environ.get("FAILURE_NOTIFICATION_FINGERPRINT", "").strip(),
+        )
+    except (ValueError, requests.RequestException) as exc:
+        print(f"Warning: Cloudflare KV failure notification cache update failed: {exc}")
 
 
 def _trim_appendix(text: str) -> str:
@@ -487,6 +500,10 @@ def main() -> None:
     Raises:
         RuntimeError: If ``GITHUB_ENV`` is not available in the environment.
     """
+    if os.environ.get("REGYBOX_RECORD_DELIVERED_FAILURE", "").strip().lower() == "true":
+        record_delivered_failure_notification_from_env()
+        return
+
     github_env_path: str | None = os.environ.get("GITHUB_ENV")
     if not github_env_path:
         raise RuntimeError("GITHUB_ENV is required to compose email notification content.")
@@ -512,8 +529,18 @@ def main() -> None:
         log_text=log_text,
         cache_key=os.environ.get("CACHE_KEY", "").strip(),
     )
+    failure_fingerprint = build_failure_notification_fingerprint(
+        enroll_result=enroll_result,
+        operation=operation,
+        log_text=log_text,
+    )
     write_multiline_env(name="EMAIL_SUBJECT", value=subject, github_env_path=github_env_path)
     write_multiline_env(name="EMAIL_BODY", value=body, github_env_path=github_env_path)
+    write_multiline_env(
+        name="FAILURE_NOTIFICATION_FINGERPRINT",
+        value=failure_fingerprint,
+        github_env_path=github_env_path,
+    )
     write_multiline_env(
         name="SHOULD_SEND_EMAIL",
         value="true" if send_email else "false",

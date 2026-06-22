@@ -200,6 +200,44 @@ def _pick_unenroll_class(
     )
 
 
+def _enroll_selected_class(
+    *,
+    class_: Class,
+    resolved_class_type: str,
+    date: datetime.date,
+    class_time: str,
+) -> OperationResult:
+    if _class_bool(class_, "user_is_enrolled"):
+        LOGGER.info("Already enrolled in class")
+        return _operation_result(
+            operation="enroll",
+            status="noop",
+            class_type=resolved_class_type,
+        )
+    if _class_bool(class_, "is_overbooked"):
+        raise ClassIsOverbookedError
+    if _class_bool(class_, "is_full") and getattr(class_, "enroll_url", None):
+        LOGGER.info(
+            f"{resolved_class_type} on {date.isoformat()} at {class_time} is full; attempting"
+            " waitlist enrollment"
+        )
+    try:
+        class_.enroll()
+    except UserAlreadyEnrolledError:
+        LOGGER.info("Already enrolled in class")
+        return _operation_result(
+            operation="enroll",
+            status="noop",
+            class_type=resolved_class_type,
+        )
+    LOGGER.info(f"Runtime: {(datetime.datetime.now(TIMEZONE) - START).total_seconds():.3f}")
+    return _operation_result(
+        operation="enroll",
+        status="success",
+        class_type=resolved_class_type,
+    )
+
+
 def _wait_for_enrollable_class(
     *,
     date: datetime.date,
@@ -300,7 +338,6 @@ def main(
 
     Raises:
         ValueError: If the class type input is empty.
-        ClassIsOverbookedError: If the class and waitlist are already full.
     """
     options = operation_options or OperationOptions()
     class_time = class_time.zfill(5)  # needs leading zeros
@@ -361,27 +398,11 @@ def main(
         LOGGER.info(
             f"Attempting to enroll in {resolved_class_type} on {date.isoformat()} at {class_time}"
         )
-    if _class_bool(class_, "is_overbooked"):
-        raise ClassIsOverbookedError
-    if _class_bool(class_, "is_full") and getattr(class_, "enroll_url", None):
-        LOGGER.info(
-            f"{resolved_class_type} on {date.isoformat()} at {class_time} is full; attempting"
-            " waitlist enrollment"
-        )
-    try:
-        class_.enroll()
-    except UserAlreadyEnrolledError:
-        LOGGER.info("Already enrolled in class")
-        return _operation_result(
-            operation="enroll",
-            status="noop",
-            class_type=resolved_class_type,
-        )
-    LOGGER.info(f"Runtime: {(datetime.datetime.now(TIMEZONE) - START).total_seconds():.3f}")
-    return _operation_result(
-        operation="enroll",
-        status="success",
-        class_type=resolved_class_type,
+    return _enroll_selected_class(
+        class_=class_,
+        resolved_class_type=resolved_class_type,
+        date=date,
+        class_time=class_time,
     )
 
 

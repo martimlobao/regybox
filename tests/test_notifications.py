@@ -22,6 +22,7 @@ from regybox.notifications import (
     extract_user_error_payload,
     read_kv_json,
     read_log_text,
+    record_delivered_failure_notification,
     should_send_email,
     should_send_email_for_state,
     write_kv_json,
@@ -565,7 +566,7 @@ def test_notifications_main_suppresses_repeated_cached_failure(
     write_kv_json.assert_not_called()
 
 
-def test_notifications_main_sends_and_caches_changed_failure(
+def test_notifications_main_sends_changed_failure_without_caching_before_delivery(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     env_file = tmp_path / "env_failure"
@@ -589,7 +590,7 @@ def test_notifications_main_sends_and_caches_changed_failure(
     monkeypatch.setenv("ENROLL_LOG_PATH", str(log_path))
     monkeypatch.setenv("CACHE_KEY", "regybox:v1:key")
     with (
-        patch("regybox.notifications.CloudflareKVConfig.from_env") as from_env,
+        patch("regybox.notifications.CloudflareKVConfig.from_env"),
         patch(
             "regybox.notifications.read_kv_json",
             return_value={"failureNotificationFingerprint": "failure:enroll:login_error:old"},
@@ -601,12 +602,37 @@ def test_notifications_main_sends_and_caches_changed_failure(
     assert "SHOULD_SEND_EMAIL<<REGYBOX_SHOULD_SEND_EMAIL_EOF\ntrue" in env_file.read_text(
         encoding="utf-8"
     )
-    write_kv_json.assert_called_once()
-    assert write_kv_json.call_args.kwargs["config"] == from_env.return_value
-    assert write_kv_json.call_args.kwargs["cache_key"] == "regybox:v1:key"
+    env_text = env_file.read_text(encoding="utf-8")
     assert (
-        write_kv_json.call_args.kwargs["payload"]["failureNotificationFingerprint"]
-        == "failure:enroll:class_overbooked:Class and waitlist are full"
+        "FAILURE_NOTIFICATION_FINGERPRINT<<REGYBOX_FAILURE_NOTIFICATION_FINGERPRINT_EOF\n"
+        "failure:enroll:class_overbooked:Class and waitlist are full" in env_text
+    )
+    write_kv_json.assert_not_called()
+
+
+def test_record_delivered_failure_notification_caches_fingerprint() -> None:
+    with (
+        patch("regybox.notifications.CloudflareKVConfig.from_env") as from_env,
+        patch(
+            "regybox.notifications.read_kv_json",
+            return_value={"state": "not_open"},
+        ),
+        patch("regybox.notifications.write_kv_json") as write_kv_json,
+    ):
+        record_delivered_failure_notification(
+            cache_key="regybox:v1:key",
+            fingerprint="failure:enroll:class_overbooked:Class and waitlist are full",
+        )
+
+    write_kv_json.assert_called_once_with(
+        config=from_env.return_value,
+        cache_key="regybox:v1:key",
+        payload={
+            "state": "not_open",
+            "failureNotificationFingerprint": (
+                "failure:enroll:class_overbooked:Class and waitlist are full"
+            ),
+        },
     )
 
 

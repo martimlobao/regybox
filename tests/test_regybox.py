@@ -197,6 +197,34 @@ def test_main_raises_overbooked_when_class_and_waitlist_full() -> None:
     mock_class.enroll.assert_not_called()
 
 
+def test_main_noops_when_already_enrolled_even_if_overbooked(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    mock_class: MagicMock = MagicMock()
+    mock_class.name = "WOD Rato"
+    mock_class.is_open = True
+    mock_class.is_full = True
+    mock_class.is_overbooked = True
+    mock_class.user_is_enrolled = True
+    with (
+        caplog.at_level(logging.INFO),
+        patch("regybox.regybox.check_cal"),
+        patch("regybox.regybox.get_classes", return_value=[mock_class]),
+        patch("regybox.regybox.pick_class", return_value=mock_class),
+    ):
+        result = main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD Rato",
+            check_calendar=False,
+            timeout=60,
+        )
+
+    mock_class.enroll.assert_not_called()
+    assert result == OperationResult(operation="enroll", status="noop", class_type="WOD Rato")
+    assert "Already enrolled in class" in caplog.text
+
+
 def test_parse_class_types_supports_comma_separated_candidates() -> None:
     assert parse_class_types(" WOD, Weekend WOD ,, Open Gym ") == [
         "WOD",
