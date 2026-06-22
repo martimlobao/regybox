@@ -277,6 +277,9 @@ def _wait_for_enrollable_class(
             resolved_class_type=resolved_class_type,
             time_to_enroll=picked.time_to_enroll,
         )
+        # Non-full closed error cards are treated as deadline-expired/not-open.
+        # Full closed error cards are intentionally classified as overbooked,
+        # even though that can miss the rare "full and starting soon" case.
         if _class_bool(picked, "enrollment_deadline_expired"):
             if closed_result is not None:
                 return closed_result

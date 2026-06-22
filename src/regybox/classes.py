@@ -143,6 +143,9 @@ class Class:
         else:
             self.is_full = False
         error: Tag | NavigableString | None = self._tag.find("span", attrs={"class": "erro_color"})
+        # Avoid localized status text: Regybox uses the same error span for
+        # full/closed classes and deadline-expired classes. With the current
+        # markup, capacity is the stable structural signal separating them.
         self.is_overbooked = self.is_full and bool(error)
         self.enrollment_deadline_expired = bool(error) and not self.is_full
         self.user_is_waitlisted = bool(
