@@ -3,24 +3,32 @@
 import json
 import runpy
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from regybox import notifications as notifications_module
+from regybox.cloudflare_kv import KV_TTL_SECONDS, CloudflareKVConfig
 from regybox.exceptions import REGYBOX_USER_ERROR_PREFIX, UnplannedClassError
 from regybox.notifications import (
     _fallback_user_payload,
     _normalize_steps,
     _try_parse_json,
     build_email_content,
+    build_failure_notification_fingerprint,
     build_technical_appendix,
     extract_error_signal,
     extract_traceback,
     extract_user_error_payload,
+    read_kv_json,
     read_log_text,
     should_send_email,
+    should_send_email_for_state,
+    write_kv_json,
     write_multiline_env,
 )
+
+FAKE_CREDENTIAL = "not-a-real-value"
 
 
 def test_extract_user_error_payload() -> None:
@@ -165,6 +173,65 @@ def test_should_send_email_skips_noop_results() -> None:
     assert not should_send_email("noop")
     assert should_send_email("success")
     assert should_send_email("failure")
+
+
+def test_failure_notification_fingerprint_uses_structured_payload() -> None:
+    payload = {
+        "error_code": "class_overbooked",
+        "user_title": "Class and waitlist are full",
+        "user_message": "No spots are available.",
+        "user_next_steps": ["Retry later."],
+        "technical_message": "Class is overbooked",
+    }
+    log_text = f"ERROR {REGYBOX_USER_ERROR_PREFIX}{json.dumps(payload)}"
+
+    assert (
+        build_failure_notification_fingerprint(
+            enroll_result="failure",
+            operation="enroll",
+            log_text=log_text,
+        )
+        == "failure:enroll:class_overbooked:Class and waitlist are full"
+    )
+
+
+def test_failure_notification_fingerprint_empty_for_success() -> None:
+    assert not build_failure_notification_fingerprint(
+        enroll_result="success",
+        operation="enroll",
+        log_text="",
+    )
+
+
+def test_should_send_email_for_state_delegates_non_failures() -> None:
+    assert should_send_email_for_state(
+        enroll_result="success",
+        current_failure_fingerprint="",
+        cached_failure_fingerprint=None,
+    )
+    assert not should_send_email_for_state(
+        enroll_result="noop",
+        current_failure_fingerprint="",
+        cached_failure_fingerprint=None,
+    )
+
+
+def test_should_send_email_for_state_suppresses_repeated_failure() -> None:
+    fingerprint = "failure:enroll:class_overbooked:Class and waitlist are full"
+
+    assert not should_send_email_for_state(
+        enroll_result="failure",
+        current_failure_fingerprint=fingerprint,
+        cached_failure_fingerprint=fingerprint,
+    )
+
+
+def test_should_send_email_for_state_sends_different_failure() -> None:
+    assert should_send_email_for_state(
+        enroll_result="failure",
+        current_failure_fingerprint="failure:enroll:login_error:Unable to log in to Regybox",
+        cached_failure_fingerprint="failure:enroll:class_overbooked:Class and waitlist are full",
+    )
 
 
 def test_build_email_content_includes_calendar_event_name_for_unplanned_class() -> None:
@@ -403,3 +470,163 @@ def test_notifications_main_sets_should_send_email_env(
             f"SHOULD_SEND_EMAIL<<REGYBOX_SHOULD_SEND_EMAIL_EOF\n{expected}"
             in env_file.read_text(encoding="utf-8")
         )
+
+
+def test_read_kv_json_returns_empty_for_missing_value() -> None:
+    with patch("regybox.notifications.requests.get") as get:
+        response = get.return_value
+        response.status_code = 404
+        assert (
+            read_kv_json(
+                config=CloudflareKVConfig(
+                    account_id="account",
+                    namespace_id="namespace",
+                    api_token=FAKE_CREDENTIAL,
+                ),
+                cache_key="regybox:v1:key",
+            )
+            == {}
+        )
+
+
+def test_read_kv_json_parses_existing_value() -> None:
+    with patch("regybox.notifications.requests.get") as get:
+        response = get.return_value
+        response.status_code = 200
+        response.text = '{"state": "not_open"}'
+        assert read_kv_json(
+            config=CloudflareKVConfig(
+                account_id="account",
+                namespace_id="namespace",
+                api_token=FAKE_CREDENTIAL,
+            ),
+            cache_key="regybox:v1:key",
+        ) == {"state": "not_open"}
+        response.raise_for_status.assert_called_once_with()
+
+
+def test_write_kv_json_sends_payload() -> None:
+    with patch("regybox.notifications.requests.put") as put:
+        response = put.return_value
+        write_kv_json(
+            config=CloudflareKVConfig(
+                account_id="account",
+                namespace_id="namespace",
+                api_token=FAKE_CREDENTIAL,
+            ),
+            cache_key="regybox:v1:key",
+            payload={"failureNotificationFingerprint": "failure:enroll:x:y"},
+        )
+        assert put.call_args.kwargs["params"] == {"expiration_ttl": str(KV_TTL_SECONDS)}
+        assert (
+            json.loads(put.call_args.kwargs["data"])["failureNotificationFingerprint"]
+            == "failure:enroll:x:y"
+        )
+        response.raise_for_status.assert_called_once_with()
+
+
+def test_notifications_main_suppresses_repeated_cached_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_file = tmp_path / "env_failure"
+    log_path = tmp_path / "enroll.log"
+    payload = {
+        "error_code": "class_overbooked",
+        "user_title": "Class and waitlist are full",
+        "user_message": "No spots are available.",
+        "technical_message": "Class is overbooked",
+    }
+    log_path.write_text(
+        f"ERROR {REGYBOX_USER_ERROR_PREFIX}{json.dumps(payload)}",
+        encoding="utf-8",
+    )
+    fingerprint = "failure:enroll:class_overbooked:Class and waitlist are full"
+
+    monkeypatch.setenv("GITHUB_ENV", str(env_file))
+    monkeypatch.setenv("ENROLL_RESULT", "failure")
+    monkeypatch.setenv("CLASS_TYPE", "WOD")
+    monkeypatch.setenv("CLASS_DATE", "2026-03-04")
+    monkeypatch.setenv("CLASS_TIME", "06:30")
+    monkeypatch.setenv("ENROLL_LOG_PATH", str(log_path))
+    monkeypatch.setenv("CACHE_KEY", "regybox:v1:key")
+    with (
+        patch("regybox.notifications.CloudflareKVConfig.from_env"),
+        patch(
+            "regybox.notifications.read_kv_json",
+            return_value={"failureNotificationFingerprint": fingerprint},
+        ),
+        patch("regybox.notifications.write_kv_json") as write_kv_json,
+    ):
+        notifications_module.main()
+
+    assert "SHOULD_SEND_EMAIL<<REGYBOX_SHOULD_SEND_EMAIL_EOF\nfalse" in env_file.read_text(
+        encoding="utf-8"
+    )
+    write_kv_json.assert_not_called()
+
+
+def test_notifications_main_sends_and_caches_changed_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_file = tmp_path / "env_failure"
+    log_path = tmp_path / "enroll.log"
+    payload = {
+        "error_code": "class_overbooked",
+        "user_title": "Class and waitlist are full",
+        "user_message": "No spots are available.",
+        "technical_message": "Class is overbooked",
+    }
+    log_path.write_text(
+        f"ERROR {REGYBOX_USER_ERROR_PREFIX}{json.dumps(payload)}",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("GITHUB_ENV", str(env_file))
+    monkeypatch.setenv("ENROLL_RESULT", "failure")
+    monkeypatch.setenv("CLASS_TYPE", "WOD")
+    monkeypatch.setenv("CLASS_DATE", "2026-03-04")
+    monkeypatch.setenv("CLASS_TIME", "06:30")
+    monkeypatch.setenv("ENROLL_LOG_PATH", str(log_path))
+    monkeypatch.setenv("CACHE_KEY", "regybox:v1:key")
+    with (
+        patch("regybox.notifications.CloudflareKVConfig.from_env") as from_env,
+        patch(
+            "regybox.notifications.read_kv_json",
+            return_value={"failureNotificationFingerprint": "failure:enroll:login_error:old"},
+        ),
+        patch("regybox.notifications.write_kv_json") as write_kv_json,
+    ):
+        notifications_module.main()
+
+    assert "SHOULD_SEND_EMAIL<<REGYBOX_SHOULD_SEND_EMAIL_EOF\ntrue" in env_file.read_text(
+        encoding="utf-8"
+    )
+    write_kv_json.assert_called_once()
+    assert write_kv_json.call_args.kwargs["config"] == from_env.return_value
+    assert write_kv_json.call_args.kwargs["cache_key"] == "regybox:v1:key"
+    assert (
+        write_kv_json.call_args.kwargs["payload"]["failureNotificationFingerprint"]
+        == "failure:enroll:class_overbooked:Class and waitlist are full"
+    )
+
+
+def test_notifications_main_sends_when_kv_check_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_file = tmp_path / "env_failure"
+    log_path = tmp_path / "enroll.log"
+    log_path.write_text("ERROR requests.exceptions.Timeout: timed out", encoding="utf-8")
+
+    monkeypatch.setenv("GITHUB_ENV", str(env_file))
+    monkeypatch.setenv("ENROLL_RESULT", "failure")
+    monkeypatch.setenv("CLASS_TYPE", "WOD")
+    monkeypatch.setenv("CLASS_DATE", "2026-03-04")
+    monkeypatch.setenv("CLASS_TIME", "06:30")
+    monkeypatch.setenv("ENROLL_LOG_PATH", str(log_path))
+    monkeypatch.setenv("CACHE_KEY", "regybox:v1:key")
+    with patch("regybox.notifications.CloudflareKVConfig.from_env", side_effect=ValueError):
+        notifications_module.main()
+
+    assert "SHOULD_SEND_EMAIL<<REGYBOX_SHOULD_SEND_EMAIL_EOF\ntrue" in env_file.read_text(
+        encoding="utf-8"
+    )

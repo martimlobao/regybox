@@ -179,6 +179,147 @@ test("existing KV entry with matching calendar event skips dispatch", async () =
   assert.deepEqual(plan.dispatches, []);
 });
 
+test("not-open KV entry skips dispatch when opening is far away and recently checked", async () => {
+  const key = "regybox:v1:calendar:one-class:2026-06-18T05:30:00.000Z";
+  const kv = makeKv(
+    new Map([
+      [
+        key,
+        JSON.stringify({
+          state: "not_open",
+          classDate: "2026-06-18",
+          classTime: "06:30",
+          classType: "WOD",
+          enrollmentOpensAt: "2026-06-18T05:00:00.000Z",
+          lastCheckedAt: "2026-06-18T00:00:00.000Z",
+        }),
+      ],
+    ]),
+  );
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:one-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260618T053000Z",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const plan = await buildPlan({
+    env: baseEnv,
+    kv,
+    icsText: ics,
+    now: new Date("2026-06-18T00:30:00Z"),
+  });
+
+  assert.deepEqual(plan.dispatches, []);
+});
+
+test("not-open KV entry dispatches when enrollment opens within 60 minutes", async () => {
+  const key = "regybox:v1:calendar:one-class:2026-06-18T05:30:00.000Z";
+  const kv = makeKv(
+    new Map([
+      [
+        key,
+        JSON.stringify({
+          state: "not_open",
+          classDate: "2026-06-18",
+          classTime: "06:30",
+          classType: "WOD",
+          enrollmentOpensAt: "2026-06-18T01:20:00.000Z",
+          lastCheckedAt: "2026-06-18T00:00:00.000Z",
+        }),
+      ],
+    ]),
+  );
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:one-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260618T053000Z",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const plan = await buildPlan({
+    env: baseEnv,
+    kv,
+    icsText: ics,
+    now: new Date("2026-06-18T00:30:00Z"),
+  });
+
+  assert.equal(plan.dispatches.length, 1);
+  assert.equal(plan.dispatches[0].operation, "enroll");
+});
+
+test("not-open KV entry dispatches when last check is over 24 hours old", async () => {
+  const key = "regybox:v1:calendar:one-class:2026-06-19T05:30:00.000Z";
+  const kv = makeKv(
+    new Map([
+      [
+        key,
+        JSON.stringify({
+          state: "not_open",
+          classDate: "2026-06-19",
+          classTime: "06:30",
+          classType: "WOD",
+          enrollmentOpensAt: "2026-06-19T05:00:00.000Z",
+          lastCheckedAt: "2026-06-17T00:00:00.000Z",
+        }),
+      ],
+    ]),
+  );
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:one-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260619T053000Z",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const plan = await buildPlan({
+    env: baseEnv,
+    kv,
+    icsText: ics,
+    now: new Date("2026-06-18T00:30:00Z"),
+  });
+
+  assert.equal(plan.dispatches.length, 1);
+  assert.equal(plan.dispatches[0].operation, "enroll");
+});
+
+test("stale not-open KV entries do not dispatch unenroll", async () => {
+  const key = "regybox:v1:calendar:old-class:2026-06-18T06:30:00.000Z";
+  const kv = makeKv(
+    new Map([
+      [
+        key,
+        JSON.stringify({
+          state: "not_open",
+          classDate: "2026-06-18",
+          classTime: "06:30",
+          classType: "WOD",
+          enrollmentOpensAt: "2026-06-18T05:00:00.000Z",
+          lastCheckedAt: "2026-06-18T00:00:00.000Z",
+        }),
+      ],
+    ]),
+  );
+
+  const plan = await buildPlan({
+    env: baseEnv,
+    kv,
+    icsText: "BEGIN:VCALENDAR\r\nEND:VCALENDAR",
+    now: new Date("2026-06-18T00:30:00Z"),
+  });
+
+  assert.deepEqual(plan.dispatches, []);
+});
+
 test("stale enrolled KV entry dispatches unenroll", async () => {
   const key = "regybox:v1:calendar:old-class:2026-06-18T06:30:00.000Z";
   const kv = makeKv(

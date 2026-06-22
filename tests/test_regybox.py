@@ -12,6 +12,7 @@ from hypothesis.strategies import integers
 
 from regybox import __version__
 from regybox.exceptions import (
+    ClassIsOverbookedError,
     ClassNotFoundError,
     ClassNotOpenError,
     NoClassesFoundError,
@@ -142,6 +143,58 @@ def test_main_enrolls_when_class_open(
     mock_class.enroll.assert_called_once()
     assert result == OperationResult(operation="enroll", status="success", class_type="WOD Rato")
     assert "Inscrito" in caplog.text or "Runtime:" in caplog.text
+    assert "Attempting to enroll in WOD Rato on 2026-03-10 at 06:30" in caplog.text
+
+
+def test_main_attempts_to_enroll_when_class_full_with_waitlist(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    mock_class: MagicMock = MagicMock()
+    mock_class.name = "WOD Rato"
+    mock_class.is_open = True
+    mock_class.is_full = True
+    mock_class.is_overbooked = False
+    mock_class.enroll.return_value = "Lista de espera"
+    with (
+        caplog.at_level(logging.INFO),
+        patch("regybox.regybox.check_cal"),
+        patch("regybox.regybox.get_classes", return_value=[mock_class]),
+        patch("regybox.regybox.pick_class", return_value=mock_class),
+    ):
+        result = main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD Rato",
+            check_calendar=False,
+            timeout=60,
+        )
+
+    mock_class.enroll.assert_called_once()
+    assert result == OperationResult(operation="enroll", status="success", class_type="WOD Rato")
+    assert "WOD Rato on 2026-03-10 at 06:30 is full; attempting waitlist enrollment" in caplog.text
+
+
+def test_main_raises_overbooked_when_class_and_waitlist_full() -> None:
+    mock_class: MagicMock = MagicMock()
+    mock_class.name = "WOD Rato"
+    mock_class.is_open = True
+    mock_class.is_full = True
+    mock_class.is_overbooked = True
+    with (
+        patch("regybox.regybox.check_cal"),
+        patch("regybox.regybox.get_classes", return_value=[mock_class]),
+        patch("regybox.regybox.pick_class", return_value=mock_class),
+        pytest.raises(ClassIsOverbookedError),
+    ):
+        main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD Rato",
+            check_calendar=False,
+            timeout=60,
+        )
+
+    mock_class.enroll.assert_not_called()
 
 
 def test_parse_class_types_supports_comma_separated_candidates() -> None:
@@ -297,6 +350,34 @@ def test_main_treats_not_open_as_noop_when_requested() -> None:
     assert result == OperationResult(operation="enroll", status="noop", class_type="WOD Rato")
 
 
+def test_main_logs_not_open_cache_metadata_when_time_to_enroll_known(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    mock_class: MagicMock = MagicMock()
+    mock_class.name = "WOD Rato"
+    mock_class.is_open = False
+    mock_class.time_to_enroll = 3600
+    with (
+        caplog.at_level(logging.INFO),
+        patch("regybox.regybox.check_cal"),
+        patch("regybox.regybox.get_classes", return_value=[mock_class]),
+        patch("regybox.regybox.pick_class", return_value=mock_class),
+    ):
+        result = main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD Rato",
+            check_calendar=False,
+            timeout=60,
+            operation_options=OperationOptions(not_open_is_noop=True),
+        )
+
+    assert result == OperationResult(operation="enroll", status="noop", class_type="WOD Rato")
+    assert "REGYBOX_CACHE_STATE=not_open" in caplog.text
+    assert "enrollment_opens_at=" in caplog.text
+    assert "last_checked_at=" in caplog.text
+
+
 def test_main_treats_not_open_without_timer_as_noop_when_requested() -> None:
     mock_class: MagicMock = MagicMock()
     mock_class.name = "WOD Rato"
@@ -333,12 +414,13 @@ def test_main_timeout_is_noop_when_requested() -> None:
     assert result == OperationResult(operation="enroll", status="noop", class_type="WOD Rato")
 
 
-def test_main_unenrolls_when_enrolled() -> None:
+def test_main_unenrolls_when_enrolled(caplog: pytest.LogCaptureFixture) -> None:
     mock_class: MagicMock = MagicMock()
     mock_class.name = "WOD Rato"
     mock_class.user_is_enrolled = True
     mock_class.unenroll.return_value = "Desmarcado"
     with (
+        caplog.at_level(logging.INFO),
         patch("regybox.regybox.check_cal"),
         patch("regybox.regybox.get_classes", return_value=[mock_class]),
         patch("regybox.regybox.pick_class", return_value=mock_class),
@@ -353,6 +435,7 @@ def test_main_unenrolls_when_enrolled() -> None:
 
     mock_class.unenroll.assert_called_once()
     assert result == OperationResult(operation="unenroll", status="success", class_type="WOD Rato")
+    assert "Attempting to unenroll from WOD Rato on 2026-03-10 at 06:30" in caplog.text
 
 
 def test_main_unenroll_noops_when_not_enrolled() -> None:

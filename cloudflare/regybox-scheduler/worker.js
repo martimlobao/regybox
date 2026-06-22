@@ -1,4 +1,6 @@
 const KV_PREFIX = "regybox:v1:calendar:";
+const NOT_OPEN_REFRESH_MS = 24 * 60 * 60 * 1000;
+const NOT_OPEN_DISPATCH_WINDOW_MS = 60 * 60 * 1000;
 
 export function normalizeList(value) {
   return String(value ?? "")
@@ -286,6 +288,29 @@ function cachedSlotKey(cached) {
   return classSlotKey(cached?.classDate, cached?.classTime, cached?.classType);
 }
 
+function parseOptionalDate(value) {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function notOpenShouldDispatch(cached, now) {
+  if (cached?.state !== "not_open") {
+    return true;
+  }
+  const enrollmentOpensAt = parseOptionalDate(cached.enrollmentOpensAt);
+  const lastCheckedAt = parseOptionalDate(cached.lastCheckedAt);
+  if (!enrollmentOpensAt || !lastCheckedAt) {
+    return true;
+  }
+  if (enrollmentOpensAt.getTime() - now.getTime() <= NOT_OPEN_DISPATCH_WINDOW_MS) {
+    return true;
+  }
+  return now.getTime() - lastCheckedAt.getTime() >= NOT_OPEN_REFRESH_MS;
+}
+
 function dispatchPayload({ env, operation, event, cacheKey, cached }) {
   const classDate = event?.classDate ?? cached.classDate;
   const classTime = event?.classTime ?? cached.classTime;
@@ -339,7 +364,7 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
   for (const [event, cached] of eventCacheEntries) {
     const slotKey = eventSlotKey(event, env);
     if (
-      (!cached || cached.state !== "enrolled") &&
+      (!cached || (cached.state !== "enrolled" && notOpenShouldDispatch(cached, now))) &&
       !enrolledSlots.has(slotKey) &&
       !plannedEnrollmentSlots.has(slotKey)
     ) {

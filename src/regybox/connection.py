@@ -17,6 +17,10 @@ from regybox.exceptions import RegyboxLoginError
 from regybox.utils.singleton import Singleton
 
 DOMAIN: str = "https://www.regybox.pt/app/app_nova/"
+DEFAULT_TIMEOUT_SECONDS: int = 15
+RETRY_TOTAL: int = 4
+RETRY_BACKOFF_FACTOR: float = 0.75
+RETRY_STATUS_CODES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 HEADERS: dict[str, str] = {
     "Accept": "text/html, */*; q=0.01",
     "Accept-Encoding": "gzip, deflate, br",
@@ -53,7 +57,16 @@ class RegyboxSession(requests.Session, metaclass=Singleton):
     def __init__(self, *, user: str = REGYBOX_USER) -> None:
         """Initialize a new instance of the RegyboxSession class."""
         super().__init__()
-        adapter: HTTPAdapter = HTTPAdapter(max_retries=Retry(connect=10, backoff_factor=0.5))
+        retry_policy = Retry(
+            total=RETRY_TOTAL,
+            connect=RETRY_TOTAL,
+            read=RETRY_TOTAL,
+            status=RETRY_TOTAL,
+            backoff_factor=RETRY_BACKOFF_FACTOR,
+            status_forcelist=RETRY_STATUS_CODES,
+            allowed_methods=frozenset({"HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS"}),
+        )
+        adapter: HTTPAdapter = HTTPAdapter(max_retries=retry_policy)
         self.mount("http://", adapter)
         self.mount("https://", adapter)
         self.set_session(user=user)  # only called once since this is a singleton
@@ -68,6 +81,7 @@ class RegyboxSession(requests.Session, metaclass=Singleton):
             urljoin(DOMAIN, "set_session.php"),
             headers=HEADERS,
             params=self.get_session_params(user=user),
+            timeout=DEFAULT_TIMEOUT_SECONDS,
         ).raise_for_status()
 
     @staticmethod
@@ -102,7 +116,7 @@ def get_url_html(url: str, *, params: dict[str, str] | None = None) -> str:
     """
     query_params: dict[str, str] = params if params is not None else {}
     res: requests.models.Response = RegyboxSession().get(
-        url, headers=HEADERS, params=query_params, timeout=10
+        url, headers=HEADERS, params=query_params, timeout=DEFAULT_TIMEOUT_SECONDS
     )
     res.raise_for_status()
     if re.findall(r"app/app_nova/login.php", res.text):

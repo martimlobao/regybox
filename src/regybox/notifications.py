@@ -5,12 +5,17 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.parse
 from pathlib import Path
 from typing import cast
 
+import requests
+
+from regybox.cloudflare_kv import KV_TTL_SECONDS, CloudflareKVConfig
 from regybox.exceptions import REGYBOX_USER_ERROR_PREFIX, UserErrorPayload
 
 MAX_APPENDIX_LINES: int = 12
+HTTP_NOT_FOUND: int = 404
 
 
 def read_log_text(path: str | None) -> str:
@@ -232,6 +237,127 @@ def _fallback_user_payload(signal: str | None) -> UserErrorPayload:
     }
 
 
+def build_failure_notification_fingerprint(
+    *, enroll_result: str, operation: str, log_text: str
+) -> str:
+    """Build a stable identity for the current failure notification.
+
+    Returns:
+        A stable fingerprint for failure results, otherwise an empty string.
+    """
+    normalized_result = enroll_result.strip().lower()
+    normalized_operation = operation.strip().lower() or "enroll"
+    if normalized_result != "failure":
+        return ""
+
+    payload = extract_user_error_payload(log_text)
+    if payload is None:
+        payload = _fallback_user_payload(extract_error_signal(log_text))
+    return f"failure:{normalized_operation}:{payload['error_code']}:{payload['user_title']}"
+
+
+def should_send_email_for_state(
+    *,
+    enroll_result: str,
+    current_failure_fingerprint: str,
+    cached_failure_fingerprint: str | None,
+) -> bool:
+    """Return whether email should send after cached failure comparison.
+
+    Returns:
+        Whether the current result should send an email.
+    """
+    normalized_result = enroll_result.strip().lower()
+    if normalized_result != "failure":
+        return should_send_email(enroll_result)
+    return bool(current_failure_fingerprint) and (
+        cached_failure_fingerprint != current_failure_fingerprint
+    )
+
+
+def _kv_value_url(*, config: CloudflareKVConfig, cache_key: str) -> str:
+    return (
+        "https://api.cloudflare.com/client/v4/accounts/"
+        f"{config.account_id}/storage/kv/namespaces/{config.namespace_id}/values/"
+        f"{urllib.parse.quote(cache_key, safe='')}"
+    )
+
+
+def read_kv_json(*, config: CloudflareKVConfig, cache_key: str) -> dict[str, object]:
+    """Read an existing Cloudflare KV JSON value.
+
+    Returns:
+        The parsed JSON dictionary, or an empty dictionary when missing.
+    """
+    response = requests.get(
+        _kv_value_url(config=config, cache_key=cache_key),
+        headers={"Authorization": f"Bearer {config.api_token}"},
+        timeout=15,
+    )
+    if response.status_code == HTTP_NOT_FOUND:
+        return {}
+    response.raise_for_status()
+    parsed = _try_parse_json(response.text)
+    return parsed or {}
+
+
+def write_kv_json(
+    *, config: CloudflareKVConfig, cache_key: str, payload: dict[str, object]
+) -> None:
+    """Write a Cloudflare KV JSON value."""
+    response = requests.put(
+        _kv_value_url(config=config, cache_key=cache_key),
+        headers={"Authorization": f"Bearer {config.api_token}"},
+        params={"expiration_ttl": str(KV_TTL_SECONDS)},
+        data=json.dumps(payload, sort_keys=True),
+        timeout=15,
+    )
+    response.raise_for_status()
+
+
+def _should_send_email_with_cache(
+    *,
+    enroll_result: str,
+    operation: str,
+    log_text: str,
+    cache_key: str,
+) -> bool:
+    """Apply repeated-failure suppression when KV cache is configured.
+
+    Returns:
+        Whether the current result should send an email.
+    """
+    if enroll_result.strip().lower() != "failure" or not cache_key:
+        return should_send_email(enroll_result)
+
+    current_fingerprint = build_failure_notification_fingerprint(
+        enroll_result=enroll_result,
+        operation=operation,
+        log_text=log_text,
+    )
+    try:
+        config = CloudflareKVConfig.from_env()
+        cached_payload = read_kv_json(config=config, cache_key=cache_key)
+    except (ValueError, requests.RequestException):
+        return should_send_email(enroll_result)
+
+    cached_fingerprint = cached_payload.get("failureNotificationFingerprint")
+    cached_fingerprint_str = cached_fingerprint if isinstance(cached_fingerprint, str) else None
+    send_email = should_send_email_for_state(
+        enroll_result=enroll_result,
+        current_failure_fingerprint=current_fingerprint,
+        cached_failure_fingerprint=cached_fingerprint_str,
+    )
+    if not send_email:
+        return False
+    cached_payload["failureNotificationFingerprint"] = current_fingerprint
+    try:
+        write_kv_json(config=config, cache_key=cache_key, payload=cached_payload)
+    except requests.RequestException:
+        return should_send_email(enroll_result)
+    return True
+
+
 def _trim_appendix(text: str) -> str:
     """Limit technical appendix size for readability.
 
@@ -371,18 +497,26 @@ def main() -> None:
         f"{os.environ.get('CLASS_TIME', 'Unknown time')}"
     )
     log_text: str = read_log_text(os.environ.get("ENROLL_LOG_PATH"))
+    enroll_result = os.environ.get("ENROLL_RESULT", "failure")
+    operation = os.environ.get("REGYBOX_OPERATION", "enroll")
     subject, body = build_email_content(
-        enroll_result=os.environ.get("ENROLL_RESULT", "failure"),
+        enroll_result=enroll_result,
         class_summary=class_summary,
         run_url=os.environ.get("ACTION_RUN_URL"),
         log_text=log_text,
-        operation=os.environ.get("REGYBOX_OPERATION", "enroll"),
+        operation=operation,
+    )
+    send_email = _should_send_email_with_cache(
+        enroll_result=enroll_result,
+        operation=operation,
+        log_text=log_text,
+        cache_key=os.environ.get("CACHE_KEY", "").strip(),
     )
     write_multiline_env(name="EMAIL_SUBJECT", value=subject, github_env_path=github_env_path)
     write_multiline_env(name="EMAIL_BODY", value=body, github_env_path=github_env_path)
     write_multiline_env(
         name="SHOULD_SEND_EMAIL",
-        value="true" if should_send_email(os.environ.get("ENROLL_RESULT", "failure")) else "false",
+        value="true" if send_email else "false",
         github_env_path=github_env_path,
     )
 
