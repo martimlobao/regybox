@@ -133,9 +133,11 @@ def test_regybox_session_retry_adapter_retries_transient_statuses(
 
     adapter = mount.call_args_list[1].args[1]
     retries = adapter.max_retries
-    assert retries.total >= 3
-    assert retries.connect >= 3
-    assert retries.read >= 3
+    assert retries.total == 10
+    assert retries.connect == 10
+    assert retries.read == 10
+    assert retries.status == 10
+    assert retries.backoff_factor == pytest.approx(0.75)
     assert {429, 500, 502, 503, 504}.issubset(retries.status_forcelist)
 
 
