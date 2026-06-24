@@ -19,7 +19,7 @@ from regybox.utils.singleton import Singleton
 DOMAIN: str = "https://www.regybox.pt/app/app_nova/"
 DEFAULT_TIMEOUT_SECONDS: int = 15
 RETRY_TOTAL: int = 10
-RETRY_BACKOFF_FACTOR: float = 0.75
+RETRY_BACKOFF_FACTOR: float = 0.05
 RETRY_STATUS_CODES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 HEADERS: dict[str, str] = {
     "Accept": "text/html, */*; q=0.01",

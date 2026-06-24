@@ -4,10 +4,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
+from urllib3.util.retry import Retry
 
 from regybox.connection import (
     DEFAULT_TIMEOUT_SECONDS,
     HEADERS,
+    RETRY_BACKOFF_FACTOR,
+    RETRY_TOTAL,
     RegyboxSession,
     get_classes_html,
     get_classes_params,
@@ -133,11 +136,12 @@ def test_regybox_session_retry_adapter_retries_transient_statuses(
 
     adapter = mount.call_args_list[1].args[1]
     retries = adapter.max_retries
-    assert retries.total == 10
-    assert retries.connect == 10
-    assert retries.read == 10
-    assert retries.status == 10
-    assert retries.backoff_factor == pytest.approx(0.75)
+    assert retries.total == RETRY_TOTAL
+    assert retries.connect == RETRY_TOTAL
+    assert retries.read == RETRY_TOTAL
+    assert retries.status == RETRY_TOTAL
+    assert retries.backoff_factor == pytest.approx(RETRY_BACKOFF_FACTOR)
+    assert retries.respect_retry_after_header
     assert {429, 500, 502, 503, 504}.issubset(retries.status_forcelist)
 
 
@@ -147,3 +151,14 @@ def test_regybox_session_get_session_params() -> None:
         "y": "*testuser",
         "ignore": "regybox.pt/app/app",
     }
+
+
+def test_retry_client_backoff_budget_stays_under_one_minute() -> None:
+    retry = Retry(total=RETRY_TOTAL, backoff_factor=RETRY_BACKOFF_FACTOR)
+
+    backoff_times: list[float] = []
+    for _ in range(RETRY_TOTAL):
+        retry = retry.increment(method="GET", url="https://example.com")
+        backoff_times.append(retry.get_backoff_time())
+
+    assert sum(backoff_times) < 60
