@@ -277,41 +277,38 @@ def _wait_for_enrollable_class(
         resolved_class_type = _resolved_class_type(picked, class_types[0])
         if picked.is_open:
             return picked
-        closed_result = _closed_enrollment_result(
-            options=options,
-            resolved_class_type=resolved_class_type,
-            time_to_enroll=picked.time_to_enroll,
-        )
         # Non-full closed error cards are treated as deadline-expired/not-open.
         # Full closed error cards are intentionally classified as overbooked,
         # even though that can miss the rare "full and starting soon" case.
-        if _class_bool(picked, "enrollment_deadline_expired"):
-            if closed_result is not None:
-                return closed_result
-            raise ClassNotOpenError
-        if _class_is_overbooked(picked):
+        deadline_expired = _class_bool(picked, "enrollment_deadline_expired")
+        if not deadline_expired and _class_is_overbooked(picked):
             _raise_overbooked(
                 resolved_class_type=resolved_class_type,
                 date=date,
                 class_time=class_time,
             )
-        if picked.time_to_enroll is None:
-            if closed_result is not None:
-                return closed_result
-            raise ClassNotOpenError
+        time_to_enroll = picked.time_to_enroll
         remaining_timeout = max(0, math.ceil(timeout - elapsed))
-        if picked.time_to_enroll > remaining_timeout:
+        wait_exceeds_timeout = time_to_enroll is not None and time_to_enroll > remaining_timeout
+        if deadline_expired or time_to_enroll is None or wait_exceeds_timeout:
+            closed_result = _closed_enrollment_result(
+                options=options,
+                resolved_class_type=resolved_class_type,
+                time_to_enroll=time_to_enroll,
+            )
             if closed_result is not None:
                 return closed_result
+            if deadline_expired or time_to_enroll is None:
+                raise ClassNotOpenError
             raise RegyboxTimeoutError(
                 remaining_timeout,
-                time_to_enroll=secs_to_str(picked.time_to_enroll),
+                time_to_enroll=secs_to_str(time_to_enroll),
             )
 
-        wait: int = snooze(picked.time_to_enroll)
+        wait: int = snooze(time_to_enroll)
         LOGGER.info(
             f"Waiting for {resolved_class_type} on {date.isoformat()} at {class_time} to be"
-            f" available, ETA in {secs_to_str(picked.time_to_enroll)}. Retrying in {wait} seconds."
+            f" available, ETA in {secs_to_str(time_to_enroll)}. Retrying in {wait} seconds."
         )
         time.sleep(wait)
     if options.not_open_is_noop:

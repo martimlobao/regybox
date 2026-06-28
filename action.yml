@@ -151,7 +151,8 @@ runs:
         set -euo pipefail
         cache_should_update=false
         if [[ "${ENROLL_OUTCOME}" == "success" ]]; then
-          if grep -q "REGYBOX_RESULT=noop" "${ENROLL_LOG_PATH}"; then
+          final_result_line="$(grep "REGYBOX_RESULT=" "${ENROLL_LOG_PATH}" | tail -n 1 || true)"
+          if [[ "${final_result_line}" == *"REGYBOX_RESULT=noop"* ]]; then
             result=noop
             if grep -q "REGYBOX_CACHE_STATE=not_open" "${ENROLL_LOG_PATH}"; then
               cache_should_update=true

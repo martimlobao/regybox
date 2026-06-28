@@ -11,6 +11,7 @@ from hypothesis import given
 from hypothesis.strategies import integers
 
 from regybox import __version__
+from regybox.common import LOGGER
 from regybox.exceptions import (
     ClassIsOverbookedError,
     ClassNotFoundError,
@@ -457,7 +458,9 @@ def test_main_treats_not_open_as_noop_when_requested() -> None:
     assert result == OperationResult(operation="enroll", status="noop", class_type="WOD Rato")
 
 
-def test_main_retries_not_open_noop_when_enrollment_opens_within_timeout() -> None:
+def test_main_retries_not_open_noop_when_enrollment_opens_within_timeout(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     closed_class: MagicMock = MagicMock()
     closed_class.name = "WOD Rato"
     closed_class.is_open = False
@@ -469,6 +472,7 @@ def test_main_retries_not_open_noop_when_enrollment_opens_within_timeout() -> No
     open_class.user_is_enrolled = False
 
     with (
+        caplog.at_level(logging.INFO),
         patch("regybox.regybox.check_cal"),
         patch("regybox.regybox.get_classes", return_value=[closed_class]),
         patch("regybox.regybox.pick_class", side_effect=[closed_class, open_class]),
@@ -487,6 +491,12 @@ def test_main_retries_not_open_noop_when_enrollment_opens_within_timeout() -> No
     assert result == OperationResult(operation="enroll", status="success", class_type="WOD Rato")
     sleep_mock.assert_called_once_with(60)
     open_class.enroll.assert_called_once_with()
+    structured_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == LOGGER.name and record.getMessage().startswith("REGYBOX_")
+    ]
+    assert structured_messages == ["REGYBOX_RESULT=success operation=enroll class_type=WOD Rato"]
 
 
 def test_main_logs_not_open_cache_metadata_when_time_to_enroll_known(
