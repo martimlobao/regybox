@@ -277,15 +277,15 @@ def _wait_for_enrollable_class(
         resolved_class_type = _resolved_class_type(picked, class_types[0])
         if picked.is_open:
             return picked
-        closed_result = _closed_enrollment_result(
-            options=options,
-            resolved_class_type=resolved_class_type,
-            time_to_enroll=picked.time_to_enroll,
-        )
         # Non-full closed error cards are treated as deadline-expired/not-open.
         # Full closed error cards are intentionally classified as overbooked,
         # even though that can miss the rare "full and starting soon" case.
         if _class_bool(picked, "enrollment_deadline_expired"):
+            closed_result = _closed_enrollment_result(
+                options=options,
+                resolved_class_type=resolved_class_type,
+                time_to_enroll=picked.time_to_enroll,
+            )
             if closed_result is not None:
                 return closed_result
             raise ClassNotOpenError
@@ -296,11 +296,21 @@ def _wait_for_enrollable_class(
                 class_time=class_time,
             )
         if picked.time_to_enroll is None:
+            closed_result = _closed_enrollment_result(
+                options=options,
+                resolved_class_type=resolved_class_type,
+                time_to_enroll=picked.time_to_enroll,
+            )
             if closed_result is not None:
                 return closed_result
             raise ClassNotOpenError
         remaining_timeout = max(0, math.ceil(timeout - elapsed))
         if picked.time_to_enroll > remaining_timeout:
+            closed_result = _closed_enrollment_result(
+                options=options,
+                resolved_class_type=resolved_class_type,
+                time_to_enroll=picked.time_to_enroll,
+            )
             if closed_result is not None:
                 return closed_result
             raise RegyboxTimeoutError(

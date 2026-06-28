@@ -23,6 +23,14 @@ def test_action_defaults_not_open_enrollment_to_noop() -> None:
     assert '    default: "true"' in action_lines[input_start:next_input]
 
 
+def test_action_classifies_enrollment_from_final_result_marker() -> None:
+    action_text = (REPO_ROOT / "action.yml").read_text(encoding="utf-8")
+
+    assert 'grep "REGYBOX_RESULT=" "${ENROLL_LOG_PATH}" | tail -n 1' in action_text
+    assert '[[ "${final_result_line}" == *"REGYBOX_RESULT=noop"* ]]' in action_text
+    assert 'grep -q "REGYBOX_RESULT=noop" "${ENROLL_LOG_PATH}"' not in action_text
+
+
 def test_class_operation_workflow_exposes_dispatch_and_kv_inputs() -> None:
     workflow_text = (REPO_ROOT / ".github/workflows/class_operation.yml").read_text(
         encoding="utf-8"
