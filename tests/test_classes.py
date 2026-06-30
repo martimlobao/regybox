@@ -7,7 +7,10 @@ from bs4 import BeautifulSoup
 from bs4.element import PageElement, Tag
 
 from regybox.classes import (
+    EMPTY_CLASS_RETRY_BACKOFF_FACTOR,
+    EMPTY_CLASS_RETRY_TOTAL,
     Class,
+    _get_classes_tags_with_retry,
     get_classes,
     get_classes_tags,
     parse_capacity_value,
@@ -377,19 +380,23 @@ def test_pick_class_raises_when_not_found() -> None:
         )
 
 
+def test_empty_class_retry_defaults_are_independent_from_connection_retries() -> None:
+    """Empty class retries use their own explicit retry budget."""
+    assert EMPTY_CLASS_RETRY_TOTAL == 10
+    assert pytest.approx(0.05) == EMPTY_CLASS_RETRY_BACKOFF_FACTOR
+
+
 def test_get_classes_tags_raises_when_no_classes_after_retries() -> None:
     """get_classes_tags raises NoClassesFoundError after empty retries."""
     with (
         patch(
-            "regybox.classes.get_classes_html", return_value="<html><body></body></html>"
-        ) as mock_get,
-        patch("regybox.classes.time.sleep") as mock_sleep,
+            "regybox.classes._get_classes_tags_with_retry", return_value=[]
+        ) as mock_get_with_retry,
         pytest.raises(NoClassesFoundError),
     ):
         get_classes_tags(2024, 7, 1)
 
-    assert mock_get.call_count == 5
-    assert mock_sleep.call_count == 4
+    mock_get_with_retry.assert_called_once()
 
 
 def test_get_classes_tags_retries_empty_class_response() -> None:
@@ -402,11 +409,31 @@ def test_get_classes_tags_retries_empty_class_response() -> None:
         ) as mock_get,
         patch("regybox.classes.time.sleep") as mock_sleep,
     ):
-        classes = get_classes_tags(2024, 7, 1)
+        classes = _get_classes_tags_with_retry(
+            1234567890000, retry_total=3, retry_backoff_factor=0.25
+        )
 
     assert len(classes) == 1
     assert mock_get.call_count == 2
-    mock_sleep.assert_called_once_with(0.75)
+    mock_sleep.assert_called_once_with(0.25)
+
+
+def test_get_classes_tags_empty_retry_budget_can_be_overridden() -> None:
+    """Empty class response retries can use an injected retry budget."""
+    with (
+        patch(
+            "regybox.classes.get_classes_html", return_value="<html><body></body></html>"
+        ) as mock_get,
+        patch("regybox.classes.time.sleep") as mock_sleep,
+    ):
+        classes = _get_classes_tags_with_retry(
+            1234567890000, retry_total=5, retry_backoff_factor=0.01
+        )
+
+    assert classes == []
+    assert mock_get.call_count == 6
+    assert mock_sleep.call_count == 5
+    assert sum(call.args[0] for call in mock_sleep.call_args_list) < 1
 
 
 def test_get_classes_returns_list_of_classes() -> None:
