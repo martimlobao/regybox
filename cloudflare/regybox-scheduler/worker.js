@@ -191,13 +191,13 @@ function zonedDateParts(date, timeZone) {
   );
 }
 
-function eventDetails(props, start, timeZone) {
-  const uid = props.UID || `${props.SUMMARY}:${start.toISOString()}`;
+function eventDetails(props, start, timeZone, summary = props.SUMMARY) {
+  const uid = props.UID || `${summary}:${start.toISOString()}`;
   const fingerprint = `${uid}:${start.toISOString()}`;
   const isUtc = props.DTSTART.trim().endsWith("Z");
   const zoned = isUtc ? zonedDateParts(start, timeZone) : null;
   return {
-    summary: props.SUMMARY,
+    summary,
     uid,
     start,
     classDate: zoned
@@ -211,6 +211,73 @@ function eventDetails(props, start, timeZone) {
   };
 }
 
+function isCancelledEvent(props) {
+  return String(props.STATUS ?? "").trim().toUpperCase() === "CANCELLED";
+}
+
+function recurrenceIdValue(props) {
+  return props["RECURRENCE-ID"] ?? null;
+}
+
+function isRecurrenceOverride(props) {
+  return recurrenceIdValue(props) !== null;
+}
+
+function masterMatchesCalendarEvent(props, normalizedNames) {
+  return (
+    props.DTSTART &&
+    props.SUMMARY &&
+    normalizedNames.has(props.SUMMARY.trim().toLowerCase())
+  );
+}
+
+function tryParseDate(value) {
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = parseDate(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  } catch {
+    return null;
+  }
+}
+
+function excludedRecurrenceInstants(overrides) {
+  return overrides
+    .map((props) => tryParseDate(recurrenceIdValue(props)))
+    .filter((instant) => instant !== null);
+}
+
+function overrideStartInstant(props) {
+  return tryParseDate(props.DTSTART);
+}
+
+function appendOverrideInstances({
+  events,
+  overrides,
+  now,
+  windowEnd,
+  timeZone,
+  masterSummary,
+}) {
+  for (const props of overrides) {
+    if (isCancelledEvent(props)) {
+      continue;
+    }
+    const overrideStart = overrideStartInstant(props);
+    if (!overrideStart) {
+      continue;
+    }
+    // Match recurrenceInstances: only emit overrides inside the lookahead window.
+    if (overrideStart >= now && overrideStart < windowEnd) {
+      events.push(
+        eventDetails(props, overrideStart, timeZone, props.SUMMARY ?? masterSummary),
+      );
+    }
+  }
+}
+
 export function expandCalendarEvents({
   icsText,
   now,
@@ -221,16 +288,43 @@ export function expandCalendarEvents({
   validateCalendarEventNames(calendarEventNames);
   const normalizedNames = new Set(calendarEventNames.map((name) => name.toLowerCase()));
   const windowEnd = new Date(now.getTime() + lookaheadHours * 60 * 60 * 1000);
-  const events = [];
+  const overridesByUid = new Map();
+  const masterEvents = [];
+
   for (const props of parseEvents(icsText)) {
-    if (!props.DTSTART || !props.SUMMARY) {
+    if (isRecurrenceOverride(props)) {
+      const uid = props.UID;
+      if (!uid) {
+        continue;
+      }
+      const overrides = overridesByUid.get(uid) ?? [];
+      overrides.push(props);
+      overridesByUid.set(uid, overrides);
       continue;
     }
-    if (!normalizedNames.has(props.SUMMARY.trim().toLowerCase())) {
-      continue;
+    if (masterMatchesCalendarEvent(props, normalizedNames)) {
+      masterEvents.push(props);
+    }
+  }
+
+  const trackedUids = new Set(masterEvents.map((props) => props.UID).filter(Boolean));
+  for (const uid of overridesByUid.keys()) {
+    if (!trackedUids.has(uid)) {
+      overridesByUid.delete(uid);
+    }
+  }
+
+  const events = [];
+  for (const props of masterEvents) {
+    const overrides = props.UID ? (overridesByUid.get(props.UID) ?? []) : [];
+    if (props.UID) {
+      overridesByUid.delete(props.UID);
     }
     const start = parseDate(props.DTSTART);
-    const excludedDates = parseDateList(props.EXDATE);
+    const excludedDates = [
+      ...parseDateList(props.EXDATE),
+      ...excludedRecurrenceInstants(overrides),
+    ];
     const starts = props.RRULE
       ? recurrenceInstances(start, parseRrule(props.RRULE), now, windowEnd, excludedDates)
       : [start].filter(
@@ -242,7 +336,16 @@ export function expandCalendarEvents({
     events.push(
       ...starts.map((instanceStart) => eventDetails(props, instanceStart, timeZone)),
     );
+    appendOverrideInstances({
+      events,
+      overrides,
+      now,
+      windowEnd,
+      timeZone,
+      masterSummary: props.SUMMARY,
+    });
   }
+
   return events.sort((left, right) => left.start - right.start);
 }
 
