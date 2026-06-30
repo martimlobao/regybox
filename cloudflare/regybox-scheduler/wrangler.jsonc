@@ -2,7 +2,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "regybox-scheduler",
   "main": "worker.js",
-  "compatibility_date": "2026-06-18",
+  "compatibility_date": "2026-06-17",
+  "preview_urls": false,
+  "keep_vars": true,
   "kv_namespaces": [
     {
       "binding": "REGYBOX_STATE",
@@ -11,5 +13,10 @@
   ],
   "triggers": {
     "crons": ["28,58 * * * *"]
+  },
+  "observability": {
+    "logs": {
+      "enabled": true
+    }
   }
 }

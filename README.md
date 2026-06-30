@@ -244,8 +244,52 @@ The Worker needs a GitHub token that can call the workflow dispatch endpoint.
    repository into the `worker.js` tab.
 8. Click **Deploy**.
 
-If you deploy with Wrangler instead, copy `cloudflare/regybox-scheduler/wrangler.jsonc`, replace
-`replace-with-your-kv-namespace-id`, and run the Worker package from that directory.
+If you deploy with Wrangler instead, set `CF_KV_NAMESPACE_ID` to the KV namespace ID from step 2
+and run the Worker package from [`cloudflare/regybox-scheduler`](cloudflare/regybox-scheduler):
+
+```bash
+cd cloudflare/regybox-scheduler
+CF_KV_NAMESPACE_ID=<your-kv-namespace-id> npm run deploy
+```
+
+From the repository root you can also run `make deploy-worker` after exporting
+`CF_KV_NAMESPACE_ID`.
+
+`npm run deploy` renders `.wrangler.deploy.jsonc` from `wrangler.jsonc` and deploys with
+Wrangler. The committed `wrangler.jsonc` keeps a placeholder namespace ID so the repository stays
+portable. Worker text variables are not committed: set them in the Cloudflare dashboard (step 6) or
+provide them as environment variables when deploying. `keep_vars` is enabled so deploys update
+worker code without removing dashboard variables that are not present in the rendered config.
+
+Optional deploy-time text variables (for example in `.env` locally or Workers Builds secrets):
+
+- `CALENDAR_EVENT_NAMES`
+- `CLASS_TYPE`
+- `GITHUB_OWNER`
+- `GITHUB_REPO`
+- `GITHUB_WORKFLOW`
+- `GITHUB_REF`
+- `LOOKAHEAD_HOURS`
+- `TIMEZONE`
+
+Keep `GITHUB_TOKEN` and `CALENDAR_URL` as Worker secrets in the dashboard, not in `wrangler.jsonc`.
+
+##### Cloudflare Workers Builds (Git Deploys)
+
+If the Worker is connected to GitHub, set the **Deploy command** to:
+
+```bash
+npm run deploy
+```
+
+In **Settings → Builds → Variables and secrets**, add secrets as needed:
+
+- `CF_KV_NAMESPACE_ID` — required; the KV namespace ID from step 2.
+- Any optional deploy-time text variables listed above if you want Git deploys to set them instead
+  of using only the dashboard.
+
+Workers Builds injects build secrets as environment variables, so `npm run deploy` can render the
+Wrangler config at deploy time without committing your namespace ID or account-specific settings.
 
 #### 6. Add Worker Variables and Secrets
 
