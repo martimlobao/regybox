@@ -13,6 +13,8 @@ from bs4.element import NavigableString, Tag
 from regybox.common import LOGGER, TIMEZONE
 from regybox.connection import (
     DOMAIN,
+    RETRY_BACKOFF_FACTOR,
+    RETRY_TOTAL,
     get_classes_html,
     get_url_html,
 )
@@ -24,9 +26,6 @@ from regybox.exceptions import (
     UnparseableError,
     UserAlreadyEnrolledError,
 )
-
-CLASS_RETRY_TOTAL: int = 4
-CLASS_RETRY_BACKOFF_FACTOR: float = 0.75
 
 
 def parse_capacity_value(value: str) -> int | None:
@@ -376,15 +375,15 @@ def _get_classes_tags_with_retry(timestamp: int) -> list[Tag]:
         The parsed class tags, or an empty list for a valid response with no
         classes.
     """
-    for attempt in range(CLASS_RETRY_TOTAL + 1):
+    for attempt in range(RETRY_TOTAL + 1):
         res_html = get_classes_html(timestamp)
         soup: BeautifulSoup = BeautifulSoup(res_html, "html.parser")
         classes: list[Tag] = soup.find_all("div", attrs={"class": "filtro0"})
         if classes:
             return classes
-        if attempt == CLASS_RETRY_TOTAL:
+        if attempt == RETRY_TOTAL:
             break
-        wait = CLASS_RETRY_BACKOFF_FACTOR * (2**attempt)
+        wait = RETRY_BACKOFF_FACTOR * (2**attempt)
         LOGGER.warning(f"No classes found in response; retrying in {wait:.2f} seconds.")
         time.sleep(wait)
     return []

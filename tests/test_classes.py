@@ -13,6 +13,7 @@ from regybox.classes import (
     parse_capacity_value,
     pick_class,
 )
+from regybox.connection import RETRY_BACKOFF_FACTOR, RETRY_TOTAL
 from regybox.exceptions import (
     ClassNotFoundError,
     NoClassesFoundError,
@@ -388,8 +389,8 @@ def test_get_classes_tags_raises_when_no_classes_after_retries() -> None:
     ):
         get_classes_tags(2024, 7, 1)
 
-    assert mock_get.call_count == 5
-    assert mock_sleep.call_count == 4
+    assert mock_get.call_count == RETRY_TOTAL + 1
+    assert mock_sleep.call_count == RETRY_TOTAL
 
 
 def test_get_classes_tags_retries_empty_class_response() -> None:
@@ -406,7 +407,18 @@ def test_get_classes_tags_retries_empty_class_response() -> None:
 
     assert len(classes) == 1
     assert mock_get.call_count == 2
-    mock_sleep.assert_called_once_with(0.75)
+    mock_sleep.assert_called_once_with(RETRY_BACKOFF_FACTOR)
+
+
+def test_get_classes_tags_empty_retry_budget_stays_under_one_minute() -> None:
+    """Empty class response retries have enough attempts.
+
+    They also avoid waiting too long.
+    """
+    waits = [RETRY_BACKOFF_FACTOR * (2**attempt) for attempt in range(RETRY_TOTAL)]
+
+    assert RETRY_TOTAL > 4
+    assert sum(waits) < 60
 
 
 def test_get_classes_returns_list_of_classes() -> None:
