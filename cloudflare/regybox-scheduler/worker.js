@@ -211,6 +211,44 @@ function eventDetails(props, start, timeZone) {
   };
 }
 
+function isCancelledEvent(props) {
+  return String(props.STATUS ?? "").trim().toUpperCase() === "CANCELLED";
+}
+
+function recurrenceIdValue(props) {
+  return props["RECURRENCE-ID"] ?? null;
+}
+
+function isRecurrenceOverride(props) {
+  return recurrenceIdValue(props) !== null;
+}
+
+function matchingCalendarEvent(props, normalizedNames) {
+  return (
+    props.DTSTART &&
+    props.SUMMARY &&
+    normalizedNames.has(props.SUMMARY.trim().toLowerCase())
+  );
+}
+
+function excludedRecurrenceInstants(overrides) {
+  return overrides
+    .map((props) => parseDate(recurrenceIdValue(props)))
+    .filter((instant) => !Number.isNaN(instant.getTime()));
+}
+
+function appendOverrideInstances({ events, overrides, now, windowEnd, timeZone }) {
+  for (const props of overrides) {
+    if (isCancelledEvent(props)) {
+      continue;
+    }
+    const overrideStart = parseDate(props.DTSTART);
+    if (overrideStart >= now && overrideStart < windowEnd) {
+      events.push(eventDetails(props, overrideStart, timeZone));
+    }
+  }
+}
+
 export function expandCalendarEvents({
   icsText,
   now,
@@ -221,16 +259,37 @@ export function expandCalendarEvents({
   validateCalendarEventNames(calendarEventNames);
   const normalizedNames = new Set(calendarEventNames.map((name) => name.toLowerCase()));
   const windowEnd = new Date(now.getTime() + lookaheadHours * 60 * 60 * 1000);
-  const events = [];
-  for (const props of parseEvents(icsText)) {
-    if (!props.DTSTART || !props.SUMMARY) {
+  const parsedEvents = parseEvents(icsText).filter((props) =>
+    matchingCalendarEvent(props, normalizedNames),
+  );
+  const overridesByUid = new Map();
+  const masterEvents = [];
+
+  for (const props of parsedEvents) {
+    if (isRecurrenceOverride(props)) {
+      const uid = props.UID;
+      if (!uid) {
+        continue;
+      }
+      const overrides = overridesByUid.get(uid) ?? [];
+      overrides.push(props);
+      overridesByUid.set(uid, overrides);
       continue;
     }
-    if (!normalizedNames.has(props.SUMMARY.trim().toLowerCase())) {
-      continue;
+    masterEvents.push(props);
+  }
+
+  const events = [];
+  for (const props of masterEvents) {
+    const overrides = props.UID ? (overridesByUid.get(props.UID) ?? []) : [];
+    if (props.UID) {
+      overridesByUid.delete(props.UID);
     }
     const start = parseDate(props.DTSTART);
-    const excludedDates = parseDateList(props.EXDATE);
+    const excludedDates = [
+      ...parseDateList(props.EXDATE),
+      ...excludedRecurrenceInstants(overrides),
+    ];
     const starts = props.RRULE
       ? recurrenceInstances(start, parseRrule(props.RRULE), now, windowEnd, excludedDates)
       : [start].filter(
@@ -242,7 +301,13 @@ export function expandCalendarEvents({
     events.push(
       ...starts.map((instanceStart) => eventDetails(props, instanceStart, timeZone)),
     );
+    appendOverrideInstances({ events, overrides, now, windowEnd, timeZone });
   }
+
+  for (const overrides of overridesByUid.values()) {
+    appendOverrideInstances({ events, overrides, now, windowEnd, timeZone });
+  }
+
   return events.sort((left, right) => left.start - right.start);
 }
 
