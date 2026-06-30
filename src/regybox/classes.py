@@ -365,27 +365,35 @@ def _find_script_containing(scripts: list[Tag], needle: str) -> str | None:
     return None
 
 
-def _get_classes_tags_with_retry(timestamp: int) -> list[Tag]:
+def _get_classes_tags_with_retry(
+    timestamp: int,
+    *,
+    retry_total: int = RETRY_TOTAL,
+    retry_backoff_factor: float = RETRY_BACKOFF_FACTOR,
+) -> list[Tag]:
     """Fetch class tags, retrying when no classes are found.
 
     Args:
         timestamp: The class date timestamp in milliseconds.
+        retry_total: The number of empty responses to retry after the initial
+            request.
+        retry_backoff_factor: The base delay for exponential retry backoff.
 
     Returns:
         The parsed class tags, or an empty list for a valid response with no
         classes.
     """
-    for attempt in range(RETRY_TOTAL + 1):
+    max_fetch_attempts = retry_total + 1
+    for attempt in range(max_fetch_attempts):
         res_html = get_classes_html(timestamp)
         soup: BeautifulSoup = BeautifulSoup(res_html, "html.parser")
         classes: list[Tag] = soup.find_all("div", attrs={"class": "filtro0"})
         if classes:
             return classes
-        if attempt == RETRY_TOTAL:
-            break
-        wait = RETRY_BACKOFF_FACTOR * (2**attempt)
-        LOGGER.warning(f"No classes found in response; retrying in {wait:.2f} seconds.")
-        time.sleep(wait)
+        if attempt < retry_total:
+            wait = retry_backoff_factor * (2**attempt)
+            LOGGER.warning(f"No classes found in response; retrying in {wait:.2f} seconds.")
+            time.sleep(wait)
     return []
 
 
