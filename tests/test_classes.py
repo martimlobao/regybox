@@ -7,6 +7,8 @@ from bs4 import BeautifulSoup
 from bs4.element import PageElement, Tag
 
 from regybox.classes import (
+    EMPTY_CLASS_RETRY_BACKOFF_FACTOR,
+    EMPTY_CLASS_RETRY_TOTAL,
     Class,
     _get_classes_tags_with_retry,
     get_classes,
@@ -376,6 +378,12 @@ def test_pick_class_raises_when_not_found() -> None:
             class_type="WOD Rato",
             class_date=class_.date,
         )
+
+
+def test_empty_class_retry_defaults_are_independent_from_connection_retries() -> None:
+    """Empty class retries use their own explicit retry budget."""
+    assert EMPTY_CLASS_RETRY_TOTAL == 10
+    assert pytest.approx(0.05) == EMPTY_CLASS_RETRY_BACKOFF_FACTOR
 
 
 def test_get_classes_tags_raises_when_no_classes_after_retries() -> None:

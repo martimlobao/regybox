@@ -13,8 +13,6 @@ from bs4.element import NavigableString, Tag
 from regybox.common import LOGGER, TIMEZONE
 from regybox.connection import (
     DOMAIN,
-    RETRY_BACKOFF_FACTOR,
-    RETRY_TOTAL,
     get_classes_html,
     get_url_html,
 )
@@ -26,6 +24,9 @@ from regybox.exceptions import (
     UnparseableError,
     UserAlreadyEnrolledError,
 )
+
+EMPTY_CLASS_RETRY_TOTAL: int = 10
+EMPTY_CLASS_RETRY_BACKOFF_FACTOR: float = 0.05
 
 
 def parse_capacity_value(value: str) -> int | None:
@@ -368,8 +369,8 @@ def _find_script_containing(scripts: list[Tag], needle: str) -> str | None:
 def _get_classes_tags_with_retry(
     timestamp: int,
     *,
-    retry_total: int = RETRY_TOTAL,
-    retry_backoff_factor: float = RETRY_BACKOFF_FACTOR,
+    retry_total: int = EMPTY_CLASS_RETRY_TOTAL,
+    retry_backoff_factor: float = EMPTY_CLASS_RETRY_BACKOFF_FACTOR,
 ) -> list[Tag]:
     """Fetch class tags, retrying when no classes are found.
 
