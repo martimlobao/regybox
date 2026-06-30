@@ -232,4 +232,3 @@ pyrightconfig.json
 # local stuff
 tmp/
 temp/
-node_modules/
