@@ -244,8 +244,35 @@ The Worker needs a GitHub token that can call the workflow dispatch endpoint.
    repository into the `worker.js` tab.
 8. Click **Deploy**.
 
-If you deploy with Wrangler instead, copy `cloudflare/regybox-scheduler/wrangler.jsonc`, replace
-`replace-with-your-kv-namespace-id`, and run the Worker package from that directory.
+If you deploy with Wrangler instead, set `CF_KV_NAMESPACE_ID` to the KV namespace ID from step 2
+and run the Worker package from [`cloudflare/regybox-scheduler`](cloudflare/regybox-scheduler):
+
+```bash
+cd cloudflare/regybox-scheduler
+CF_KV_NAMESPACE_ID=<your-kv-namespace-id> npm run deploy
+```
+
+From the repository root you can also run `make deploy-worker` after exporting
+`CF_KV_NAMESPACE_ID`.
+
+`npm run deploy` renders `.wrangler.deploy.jsonc` from `wrangler.jsonc` and deploys with
+Wrangler. The committed `wrangler.jsonc` keeps a placeholder namespace ID so the repository stays
+portable.
+
+##### Cloudflare Workers Builds (Git Deploys)
+
+If the Worker is connected to GitHub, set the **Deploy command** to:
+
+```bash
+npm run deploy
+```
+
+In **Settings → Builds → Variables and secrets**, add a secret:
+
+- `CF_KV_NAMESPACE_ID` — the KV namespace ID from step 2.
+
+Workers Builds injects build secrets as environment variables, so `npm run deploy` can render the
+Wrangler config at deploy time without committing your namespace ID.
 
 #### 6. Add Worker Variables and Secrets
 

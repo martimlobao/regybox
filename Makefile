@@ -2,7 +2,7 @@
 JOBS ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 MAKEFLAGS += -j$(JOBS) --output-sync=target
 
-.PHONY: check lint typecheck test test-python test-worker test-strict-roundtrip test-roundtrip-verbose fix repl \
+.PHONY: check lint typecheck test test-python test-worker deploy-worker test-strict-roundtrip test-roundtrip-verbose fix repl \
         lint-ruff lint-ruff-format lint-docfmt lint-bandit lint-yamllint lint-rumdl lint-tombi \
         type-ty type-pyright
 
@@ -57,6 +57,9 @@ test-python:
 
 test-worker:
 	cd cloudflare/regybox-scheduler && npm test
+
+deploy-worker:
+	cd cloudflare/regybox-scheduler && npm run deploy
 
 ########
 # Fixes (keep sequential to avoid races)

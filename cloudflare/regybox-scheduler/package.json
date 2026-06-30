@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "deploy": "node scripts/render-wrangler-config.mjs && npx wrangler deploy -c .wrangler.deploy.jsonc"
   }
 }
