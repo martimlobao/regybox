@@ -231,18 +231,26 @@ function masterMatchesCalendarEvent(props, normalizedNames) {
   );
 }
 
+function tryParseDate(value) {
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = parseDate(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  } catch {
+    return null;
+  }
+}
+
 function excludedRecurrenceInstants(overrides) {
   return overrides
-    .map((props) => parseDate(recurrenceIdValue(props)))
-    .filter((instant) => !Number.isNaN(instant.getTime()));
+    .map((props) => tryParseDate(recurrenceIdValue(props)))
+    .filter((instant) => instant !== null);
 }
 
 function overrideStartInstant(props) {
-  if (!props.DTSTART) {
-    return null;
-  }
-  const parsed = parseDate(props.DTSTART);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  return tryParseDate(props.DTSTART);
 }
 
 function appendOverrideInstances({

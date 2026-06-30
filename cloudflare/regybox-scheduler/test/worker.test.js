@@ -781,6 +781,39 @@ test("cancelled recurrence override without dtstart still removes instance", () 
   assert.deepEqual(events, []);
 });
 
+test("malformed recurrence-id on one override does not abort expansion", () => {
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:weekly-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260626T053000Z",
+    "RRULE:FREQ=WEEKLY;COUNT=2",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "UID:weekly-class",
+    "RECURRENCE-ID:not-a-valid-date",
+    "STATUS:CANCELLED",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "UID:weekly-class",
+    "RECURRENCE-ID:20260703T053000Z",
+    "STATUS:CANCELLED",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const events = expandCalendarEvents({
+    icsText: ics,
+    now: new Date("2026-06-29T00:00:00Z"),
+    lookaheadHours: 120,
+    calendarEventNames: ["Crossfit"],
+    timeZone: "Europe/Lisbon",
+  });
+
+  assert.deepEqual(events, []);
+});
+
 test("buildPlan unenrolls cancelled recurring instance without new enroll", async () => {
   const staleKey = "regybox:v1:calendar:weekly-class:2026-07-03T06:30:00.000Z";
   const kv = makeKv(
