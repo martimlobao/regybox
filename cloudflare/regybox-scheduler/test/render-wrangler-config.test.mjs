@@ -4,18 +4,50 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { loadRepoDotEnv, renderWranglerConfig } from "../scripts/render-wrangler-config.mjs";
+import {
+  collectWorkerVars,
+  loadRepoDotEnv,
+  renderWranglerConfig,
+} from "../scripts/render-wrangler-config.mjs";
 
 const template = `{
+  "keep_vars": true,
   "kv_namespaces": [
     { "binding": "REGYBOX_STATE", "id": "replace-with-your-kv-namespace-id" }
   ]
 }`;
 
 test("renderWranglerConfig substitutes the kv namespace id", () => {
-  const rendered = renderWranglerConfig(template, "test-kv-namespace-id");
-  assert.match(rendered, /test-kv-namespace-id/);
-  assert.doesNotMatch(rendered, /replace-with-your-kv-namespace-id/);
+  const rendered = JSON.parse(renderWranglerConfig(template, "test-kv-namespace-id"));
+  assert.equal(rendered.kv_namespaces[0].id, "test-kv-namespace-id");
+  assert.equal(rendered.vars, undefined);
+});
+
+test("renderWranglerConfig injects worker vars from env", () => {
+  const rendered = JSON.parse(
+    renderWranglerConfig(template, "test-kv-namespace-id", {
+      GITHUB_OWNER: "example-owner",
+      CLASS_TYPE: "WOD",
+    }),
+  );
+  assert.deepEqual(rendered.vars, {
+    GITHUB_OWNER: "example-owner",
+    CLASS_TYPE: "WOD",
+  });
+});
+
+test("collectWorkerVars ignores empty values", () => {
+  assert.deepEqual(
+    collectWorkerVars({
+      GITHUB_OWNER: " example-owner ",
+      GITHUB_REPO: "   ",
+      LOOKAHEAD_HOURS: "73",
+    }),
+    {
+      GITHUB_OWNER: "example-owner",
+      LOOKAHEAD_HOURS: "73",
+    },
+  );
 });
 
 test("renderWranglerConfig rejects a missing namespace id", () => {

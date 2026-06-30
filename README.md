@@ -257,7 +257,22 @@ From the repository root you can also run `make deploy-worker` after exporting
 
 `npm run deploy` renders `.wrangler.deploy.jsonc` from `wrangler.jsonc` and deploys with
 Wrangler. The committed `wrangler.jsonc` keeps a placeholder namespace ID so the repository stays
-portable.
+portable. Worker text variables are not committed: set them in the Cloudflare dashboard (step 6) or
+provide them as environment variables when deploying. `keep_vars` is enabled so deploys update
+worker code without removing dashboard variables that are not present in the rendered config.
+
+Optional deploy-time text variables (for example in `.env` locally or Workers Builds secrets):
+
+- `CALENDAR_EVENT_NAMES`
+- `CLASS_TYPE`
+- `GITHUB_OWNER`
+- `GITHUB_REPO`
+- `GITHUB_WORKFLOW`
+- `GITHUB_REF`
+- `LOOKAHEAD_HOURS`
+- `TIMEZONE`
+
+Keep `GITHUB_TOKEN` and `CALENDAR_URL` as Worker secrets in the dashboard, not in `wrangler.jsonc`.
 
 ##### Cloudflare Workers Builds (Git Deploys)
 
@@ -267,12 +282,14 @@ If the Worker is connected to GitHub, set the **Deploy command** to:
 npm run deploy
 ```
 
-In **Settings → Builds → Variables and secrets**, add a secret:
+In **Settings → Builds → Variables and secrets**, add secrets as needed:
 
-- `CF_KV_NAMESPACE_ID` — the KV namespace ID from step 2.
+- `CF_KV_NAMESPACE_ID` — required; the KV namespace ID from step 2.
+- Any optional deploy-time text variables listed above if you want Git deploys to set them instead
+  of using only the dashboard.
 
 Workers Builds injects build secrets as environment variables, so `npm run deploy` can render the
-Wrangler config at deploy time without committing your namespace ID.
+Wrangler config at deploy time without committing your namespace ID or account-specific settings.
 
 #### 6. Add Worker Variables and Secrets
 
