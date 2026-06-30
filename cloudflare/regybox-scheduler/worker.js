@@ -191,13 +191,13 @@ function zonedDateParts(date, timeZone) {
   );
 }
 
-function eventDetails(props, start, timeZone) {
-  const uid = props.UID || `${props.SUMMARY}:${start.toISOString()}`;
+function eventDetails(props, start, timeZone, summary = props.SUMMARY) {
+  const uid = props.UID || `${summary}:${start.toISOString()}`;
   const fingerprint = `${uid}:${start.toISOString()}`;
   const isUtc = props.DTSTART.trim().endsWith("Z");
   const zoned = isUtc ? zonedDateParts(start, timeZone) : null;
   return {
-    summary: props.SUMMARY,
+    summary,
     uid,
     start,
     classDate: zoned
@@ -223,7 +223,7 @@ function isRecurrenceOverride(props) {
   return recurrenceIdValue(props) !== null;
 }
 
-function matchingCalendarEvent(props, normalizedNames) {
+function masterMatchesCalendarEvent(props, normalizedNames) {
   return (
     props.DTSTART &&
     props.SUMMARY &&
@@ -237,14 +237,35 @@ function excludedRecurrenceInstants(overrides) {
     .filter((instant) => !Number.isNaN(instant.getTime()));
 }
 
-function appendOverrideInstances({ events, overrides, now, windowEnd, timeZone }) {
+function overrideStartInstant(props) {
+  if (!props.DTSTART) {
+    return null;
+  }
+  const parsed = parseDate(props.DTSTART);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function appendOverrideInstances({
+  events,
+  overrides,
+  now,
+  windowEnd,
+  timeZone,
+  masterSummary,
+}) {
   for (const props of overrides) {
     if (isCancelledEvent(props)) {
       continue;
     }
-    const overrideStart = parseDate(props.DTSTART);
+    const overrideStart = overrideStartInstant(props);
+    if (!overrideStart) {
+      continue;
+    }
+    // Match recurrenceInstances: only emit overrides inside the lookahead window.
     if (overrideStart >= now && overrideStart < windowEnd) {
-      events.push(eventDetails(props, overrideStart, timeZone));
+      events.push(
+        eventDetails(props, overrideStart, timeZone, props.SUMMARY ?? masterSummary),
+      );
     }
   }
 }
@@ -259,13 +280,10 @@ export function expandCalendarEvents({
   validateCalendarEventNames(calendarEventNames);
   const normalizedNames = new Set(calendarEventNames.map((name) => name.toLowerCase()));
   const windowEnd = new Date(now.getTime() + lookaheadHours * 60 * 60 * 1000);
-  const parsedEvents = parseEvents(icsText).filter((props) =>
-    matchingCalendarEvent(props, normalizedNames),
-  );
   const overridesByUid = new Map();
   const masterEvents = [];
 
-  for (const props of parsedEvents) {
+  for (const props of parseEvents(icsText)) {
     if (isRecurrenceOverride(props)) {
       const uid = props.UID;
       if (!uid) {
@@ -276,7 +294,16 @@ export function expandCalendarEvents({
       overridesByUid.set(uid, overrides);
       continue;
     }
-    masterEvents.push(props);
+    if (masterMatchesCalendarEvent(props, normalizedNames)) {
+      masterEvents.push(props);
+    }
+  }
+
+  const trackedUids = new Set(masterEvents.map((props) => props.UID).filter(Boolean));
+  for (const uid of overridesByUid.keys()) {
+    if (!trackedUids.has(uid)) {
+      overridesByUid.delete(uid);
+    }
   }
 
   const events = [];
@@ -301,11 +328,14 @@ export function expandCalendarEvents({
     events.push(
       ...starts.map((instanceStart) => eventDetails(props, instanceStart, timeZone)),
     );
-    appendOverrideInstances({ events, overrides, now, windowEnd, timeZone });
-  }
-
-  for (const overrides of overridesByUid.values()) {
-    appendOverrideInstances({ events, overrides, now, windowEnd, timeZone });
+    appendOverrideInstances({
+      events,
+      overrides,
+      now,
+      windowEnd,
+      timeZone,
+      masterSummary: props.SUMMARY,
+    });
   }
 
   return events.sort((left, right) => left.start - right.start);

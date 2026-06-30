@@ -693,6 +693,145 @@ test("cancelled recurrence override removes instance without adding replacement"
   assert.deepEqual(events, []);
 });
 
+test("moved recurring override without summary inherits master summary", () => {
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:weekly-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260626T053000Z",
+    "RRULE:FREQ=WEEKLY;COUNT=2",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "UID:weekly-class",
+    "RECURRENCE-ID:20260703T053000Z",
+    "DTSTART:20260703T073000Z",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const events = expandCalendarEvents({
+    icsText: ics,
+    now: new Date("2026-06-29T00:00:00Z"),
+    lookaheadHours: 120,
+    calendarEventNames: ["Crossfit"],
+    timeZone: "Europe/Lisbon",
+  });
+
+  assert.deepEqual(
+    events.map((event) => [event.classDate, event.classTime, event.summary]),
+    [["2026-07-03", "08:30", "Crossfit"]],
+  );
+});
+
+test("cancelled recurrence override without summary still removes instance", () => {
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:weekly-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260626T053000Z",
+    "RRULE:FREQ=WEEKLY;COUNT=2",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "UID:weekly-class",
+    "RECURRENCE-ID:20260703T053000Z",
+    "STATUS:CANCELLED",
+    "DTSTART:20260703T053000Z",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const events = expandCalendarEvents({
+    icsText: ics,
+    now: new Date("2026-06-29T00:00:00Z"),
+    lookaheadHours: 120,
+    calendarEventNames: ["Crossfit"],
+    timeZone: "Europe/Lisbon",
+  });
+
+  assert.deepEqual(events, []);
+});
+
+test("cancelled recurrence override without dtstart still removes instance", () => {
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:weekly-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260626T053000Z",
+    "RRULE:FREQ=WEEKLY;COUNT=2",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "UID:weekly-class",
+    "RECURRENCE-ID:20260703T053000Z",
+    "STATUS:CANCELLED",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const events = expandCalendarEvents({
+    icsText: ics,
+    now: new Date("2026-06-29T00:00:00Z"),
+    lookaheadHours: 120,
+    calendarEventNames: ["Crossfit"],
+    timeZone: "Europe/Lisbon",
+  });
+
+  assert.deepEqual(events, []);
+});
+
+test("buildPlan unenrolls cancelled recurring instance without new enroll", async () => {
+  const staleKey = "regybox:v1:calendar:weekly-class:2026-07-03T06:30:00.000Z";
+  const kv = makeKv(
+    new Map([
+      [
+        staleKey,
+        JSON.stringify({
+          state: "enrolled",
+          classDate: "2026-07-03",
+          classTime: "06:30",
+          classType: "WOD",
+          calendarEventName: "Crossfit",
+          calendarFingerprint: "weekly-class:2026-07-03T06:30:00.000Z",
+        }),
+      ],
+    ]),
+  );
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:weekly-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260626T053000Z",
+    "RRULE:FREQ=WEEKLY;COUNT=2",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "UID:weekly-class",
+    "RECURRENCE-ID:20260703T053000Z",
+    "STATUS:CANCELLED",
+    "DTSTART:20260703T053000Z",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const plan = await buildPlan({
+    env: baseEnv,
+    kv,
+    icsText: ics,
+    now: new Date("2026-06-30T12:00:00Z"),
+  });
+
+  assert.deepEqual(
+    plan.dispatches.map((dispatch) => [
+      dispatch.operation,
+      dispatch.inputs["class-date"],
+      dispatch.inputs["class-time"],
+    ]),
+    [["unenroll", "2026-07-03", "06:30"]],
+  );
+});
+
 test("moved recurring instance dispatches enroll at new time and unenrolls stale slot", async () => {
   const staleKey = "regybox:v1:calendar:weekly-class:2026-07-03T06:30:00.000Z";
   const kv = makeKv(
