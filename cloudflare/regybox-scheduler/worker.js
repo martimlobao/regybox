@@ -174,28 +174,30 @@ function pad(value) {
   return String(value).padStart(2, "0");
 }
 
-function zonedDateParts(date, timeZone) {
-  return Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(date)
-      .filter((part) => part.type !== "literal")
-      .map((part) => [part.type, part.value]),
-  );
+function createZonedDateParts(timeZone) {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  return (date) =>
+    Object.fromEntries(
+      formatter
+        .formatToParts(date)
+        .filter((part) => part.type !== "literal")
+        .map((part) => [part.type, part.value]),
+    );
 }
 
-function eventDetails(props, start, timeZone, summary = props.SUMMARY) {
+function eventDetails(props, start, zonedDateParts, summary = props.SUMMARY) {
   const uid = props.UID || `${summary}:${start.toISOString()}`;
   const fingerprint = `${uid}:${start.toISOString()}`;
   const isUtc = props.DTSTART.trim().endsWith("Z");
-  const zoned = isUtc ? zonedDateParts(start, timeZone) : null;
+  const zoned = isUtc ? zonedDateParts(start) : null;
   return {
     summary,
     uid,
@@ -258,7 +260,7 @@ function appendOverrideInstances({
   overrides,
   now,
   windowEnd,
-  timeZone,
+  zonedDateParts,
   masterSummary,
 }) {
   for (const props of overrides) {
@@ -272,7 +274,7 @@ function appendOverrideInstances({
     // Match recurrenceInstances: only emit overrides inside the lookahead window.
     if (overrideStart >= now && overrideStart < windowEnd) {
       events.push(
-        eventDetails(props, overrideStart, timeZone, props.SUMMARY ?? masterSummary),
+        eventDetails(props, overrideStart, zonedDateParts, props.SUMMARY ?? masterSummary),
       );
     }
   }
@@ -288,6 +290,7 @@ export function expandCalendarEvents({
   validateCalendarEventNames(calendarEventNames);
   const normalizedNames = new Set(calendarEventNames.map((name) => name.toLowerCase()));
   const windowEnd = new Date(now.getTime() + lookaheadHours * 60 * 60 * 1000);
+  const zonedDateParts = createZonedDateParts(timeZone);
   const overridesByUid = new Map();
   const masterEvents = [];
 
@@ -334,14 +337,14 @@ export function expandCalendarEvents({
             !excludedDates.some((excluded) => sameUtcInstant(excluded, candidate)),
         );
     events.push(
-      ...starts.map((instanceStart) => eventDetails(props, instanceStart, timeZone)),
+      ...starts.map((instanceStart) => eventDetails(props, instanceStart, zonedDateParts)),
     );
     appendOverrideInstances({
       events,
       overrides,
       now,
       windowEnd,
-      timeZone,
+      zonedDateParts,
       masterSummary: props.SUMMARY,
     });
   }
@@ -353,8 +356,14 @@ async function listKvEntries(kv) {
   if (typeof kv.list !== "function") {
     return [];
   }
-  const response = await kv.list({ prefix: KV_PREFIX });
-  return response.keys ?? [];
+  const keys = [];
+  let cursor;
+  do {
+    const response = await kv.list({ prefix: KV_PREFIX, cursor });
+    keys.push(...(response.keys ?? []));
+    cursor = response.list_complete === false ? response.cursor : undefined;
+  } while (cursor);
+  return keys;
 }
 
 async function readJson(kv, key) {
@@ -452,6 +461,7 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
   const cachedKvEntries = await Promise.all(
     kvEntries.map(async ({ name }) => [name, await readJson(kv, name)]),
   );
+  const cachedByName = new Map(cachedKvEntries);
   const enrolledSlots = new Set(
     cachedKvEntries
       .filter(([, cached]) => cached?.state === "enrolled" && cachedEventIsFuture(cached, now))
@@ -460,7 +470,12 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
   );
 
   const eventCacheEntries = await Promise.all(
-    events.map(async (event) => [event, await readJson(kv, event.cacheKey)]),
+    events.map(async (event) => [
+      event,
+      cachedByName.has(event.cacheKey)
+        ? cachedByName.get(event.cacheKey)
+        : await readJson(kv, event.cacheKey),
+    ]),
   );
   const plannedEnrollmentSlots = new Set();
 
