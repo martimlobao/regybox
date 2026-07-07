@@ -19,9 +19,12 @@ const baseEnv = {
 
 function makeKv(existing = new Map()) {
   const writes = [];
+  const gets = [];
   return {
     writes,
+    gets,
     async get(key) {
+      gets.push(key);
       return existing.get(key) ?? null;
     },
     async put(key, value) {
@@ -33,6 +36,26 @@ function makeKv(existing = new Map()) {
         keys: [...existing.keys()]
           .filter((name) => name.startsWith(prefix))
           .map((name) => ({ name })),
+      };
+    },
+  };
+}
+
+function makePaginatedKv(pages, values) {
+  return {
+    async get(key) {
+      return values.get(key) ?? null;
+    },
+    async list({ prefix, cursor }) {
+      const pageIndex = cursor ? Number.parseInt(cursor, 10) : 0;
+      const keys = pages[pageIndex]
+        .filter((name) => name.startsWith(prefix))
+        .map((name) => ({ name }));
+      const nextPageIndex = pageIndex + 1;
+      return {
+        keys,
+        list_complete: nextPageIndex >= pages.length,
+        cursor: String(nextPageIndex),
       };
     },
   };
@@ -177,6 +200,73 @@ test("existing KV entry with matching calendar event skips dispatch", async () =
   });
 
   assert.deepEqual(plan.dispatches, []);
+});
+
+test("buildPlan reuses listed KV values for active event cache checks", async () => {
+  const key = "regybox:v1:calendar:one-class:2026-06-18T06:30:00.000Z";
+  const kv = makeKv(new Map([[key, JSON.stringify({ state: "enrolled" })]]));
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:one-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260618T063000Z",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  await buildPlan({
+    env: baseEnv,
+    kv,
+    icsText: ics,
+    now: new Date("2026-06-18T00:00:00Z"),
+  });
+
+  assert.deepEqual(kv.gets, [key]);
+});
+
+test("buildPlan sweeps stale enrolled entries across paginated KV listings", async () => {
+  const firstPageKey = "regybox:v1:calendar:old-class:2026-06-18T06:30:00.000Z";
+  const secondPageKey = "regybox:v1:calendar:old-class:2026-06-19T06:30:00.000Z";
+  const kv = makePaginatedKv(
+    [[firstPageKey], [secondPageKey]],
+    new Map([
+      [
+        firstPageKey,
+        JSON.stringify({
+          state: "enrolled",
+          classDate: "2026-06-18",
+          classTime: "06:30",
+          classType: "WOD",
+          calendarEventName: "Crossfit",
+          calendarFingerprint: "old-class:2026-06-18T06:30:00.000Z",
+        }),
+      ],
+      [
+        secondPageKey,
+        JSON.stringify({
+          state: "enrolled",
+          classDate: "2026-06-19",
+          classTime: "06:30",
+          classType: "WOD",
+          calendarEventName: "Crossfit",
+          calendarFingerprint: "old-class:2026-06-19T06:30:00.000Z",
+        }),
+      ],
+    ]),
+  );
+
+  const plan = await buildPlan({
+    env: baseEnv,
+    kv,
+    icsText: "BEGIN:VCALENDAR\r\nEND:VCALENDAR",
+    now: new Date("2026-06-18T00:00:00Z"),
+  });
+
+  assert.deepEqual(
+    plan.dispatches.map((dispatch) => dispatch.inputs["class-date"]),
+    ["2026-06-18", "2026-06-19"],
+  );
 });
 
 test("not-open KV entry skips dispatch when opening is far away and recently checked", async () => {
