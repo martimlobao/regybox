@@ -5,7 +5,5 @@ REGYBOX_USER=
 # Required. Copy the "Secret address in iCal format" from Google Calendar settings.
 CALENDAR_URL=
 
-# Optional email notifications. Use a Gmail address and its app password.
-EMAIL_USERNAME=
-EMAIL_PASSWORD=
-EMAIL_TO=
+# Email notifications are optional. Add EMAIL_USERNAME, EMAIL_PASSWORD and EMAIL_TO after deploy
+# under the Worker's Settings -> Variables and Secrets; the status page shows whether they are active.

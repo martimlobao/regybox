@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "deploy": "node scripts/render-wrangler-config.mjs && wrangler deploy -c .wrangler.deploy.jsonc"
+    "deploy": "wrangler deploy",
+    "deploy:manual": "node scripts/render-wrangler-config.mjs && wrangler deploy -c .wrangler.deploy.jsonc"
   },
   "dependencies": {
     "worker-mailer": "^1.1.5"
@@ -26,20 +27,8 @@
       "CALENDAR_URL": {
         "description": "Paste the secret iCal address from your Google Calendar settings."
       },
-      "EMAIL_USERNAME": {
-        "description": "Optional Gmail address used to send notifications."
-      },
-      "EMAIL_PASSWORD": {
-        "description": "Optional Gmail app password used to send notifications."
-      },
-      "EMAIL_TO": {
-        "description": "Optional email address that receives notifications."
-      },
-      "CALENDAR_EVENT_NAMES": {
-        "description": "Calendar event title or titles that mean a class, separated by commas."
-      },
-      "CLASS_TYPE": {
-        "description": "Exact Regybox class name or names to use as a fallback, separated by commas."
+      "CLASS_MAP": {
+        "description": "Which calendar events book which Regybox classes, like: CrossFit = WOD. Separate several rules with ';' and give backup class names with commas: Weightlifting = Weightlifting Rato; CrossFit = WOD, Weekend WOD."
       },
       "TIMEZONE": {
         "description": "Timezone used to interpret class times."

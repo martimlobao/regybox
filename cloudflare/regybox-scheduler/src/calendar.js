@@ -9,6 +9,45 @@ export function normalizeList(value) {
     .filter(Boolean);
 }
 
+export function parseClassMap(value) {
+  const rules = [];
+  const eventNames = new Set();
+  for (const rawRule of String(value ?? "").split(";")) {
+    if (!rawRule.trim()) {
+      continue;
+    }
+    const separator = rawRule.indexOf("=");
+    const badRule = rawRule;
+    if (separator === -1) {
+      throw new Error(`Invalid CLASS_MAP rule "${badRule}": expected Event Name = Class Name.`);
+    }
+    const eventName = rawRule.slice(0, separator).trim();
+    const classType = normalizeList(rawRule.slice(separator + 1)).join(", ");
+    if (!eventName || !classType) {
+      throw new Error(`Invalid CLASS_MAP rule "${badRule}": both event and class names are required.`);
+    }
+    const normalizedEventName = eventName.toLowerCase();
+    if (eventNames.has(normalizedEventName)) {
+      throw new Error(`Duplicate CLASS_MAP event name "${eventName}" in rule "${badRule}".`);
+    }
+    eventNames.add(normalizedEventName);
+    rules.push({ eventName, classType });
+  }
+  if (rules.length === 0) {
+    throw new Error("CLASS_MAP must include at least one Event Name = Class Name rule.");
+  }
+  return rules;
+}
+
+export function resolveClassRules(env) {
+  if (String(env.CLASS_MAP ?? "").trim()) {
+    return parseClassMap(env.CLASS_MAP);
+  }
+  const calendarEventNames = normalizeList(env.CALENDAR_EVENT_NAMES);
+  validateCalendarEventNames(calendarEventNames);
+  return calendarEventNames.map((eventName) => ({ eventName, classType: env.CLASS_TYPE }));
+}
+
 export function defaultLookaheadHours(env) {
   const parsed = Number.parseInt(env.LOOKAHEAD_HOURS ?? "73", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 73;
@@ -193,7 +232,7 @@ function createZonedDateParts(timeZone) {
     );
 }
 
-function eventDetails(props, start, zonedDateParts, summary = props.SUMMARY) {
+function eventDetails(props, start, zonedDateParts, classType, summary = props.SUMMARY) {
   const uid = props.UID || `${summary}:${start.toISOString()}`;
   const fingerprint = `${uid}:${start.toISOString()}`;
   const isUtc = props.DTSTART.trim().endsWith("Z");
@@ -210,6 +249,7 @@ function eventDetails(props, start, zonedDateParts, summary = props.SUMMARY) {
       : `${pad(start.getUTCHours())}:${pad(start.getUTCMinutes())}`,
     fingerprint,
     cacheKey: `${KV_PREFIX}${fingerprint}`,
+    classType,
   };
 }
 
@@ -225,12 +265,15 @@ function isRecurrenceOverride(props) {
   return recurrenceIdValue(props) !== null;
 }
 
-function masterMatchesCalendarEvent(props, normalizedNames) {
-  return (
-    props.DTSTART &&
-    props.SUMMARY &&
-    normalizedNames.has(props.SUMMARY.trim().toLowerCase())
-  );
+function classRuleForSummary(summary, rulesByEventName) {
+  return rulesByEventName.get(String(summary ?? "").trim().toLowerCase()) ?? null;
+}
+
+function masterClassRule(props, rulesByEventName) {
+  if (!props.DTSTART || !props.SUMMARY) {
+    return null;
+  }
+  return classRuleForSummary(props.SUMMARY, rulesByEventName);
 }
 
 function tryParseDate(value) {
@@ -262,6 +305,8 @@ function appendOverrideInstances({
   windowEnd,
   zonedDateParts,
   masterSummary,
+  classRule,
+  rulesByEventName,
 }) {
   for (const props of overrides) {
     if (isCancelledEvent(props)) {
@@ -273,8 +318,15 @@ function appendOverrideInstances({
     }
     // Match recurrenceInstances: only emit overrides inside the lookahead window.
     if (overrideStart >= now && overrideStart < windowEnd) {
+      const summary = props.SUMMARY ?? masterSummary;
       events.push(
-        eventDetails(props, overrideStart, zonedDateParts, props.SUMMARY ?? masterSummary),
+        eventDetails(
+          props,
+          overrideStart,
+          zonedDateParts,
+          classRuleForSummary(summary, rulesByEventName)?.classType ?? classRule.classType,
+          summary,
+        ),
       );
     }
   }
@@ -285,10 +337,17 @@ export function expandCalendarEvents({
   now,
   lookaheadHours,
   calendarEventNames,
+  classRules,
   timeZone = "Europe/Lisbon",
 }) {
-  validateCalendarEventNames(calendarEventNames);
-  const normalizedNames = new Set(calendarEventNames.map((name) => name.toLowerCase()));
+  const resolvedRules = classRules ?? (calendarEventNames ?? []).map((eventName) => ({
+    eventName,
+    classType: undefined,
+  }));
+  validateCalendarEventNames(resolvedRules.map((rule) => rule.eventName));
+  const rulesByEventName = new Map(
+    resolvedRules.map((rule) => [rule.eventName.trim().toLowerCase(), rule]),
+  );
   const windowEnd = new Date(now.getTime() + lookaheadHours * 60 * 60 * 1000);
   const zonedDateParts = createZonedDateParts(timeZone);
   const overridesByUid = new Map();
@@ -305,12 +364,13 @@ export function expandCalendarEvents({
       overridesByUid.set(uid, overrides);
       continue;
     }
-    if (masterMatchesCalendarEvent(props, normalizedNames)) {
-      masterEvents.push(props);
+    const classRule = masterClassRule(props, rulesByEventName);
+    if (classRule) {
+      masterEvents.push({ props, classRule });
     }
   }
 
-  const trackedUids = new Set(masterEvents.map((props) => props.UID).filter(Boolean));
+  const trackedUids = new Set(masterEvents.map(({ props }) => props.UID).filter(Boolean));
   for (const uid of overridesByUid.keys()) {
     if (!trackedUids.has(uid)) {
       overridesByUid.delete(uid);
@@ -318,7 +378,7 @@ export function expandCalendarEvents({
   }
 
   const events = [];
-  for (const props of masterEvents) {
+  for (const { props, classRule } of masterEvents) {
     const overrides = props.UID ? (overridesByUid.get(props.UID) ?? []) : [];
     if (props.UID) {
       overridesByUid.delete(props.UID);
@@ -337,7 +397,9 @@ export function expandCalendarEvents({
             !excludedDates.some((excluded) => sameUtcInstant(excluded, candidate)),
         );
     events.push(
-      ...starts.map((instanceStart) => eventDetails(props, instanceStart, zonedDateParts)),
+      ...starts.map((instanceStart) =>
+        eventDetails(props, instanceStart, zonedDateParts, classRule.classType),
+      ),
     );
     appendOverrideInstances({
       events,
@@ -346,6 +408,8 @@ export function expandCalendarEvents({
       windowEnd,
       zonedDateParts,
       masterSummary: props.SUMMARY,
+      classRule,
+      rulesByEventName,
     });
   }
 
@@ -392,8 +456,8 @@ function classSlotKey(classDate, classTime, classType) {
   return `${classDate}T${classTime}:${classType}`;
 }
 
-function eventSlotKey(event, env) {
-  return classSlotKey(event.classDate, event.classTime, env.CLASS_TYPE);
+function eventSlotKey(event) {
+  return classSlotKey(event.classDate, event.classTime, event.classType);
 }
 
 function cachedSlotKey(cached) {
@@ -423,10 +487,10 @@ function notOpenShouldDispatch(cached, now) {
   return now.getTime() - lastCheckedAt.getTime() >= NOT_OPEN_REFRESH_MS;
 }
 
-function dispatchPayload({ env, operation, event, cacheKey, cached }) {
+function dispatchPayload({ operation, event, cacheKey, cached }) {
   const classDate = event?.classDate ?? cached.classDate;
   const classTime = event?.classTime ?? cached.classTime;
-  const classType = event ? env.CLASS_TYPE : cached.classType;
+  const classType = event ? event.classType : cached.classType;
   const fingerprint = event?.fingerprint ?? cached.calendarFingerprint ?? "";
   const calendarEventName = event?.summary ?? cached.calendarEventName ?? "";
   return {
@@ -445,17 +509,16 @@ function dispatchPayload({ env, operation, event, cacheKey, cached }) {
 
 export async function buildPlan({ env, kv, icsText, now = new Date() }) {
   const lookaheadHours = defaultLookaheadHours(env);
-  const calendarEventNames = normalizeList(env.CALENDAR_EVENT_NAMES);
-  validateCalendarEventNames(calendarEventNames);
+  const classRules = resolveClassRules(env);
   const events = expandCalendarEvents({
     icsText,
     now,
     lookaheadHours,
-    calendarEventNames,
+    classRules,
     timeZone: env.TIMEZONE || "Europe/Lisbon",
   });
   const activeKeys = new Set(events.map((event) => event.cacheKey));
-  const activeSlots = new Set(events.map((event) => eventSlotKey(event, env)).filter(Boolean));
+  const activeSlots = new Set(events.map((event) => eventSlotKey(event)).filter(Boolean));
   const dispatches = [];
   const kvEntries = await listKvEntries(kv);
   const cachedKvEntries = await Promise.all(
@@ -480,7 +543,7 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
   const plannedEnrollmentSlots = new Set();
 
   for (const [event, cached] of eventCacheEntries) {
-    const slotKey = eventSlotKey(event, env);
+    const slotKey = eventSlotKey(event);
     if (
       (!cached || (cached.state !== "enrolled" && notOpenShouldDispatch(cached, now))) &&
       !enrolledSlots.has(slotKey) &&
@@ -488,7 +551,6 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
     ) {
       dispatches.push(
         dispatchPayload({
-          env,
           operation: "enroll",
           event,
           cacheKey: event.cacheKey,
@@ -508,7 +570,6 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
     ) {
       dispatches.push(
         dispatchPayload({
-          env,
           operation: "unenroll",
           event: null,
           cacheKey: name,

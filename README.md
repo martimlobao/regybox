@@ -50,17 +50,31 @@ GitHub account (both free — GitHub is only used to store your copy of the code
 2. Fill in the values it asks for:
     - `PHPSESSID` and `REGYBOX_USER` — the cookie values from step 1.
     - `CALENDAR_URL` — the secret calendar link from step 2.
-    - `CALENDAR_EVENT_NAMES` — the event title on your calendar that means
-      "class", for example `CrossFit`.
-    - `CLASS_TYPE` — the exact class name in Regybox, for example `WOD`.
-    - `EMAIL_USERNAME`, `EMAIL_PASSWORD`, `EMAIL_TO` — optional; fill these in if
-      you want a confirmation email (for Gmail, use an
-      [App Password](https://myaccount.google.com/apppasswords), not your normal
-      password).
+    - `CLASS_MAP` — which calendar events book which Regybox classes. Each rule is
+      `Calendar event = Regybox class`; separate several rules with `;` and give
+      backup class names with commas. Examples:
+
+      ```text
+      CrossFit = WOD
+      Weightlifting = Weightlifting Rato; CrossFit = WOD, Weekend WOD
+      ```
+
+      The second example books `Weightlifting Rato` for calendar events titled
+      "Weightlifting", and for events titled "CrossFit" tries `WOD` first and
+      `Weekend WOD` if there is no `WOD` at that time.
 3. Click **Create and deploy**. Cloudflare creates the storage and the half-hourly
    schedule automatically.
 
-### 4. Check That It Works
+### 4. Optional: Turn on Email Notifications
+
+After the Worker is deployed, open it in the Cloudflare dashboard and go to
+**Settings → Variables and Secrets**. Add three secrets: `EMAIL_USERNAME` and
+`EMAIL_TO` (usually the same address) and `EMAIL_PASSWORD` — for Gmail, use an
+[App Password](https://myaccount.google.com/apppasswords), not your normal
+password. You will get an email when a class is booked or cancelled, or when
+something needs your attention (like an expired login). No-op runs stay silent.
+
+### 5. Check That It Works
 
 Open your Worker's page (Cloudflare dashboard → **Workers & Pages** →
 **regybox-scheduler** → the `workers.dev` link). It shows a plain-English
@@ -232,15 +246,19 @@ This approach is different from a fixed GitHub schedule:
 - If you manually unenroll from a class, the KV entry suppresses re-enrollment while the calendar
   event remains present.
 
-Calendar event names and Regybox class names are configured separately:
+Calendar event names and Regybox class names are configured with the same `CLASS_MAP` variable
+used by the one-click setup, for example `CLASS_MAP=Crossfit = WOD`. Older deployments that set
+`CALENDAR_EVENT_NAMES` and `CLASS_TYPE` keep working unchanged when `CLASS_MAP` is not set:
 
 ```text
 CALENDAR_EVENT_NAMES=Crossfit
 CLASS_TYPE=WOD
 ```
 
-You can provide more than one value by separating names with commas, for example
-`CALENDAR_EVENT_NAMES=Crossfit,Strength` or `CLASS_TYPE=WOD,Weekend WOD`.
+With the legacy pair, commas provide multiple values, for example
+`CALENDAR_EVENT_NAMES=Crossfit,Strength` or `CLASS_TYPE=WOD,Weekend WOD`. Note that the legacy
+pair applies the same `CLASS_TYPE` to every calendar event name; use `CLASS_MAP` when different
+events should book different classes.
 
 ### Cloudflare Setup
 
@@ -339,8 +357,9 @@ worker code without removing dashboard variables that are not present in the ren
 
 Optional deploy-time text variables (for example in `.env` locally or Workers Builds secrets):
 
-- `CALENDAR_EVENT_NAMES`
-- `CLASS_TYPE`
+- `CLASS_MAP`
+- `CALENDAR_EVENT_NAMES` (legacy; ignored when `CLASS_MAP` is set)
+- `CLASS_TYPE` (legacy; ignored when `CLASS_MAP` is set)
 - `GITHUB_OWNER`
 - `GITHUB_REPO`
 - `GITHUB_WORKFLOW`
@@ -377,8 +396,9 @@ Add these as type **Text**:
 - `GITHUB_REPO` — the name of the GitHub repository containing `class_operation.yml`.
 - `GITHUB_WORKFLOW` — workflow file name, usually `class_operation.yml`.
 - `GITHUB_REF` — branch or tag to dispatch, usually `main`.
-- `CALENDAR_EVENT_NAMES` — for example `CrossFit`.
-- `CLASS_TYPE` — for example `WOD`.
+- `CLASS_MAP` — for example `CrossFit = WOD`. (Older setups may use the legacy
+  `CALENDAR_EVENT_NAMES` and `CLASS_TYPE` pair instead; it keeps working when `CLASS_MAP` is
+  not set.)
 - `LOOKAHEAD_HOURS` — optional; defaults to `73`. This is one hour longer than a typical 72-hour
   booking window so the `:28`/`:58` trigger can start before enrollment opens. For example, if
   enrollment opens exactly 72 hours before a `06:30` class, the `06:28` trigger sees that class 72

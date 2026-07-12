@@ -112,6 +112,37 @@ test("a reachable calendar without matching events warns about event names", asy
   assert.equal(calendar?.level, "warn");
 });
 
+test("an invalid CLASS_MAP is shown in Setup without hiding the parse error", async () => {
+  const model = await buildStatusModel({
+    env: workerEnv({ CLASS_MAP: "CrossFit WOD" }),
+    kv: makeKv(),
+    now: () => NOW_MS,
+    createClient: okClient,
+    fetchImpl: async () => new Response(ICS_WITH_EVENT("20260713T063000Z")),
+  });
+  const invalid = model.sections
+    .find((section) => section.title === "Setup")
+    .checks.find((item) => item.text.startsWith("CLASS_MAP is invalid:"));
+  assert.equal(invalid?.level, "bad");
+  assert.match(invalid.text, /CrossFit WOD/);
+  assert.match(invalid.hint, /CrossFit = WOD/);
+});
+
+test("CLASS_MAP booking rules are shown in the calendar live check", async () => {
+  const model = await buildStatusModel({
+    env: workerEnv({
+      CLASS_MAP: "Weightlifting = Weightlifting Rato; CrossFit = WOD, Weekend WOD",
+    }),
+    kv: makeKv(),
+    now: () => NOW_MS,
+    createClient: okClient,
+    fetchImpl: async () => new Response(ICS_WITH_EVENT("20260713T063000Z")),
+  });
+  const calendar = flatChecks(model).find((item) => item.text.startsWith("Calendar is reachable"));
+  assert.match(calendar?.hint, /Weightlifting → Weightlifting Rato/);
+  assert.match(calendar?.hint, /CrossFit → WOD \(backup: Weekend WOD\)/);
+});
+
 test("the last run section summarizes results and failures", async () => {
   const lastRun = {
     ranAt: new Date(NOW_MS - 12 * 60_000).toISOString(),

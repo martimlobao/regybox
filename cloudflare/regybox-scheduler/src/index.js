@@ -3,6 +3,8 @@ import {
   defaultLookaheadHours,
   expandCalendarEvents,
   normalizeList,
+  parseClassMap,
+  resolveClassRules,
 } from "./calendar.js";
 import { dispatchWorkflow, executePlan, executionMode, writeLastRun } from "./executor.js";
 import { handleStatusRequest } from "./status.js";
@@ -12,6 +14,8 @@ export {
   defaultLookaheadHours,
   expandCalendarEvents,
   normalizeList,
+  parseClassMap,
+  resolveClassRules,
   dispatchWorkflow,
 };
 

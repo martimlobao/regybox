@@ -8,15 +8,13 @@
   "preview_urls": false,
   "keep_vars": true,
   "vars": {
-    "CALENDAR_EVENT_NAMES": "CrossFit",
-    "CLASS_TYPE": "WOD",
+    "CLASS_MAP": "CrossFit = WOD",
     "TIMEZONE": "Europe/Lisbon",
     "LOOKAHEAD_HOURS": "73"
   },
   "kv_namespaces": [
     {
-      "binding": "REGYBOX_STATE",
-      "id": "replace-with-your-kv-namespace-id"
+      "binding": "REGYBOX_STATE"
     }
   ],
   "triggers": {

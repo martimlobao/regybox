@@ -13,13 +13,12 @@ import {
 const template = `{
   "keep_vars": true,
   "vars": {
-    "CALENDAR_EVENT_NAMES": "CrossFit",
-    "CLASS_TYPE": "WOD",
+    "CLASS_MAP": "CrossFit = WOD",
     "TIMEZONE": "Europe/Lisbon",
     "LOOKAHEAD_HOURS": "73"
   },
   "kv_namespaces": [
-    { "binding": "REGYBOX_STATE", "id": "replace-with-your-kv-namespace-id" }
+    { "binding": "REGYBOX_STATE" }
   ]
 }`;
 
@@ -33,12 +32,12 @@ test("renderWranglerConfig injects worker vars from env", () => {
   const rendered = JSON.parse(
     renderWranglerConfig(template, "test-kv-namespace-id", {
       GITHUB_OWNER: "example-owner",
-      CLASS_TYPE: "WOD",
+      CLASS_MAP: "CrossFit = WOD",
     }),
   );
   assert.deepEqual(rendered.vars, {
     GITHUB_OWNER: "example-owner",
-    CLASS_TYPE: "WOD",
+      CLASS_MAP: "CrossFit = WOD",
   });
 });
 
@@ -60,6 +59,17 @@ test("renderWranglerConfig rejects a missing namespace id", () => {
   assert.throws(
     () => renderWranglerConfig(template, ""),
     /CF_KV_NAMESPACE_ID is required/,
+  );
+});
+
+test("renderWranglerConfig rejects a template with a pinned namespace", () => {
+  assert.throws(
+    () =>
+      renderWranglerConfig(
+        template.replace('"binding": "REGYBOX_STATE"', '"binding": "REGYBOX_STATE", "id": "old-id"'),
+        "test-kv-namespace-id",
+      ),
+    /unpinned REGYBOX_STATE KV binding/,
   );
 });
 

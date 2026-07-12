@@ -2,10 +2,10 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const PLACEHOLDER = "replace-with-your-kv-namespace-id";
 const OUTPUT_FILE = ".wrangler.deploy.jsonc";
 
 export const WORKER_VAR_KEYS = [
+  "CLASS_MAP",
   "CALENDAR_EVENT_NAMES",
   "CLASS_TYPE",
   "GITHUB_OWNER",
@@ -68,8 +68,12 @@ export function renderWranglerConfig(templateText, namespaceId, env = {}) {
   }
   const config = JSON.parse(stripJsoncComments(templateText));
   const namespace = config.kv_namespaces?.[0];
-  if (!namespace || namespace.id !== PLACEHOLDER) {
-    throw new Error(`wrangler.jsonc is missing placeholder ${PLACEHOLDER}.`);
+  if (
+    !namespace ||
+    namespace.binding !== "REGYBOX_STATE" ||
+    Object.hasOwn(namespace, "id")
+  ) {
+    throw new Error("wrangler.jsonc must include an unpinned REGYBOX_STATE KV binding.");
   }
   namespace.id = id;
   const vars = collectWorkerVars(env);

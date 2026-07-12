@@ -1,4 +1,4 @@
-import { defaultLookaheadHours, expandCalendarEvents, normalizeList } from "./calendar.js";
+import { defaultLookaheadHours, expandCalendarEvents, resolveClassRules } from "./calendar.js";
 import { executionMode, readLastRun } from "./executor.js";
 import { emailConfigured } from "./notify.js";
 import { RegyboxLoginError, createRegyboxClient } from "./regybox.js";
@@ -89,6 +89,19 @@ function setupChecks(env) {
       ),
     );
   }
+  if (configured(env.CLASS_MAP)) {
+    try {
+      resolveClassRules(env);
+    } catch (error) {
+      checks.push(
+        check(
+          "bad",
+          `CLASS_MAP is invalid: ${error.message}`,
+          "Use rules such as CrossFit = WOD; Weightlifting = Weightlifting Rato, Strength.",
+        ),
+      );
+    }
+  }
   if (emailConfigured(env)) {
     checks.push(check("ok", "Email notifications are on"));
   } else {
@@ -108,7 +121,17 @@ async function calendarCheck(env, { fetchImpl, nowMs }) {
   if (!configured(env.CALENDAR_URL)) {
     return null;
   }
-  const eventNames = normalizeList(env.CALENDAR_EVENT_NAMES);
+  let classRules;
+  try {
+    classRules = resolveClassRules(env);
+  } catch (error) {
+    return check(
+      "bad",
+      `Calendar booking rules are invalid: ${error.message}`,
+      "Use rules such as CrossFit = WOD; Weightlifting = Weightlifting Rato, Strength.",
+    );
+  }
+  const eventNames = classRules.map((rule) => rule.eventName);
   const lookaheadHours = defaultLookaheadHours(env);
   let response;
   try {
@@ -127,20 +150,13 @@ async function calendarCheck(env, { fetchImpl, nowMs }) {
       "The link may have been reset. Copy a fresh secret iCal address from your calendar settings.",
     );
   }
-  if (eventNames.length === 0) {
-    return check(
-      "warn",
-      "Calendar is reachable, but CALENDAR_EVENT_NAMES is not set",
-      "Add CALENDAR_EVENT_NAMES (for example: CrossFit) so the scheduler knows which events are classes.",
-    );
-  }
   let events;
   try {
     events = expandCalendarEvents({
       icsText: await response.text(),
       now: new Date(nowMs),
       lookaheadHours,
-      calendarEventNames: eventNames,
+      classRules,
       timeZone: env.TIMEZONE || "Europe/Lisbon",
     });
   } catch {
@@ -151,18 +167,27 @@ async function calendarCheck(env, { fetchImpl, nowMs }) {
     );
   }
   const names = eventNames.join(", ");
+  const bookingRules = configured(env.CLASS_MAP)
+    ? classRules
+        .map(({ eventName, classType }) => {
+          const [primary, ...fallbacks] = classType.split(", ");
+          return `${eventName} → ${primary}${fallbacks.length ? ` (backup: ${fallbacks.join(", ")})` : ""}`;
+        })
+        .join(" · ")
+    : null;
   if (events.length === 0) {
     return check(
       "warn",
       `Calendar is reachable, but no “${names}” events in the next ${lookaheadHours} hours`,
-      "The scheduler only books classes that are on your calendar. " +
-        "Check that CALENDAR_EVENT_NAMES matches your event titles exactly.",
+      `${bookingRules ? `Booking rules: ${bookingRules}. ` : ""}` +
+        "The scheduler only books classes that are on your calendar. Check that your event titles match the booking rules exactly.",
     );
   }
   return check(
     "ok",
     `Calendar is reachable — ${events.length} upcoming “${names}” ` +
       `event${events.length === 1 ? "" : "s"} in the next ${lookaheadHours} hours`,
+    bookingRules ? `Booking rules: ${bookingRules}` : undefined,
   );
 }
 
