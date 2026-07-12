@@ -153,8 +153,9 @@ export async function notifyResult({ env, kv, dispatch, result, statusUrl, send 
         statusUrl,
       }),
     );
+    console.log(`regybox: email sent (${dispatch.operation} success)`);
   } catch (error) {
-    console.warn("Regybox success notification email failed:", error);
+    console.warn("regybox: success notification email failed:", error);
   }
 }
 
@@ -178,10 +179,11 @@ export async function notifyFailure({
     try {
       const cached = parseCachedValue(await kv.get(cacheKey));
       if (cached.failureNotificationFingerprint === fingerprint) {
+        console.log("regybox: failure email suppressed (same fingerprint)");
         return;
       }
     } catch (notificationError) {
-      console.warn("Regybox failure notification cache read failed:", notificationError);
+      console.warn("regybox: failure notification cache read failed:", notificationError);
     }
   }
 
@@ -201,7 +203,7 @@ export async function notifyFailure({
       }),
     );
   } catch (notificationError) {
-    console.warn("Regybox failure notification email failed:", notificationError ?? error);
+    console.warn("regybox: failure notification email failed:", notificationError ?? error);
     return;
   }
 
@@ -211,7 +213,7 @@ export async function notifyFailure({
       state.failureNotificationFingerprint = fingerprint;
       await kv.put(cacheKey, JSON.stringify(state), { expirationTtl: STATE_TTL_SECONDS });
     } catch (notificationError) {
-      console.warn("Regybox failure notification cache write failed:", notificationError);
+      console.warn("regybox: failure notification cache write failed:", notificationError);
     }
   }
 }

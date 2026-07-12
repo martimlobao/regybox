@@ -3,6 +3,7 @@ import { notifyFailure, notifyResult } from "./notify.js";
 import { createRegyboxClient, runOperation } from "./regybox.js";
 
 const LAST_RUN_KEY = "regybox:v1:last_run";
+const ACTIVITY_KEY = "regybox:v1:activity";
 const LAST_RUN_TTL_SECONDS = 604800;
 const STATE_TTL_SECONDS = 2592000;
 const WALL_BUDGET_MS = 13 * 60 * 1000;
@@ -47,6 +48,28 @@ function summaryOperation(details, outcome, extra = {}) {
   };
 }
 
+function activityOperation(details, outcome, at, extra = {}) {
+  return {
+    at: new Date(at).toISOString(),
+    operation: details.operation,
+    classDate: details.classDate,
+    classTime: details.classTime,
+    classType: details.classType,
+    calendarEventName: details.calendarEventName,
+    outcome,
+    ...extra,
+  };
+}
+
+function operationDescription(details) {
+  const classDetails = [details.classType, "on", details.classDate, "at", details.classTime]
+    .filter(Boolean)
+    .join(" ");
+  return `${details.operation} ${classDetails}${
+    details.calendarEventName ? ` (${details.calendarEventName})` : ""
+  }`;
+}
+
 function parseCachedValue(value) {
   if (typeof value !== "string") {
     return {};
@@ -61,11 +84,11 @@ function parseCachedValue(value) {
 
 async function writeState({ kv, details, result }) {
   if (result.status !== "success" && result.status !== "noop") {
-    return false;
+    return null;
   }
   const isNotOpen = result.status === "noop" && result.cacheState === "not_open";
   if (isNotOpen && !result.enrollmentOpensAt) {
-    return false;
+    return null;
   }
 
   const state = isNotOpen
@@ -91,7 +114,8 @@ async function writeState({ kv, details, result }) {
     payload.lastCheckedAt = result.lastCheckedAt;
   }
   await kv.put(details.cacheKey, JSON.stringify(payload), { expirationTtl: STATE_TTL_SECONDS });
-  return true;
+  console.log(`regybox: cached state=${state} for ${details.cacheKey}`);
+  return state;
 }
 
 export function executionMode(env) {
@@ -137,6 +161,32 @@ export async function readLastRun(kv) {
   return parseCachedValue(await kv.get(LAST_RUN_KEY));
 }
 
+export async function readActivity(kv) {
+  const value = await kv.get(ACTIVITY_KEY);
+  if (typeof value !== "string") {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function appendActivity(kv, entries) {
+  if (!entries.length) {
+    return;
+  }
+  try {
+    const existing = await readActivity(kv);
+    const activity = [...entries].reverse().concat(existing).slice(0, 50);
+    await kv.put(ACTIVITY_KEY, JSON.stringify(activity), { expirationTtl: STATE_TTL_SECONDS });
+  } catch (error) {
+    console.warn("regybox: activity state write failed:", error);
+  }
+}
+
 export async function executePlan({
   env,
   kv,
@@ -160,6 +210,7 @@ export async function executePlan({
     onResult ?? ((notification) => notifyResultImpl({ env, kv, ...notification, statusUrl: env.STATUS_URL }));
   const startedAt = now();
   const operations = [];
+  const activity = [];
   const summary = {
     ranAt: new Date(startedAt).toISOString(),
     mode,
@@ -168,11 +219,25 @@ export async function executePlan({
   };
 
   try {
+    console.log(`regybox: executing ${dispatches.length} operation(s) in ${mode} mode`);
     if (mode === "dispatch") {
       for (const dispatch of dispatches) {
         const details = operationDetails(dispatch);
-        await dispatchWorkflowImpl(env, dispatch);
-        operations.push(summaryOperation(details, "dispatched"));
+        console.log(`regybox: ${operationDescription(details)}`);
+        try {
+          await dispatchWorkflowImpl(env, dispatch);
+          operations.push(summaryOperation(details, "dispatched"));
+          activity.push(activityOperation(details, "dispatched", now()));
+          console.log(`regybox: ${operationDescription(details)} -> dispatched to GitHub`);
+        } catch (error) {
+          const payload = errorPayload(error);
+          operations.push(summaryOperation(details, "failure", { errorCode: payload.errorCode }));
+          activity.push(activityOperation(details, "failure", now(), { errorCode: payload.errorCode }));
+          console.error(
+            `regybox: ${operationDescription(details)} -> failure (${payload.errorCode}): ${error.message}`,
+          );
+          throw error;
+        }
       }
       return summary;
     }
@@ -190,10 +255,14 @@ export async function executePlan({
         const payload = errorPayload(error);
         const fingerprint = buildFailureFingerprint({ operation: dispatch.operation, error });
         operations.push(summaryOperation(details, "failure", { errorCode: payload.errorCode }));
+        activity.push(activityOperation(details, "failure", now(), { errorCode: payload.errorCode }));
+        console.error(
+          `regybox: ${operationDescription(details)} -> failure (${payload.errorCode}): ${error.message}`,
+        );
         try {
           await reportFailure({ dispatch, error, payload, fingerprint });
         } catch (notificationError) {
-          console.warn("Regybox bootstrap failure notification failed:", notificationError);
+          console.warn("regybox: bootstrap failure notification failed:", notificationError);
         }
       }
       throw error;
@@ -203,8 +272,11 @@ export async function executePlan({
       const remainingMs = startedAt + WALL_BUDGET_MS - now();
       if (remainingMs < MINIMUM_OPERATION_BUDGET_MS) {
         operations.push(summaryOperation(details, "skipped"));
+        activity.push(activityOperation(details, "skipped", now()));
+        console.log(`regybox: ${operationDescription(details)} -> skipped (out of time)`);
         continue;
       }
+      console.log(`regybox: ${operationDescription(details)}`);
       let result;
       try {
         result = await runOperationImpl({
@@ -221,19 +293,40 @@ export async function executePlan({
         const payload = errorPayload(error);
         const fingerprint = buildFailureFingerprint({ operation: details.operation, error });
         operations.push(summaryOperation(details, "failure", { errorCode: payload.errorCode }));
+        activity.push(activityOperation(details, "failure", now(), { errorCode: payload.errorCode }));
+        console.error(
+          `regybox: ${operationDescription(details)} -> failure (${payload.errorCode}): ${error.message}`,
+        );
         await reportFailure({ dispatch, error, payload, fingerprint });
         continue;
       }
-      await writeState({ kv, details, result });
+      const cacheState = await writeState({ kv, details, result });
       await reportResult({ dispatch, result });
       operations.push(summaryOperation(details, result.status));
+      activity.push(
+        activityOperation(details, result.status, now(), {
+          ...(cacheState ? { cacheState } : result.cacheState ? { cacheState: result.cacheState } : {}),
+        }),
+      );
+      if (result.status === "noop") {
+        const outcomeDetails = [
+          result.cacheState || "no change",
+          result.enrollmentOpensAt && `opens ${result.enrollmentOpensAt}`,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        console.log(`regybox: ${operationDescription(details)} -> noop (${outcomeDetails})`);
+      } else {
+        console.log(`regybox: ${operationDescription(details)} -> ${result.status}`);
+      }
     }
     return summary;
   } finally {
+    await appendActivity(kv, activity);
     try {
       await writeLastRun(kv, summary);
     } catch (error) {
-      console.warn("Regybox last-run state write failed:", error);
+      console.warn("regybox: last-run state write failed:", error);
     }
   }
 }

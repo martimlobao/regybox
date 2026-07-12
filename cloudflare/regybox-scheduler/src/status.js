@@ -1,5 +1,5 @@
 import { defaultLookaheadHours, expandCalendarEvents, resolveClassRules } from "./calendar.js";
-import { executionMode, readLastRun } from "./executor.js";
+import { executionMode, readActivity, readLastRun } from "./executor.js";
 import { emailConfigured } from "./notify.js";
 import { RegyboxLoginError, createRegyboxClient } from "./regybox.js";
 
@@ -266,6 +266,14 @@ function lastRunCheck(lastRun, nowMs) {
   return check("ok", `Last check: ${when} — ${operations.map(describeOperation).join("; ")}`);
 }
 
+function activityCheck(activity, nowMs) {
+  const when = relativeTime(activity.at, nowMs) ?? activity.at;
+  const description = describeOperation(activity);
+  const text = `${description.charAt(0).toUpperCase()}${description.slice(1)} — ${when}`;
+  const level = activity.outcome === "success" ? "ok" : activity.outcome === "failure" ? "bad" : "off";
+  return check(level, text);
+}
+
 export async function buildStatusModel({
   env,
   kv,
@@ -292,17 +300,30 @@ export async function buildStatusModel({
   } catch {
     lastRun = null;
   }
+  let activity = [];
+  try {
+    activity = kv ? await readActivity(kv) : [];
+  } catch {
+    activity = [];
+  }
+  const sections = [
+    { title: "Setup", checks: setupChecks(env) },
+    { title: "Live checks", checks: liveChecks },
+    {
+      title: "Last run",
+      checks: [lastRunCheck(lastRun && Object.keys(lastRun).length > 0 ? lastRun : null, nowMs)],
+    },
+  ];
+  if (activity.length > 0) {
+    sections.push({
+      title: "Recent activity",
+      checks: activity.slice(0, 10).map((entry) => activityCheck(entry, nowMs)),
+    });
+  }
   return {
     mode,
     generatedAt: new Date(nowMs).toISOString(),
-    sections: [
-      { title: "Setup", checks: setupChecks(env) },
-      { title: "Live checks", checks: liveChecks },
-      {
-        title: "Last run",
-        checks: [lastRunCheck(lastRun && Object.keys(lastRun).length > 0 ? lastRun : null, nowMs)],
-      },
-    ],
+    sections,
   };
 }
 

@@ -109,6 +109,17 @@ Regybox login eventually expires, the status page and the notification email wil
 tell you — copy fresh cookie values from regybox.pt and update `PHPSESSID` under
 **Settings → Variables and Secrets**, then you're back in business.
 
+### Seeing What It's Doing
+
+- **Status page** (the `workers.dev` link): the **Recent activity** section lists the
+  last bookings, cancellations, and failures with timestamps, and **Last run** shows
+  what the most recent half-hourly check did — including "nothing to do".
+- **Cloudflare logs**: in the dashboard, open the Worker → **Logs** to see every run
+  (searchable, kept for a few days). Every log line the scheduler writes starts with
+  `regybox:`, for example `regybox: enroll WOD on 2026-07-14 at 06:30 -> success`.
+- **Live tail** (for the technically inclined): `bunx wrangler tail <worker-name>`
+  streams runs as they happen.
+
 ## Development
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management and the `src/` layout for the package code.

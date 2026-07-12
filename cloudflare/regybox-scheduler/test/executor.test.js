@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { executePlan, executionMode, readLastRun } from "../src/executor.js";
+import { executePlan, executionMode, readActivity, readLastRun } from "../src/executor.js";
 import { buildFailureFingerprint, errorPayload } from "../src/failures.js";
 import { handleScheduled } from "../src/index.js";
 import {
@@ -52,7 +52,11 @@ function fakeClient() {
 }
 
 function stateWrites(kv) {
-  return kv.writes.filter(({ key }) => key !== "regybox:v1:last_run");
+  return kv.writes.filter(({ key }) => !["regybox:v1:last_run", "regybox:v1:activity"].includes(key));
+}
+
+function activityWrites(kv) {
+  return kv.writes.filter(({ key }) => key === "regybox:v1:activity");
 }
 
 test("execution mode keeps GitHub dispatch as the backward-compatible preference", () => {
@@ -257,7 +261,7 @@ test("last-run write failure does not mask a dispatch failure or a successful ru
     console.warn = originalWarn;
   }
   assert.equal(warnings.length, 2);
-  assert.ok(warnings.every(([message, error]) => message === "Regybox last-run state write failed:" && error === lastRunError));
+  assert.ok(warnings.every(([message, error]) => message === "regybox: last-run state write failed:" && error === lastRunError));
 });
 
 test("worker skips operations when the remaining invocation budget is below thirty seconds", async () => {
@@ -308,6 +312,139 @@ test("dispatch mode and zero-operation runs both leave a last-run summary", asyn
   assert.equal(zeroSummary.plannedOperations, 0);
   assert.deepEqual(zeroSummary.operations, []);
   assert.equal(zeroKv.writes[0].options.expirationTtl, 604800);
+  assert.equal(activityWrites(zeroKv).length, 0);
+});
+
+test("activity feed batches every worker outcome and dispatched operations once per run", async () => {
+  const kv = makeKv();
+  let clock = 0;
+  let calls = 0;
+  const originalLog = console.log;
+  const originalError = console.error;
+  console.log = () => {};
+  console.error = () => {};
+  try {
+    await executePlan({
+      env: workerEnv,
+      kv,
+      dispatches: [dispatch(), dispatch(), dispatch(), dispatch()],
+      now: () => clock,
+      createClient: fakeClient,
+      runOperationImpl: async () => {
+        calls += 1;
+        if (calls === 2) {
+          throw new RegyboxLoginError();
+        }
+        if (calls === 3) {
+          clock = 13 * 60 * 1000 - 29_000;
+          return { status: "noop", cacheState: "not_open" };
+        }
+        return { status: "success" };
+      },
+      onFailure: async () => {},
+    });
+    await executePlan({
+      env: { ...workerEnv, GITHUB_TOKEN: "token", GITHUB_OWNER: "martim", GITHUB_REPO: "regybox" },
+      kv,
+      dispatches: [dispatch({ operation: "unenroll" })],
+      dispatchWorkflowImpl: async () => {},
+    });
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+  }
+
+  assert.equal(activityWrites(kv).length, 2);
+  assert.deepEqual((await readActivity(kv)).map(({ outcome }) => outcome), [
+    "dispatched",
+    "skipped",
+    "noop",
+    "failure",
+    "success",
+  ]);
+  assert.equal(activityWrites(kv)[0].options.expirationTtl, 2592000);
+});
+
+test("activity feed keeps the newest fifty entries and tolerates corrupt history", async () => {
+  const kv = makeKv(new Map([["regybox:v1:activity", "not JSON"]]));
+  const originalLog = console.log;
+  console.log = () => {};
+  try {
+    for (let index = 0; index < 60; index += 1) {
+      await executePlan({
+        env: workerEnv,
+        kv,
+        dispatches: [dispatch({ classType: `WOD ${index}`, cacheKey: `class-${index}` })],
+        now: () => index * 1_000,
+        createClient: fakeClient,
+        runOperationImpl: async () => ({ status: "success" }),
+      });
+    }
+  } finally {
+    console.log = originalLog;
+  }
+  const activity = await readActivity(kv);
+  assert.equal(activity.length, 50);
+  assert.equal(activity[0].classType, "WOD 59");
+  assert.equal(activity.at(-1).classType, "WOD 10");
+});
+
+test("an activity feed write failure does not break a successful run", async () => {
+  const kv = makeKv();
+  const put = kv.put;
+  const activityError = new Error("activity unavailable");
+  kv.put = async (key, ...args) => {
+    if (key === "regybox:v1:activity") {
+      throw activityError;
+    }
+    return put(key, ...args);
+  };
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    const summary = await executePlan({
+      env: workerEnv,
+      kv,
+      dispatches: [dispatch()],
+      createClient: fakeClient,
+      runOperationImpl: async () => ({ status: "success" }),
+    });
+    assert.equal(summary.operations[0].outcome, "success");
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.deepEqual(warnings, [["regybox: activity state write failed:", activityError]]);
+});
+
+test("operation logs record successful and failed outcomes at their respective levels", async () => {
+  const kv = makeKv();
+  const logs = [];
+  const errors = [];
+  const originalLog = console.log;
+  const originalError = console.error;
+  console.log = (...args) => logs.push(args);
+  console.error = (...args) => errors.push(args);
+  try {
+    await executePlan({
+      env: workerEnv,
+      kv,
+      dispatches: [dispatch(), dispatch({ cacheKey: "failed" })],
+      createClient: fakeClient,
+      runOperationImpl: async () => {
+        if (logs.some(([message]) => String(message).includes("-> success"))) {
+          throw new RegyboxLoginError();
+        }
+        return { status: "success" };
+      },
+      onFailure: async () => {},
+    });
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+  }
+  assert.ok(logs.some(([message]) => String(message).includes("-> success")));
+  assert.ok(errors.some(([message]) => String(message).includes("-> failure")));
 });
 
 test("calendar failures still write a failure last-run summary before rethrowing", async () => {
@@ -335,6 +472,15 @@ test("calendar failures still write a failure last-run summary before rethrowing
   assert.deepEqual(summary.operations, [
     { operation: "calendar", outcome: "failure", errorCode: "calendar_or_plan_failure" },
   ]);
+  const activity = await readActivity(kv);
+  assert.equal(activity.length, 1);
+  const { at, ...entry } = activity[0];
+  assert.ok(Number.isFinite(Date.parse(at)));
+  assert.deepEqual(entry, {
+    operation: "calendar",
+    outcome: "failure",
+    errorCode: "calendar_or_plan_failure",
+  });
 });
 
 test("failure payloads and fingerprints mirror the action notification contract", () => {

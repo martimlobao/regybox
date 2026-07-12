@@ -182,6 +182,45 @@ test("a calendar-level failure is described without class placeholders", async (
   assert.match(summary.text, /calendar could not be checked \(calendar_or_plan_failure\)/);
 });
 
+test("recent activity is newest-first with outcome levels and is omitted when empty", async () => {
+  const activity = [
+    {
+      at: new Date(NOW_MS - 2 * 60 * 60_000).toISOString(),
+      operation: "enroll",
+      classDate: "2026-07-14",
+      classTime: "06:30",
+      classType: "WOD Rato",
+      outcome: "success",
+    },
+    {
+      at: new Date(NOW_MS - 5 * 60_000).toISOString(),
+      operation: "enroll",
+      classDate: "2026-07-15",
+      classTime: "06:30",
+      classType: "WOD",
+      outcome: "noop",
+    },
+    {
+      at: new Date(NOW_MS - 60_000).toISOString(),
+      operation: "calendar",
+      outcome: "failure",
+      errorCode: "calendar_or_plan_failure",
+    },
+  ];
+  const model = await buildStatusModel({
+    env: {},
+    kv: makeKv({ "regybox:v1:activity": JSON.stringify(activity) }),
+    now: () => NOW_MS,
+  });
+  const section = model.sections.find(({ title }) => title === "Recent activity");
+  assert.deepEqual(section.checks.map(({ level }) => level), ["ok", "off", "bad"]);
+  assert.match(section.checks[0].text, /^Enrolled in WOD Rato on 2026-07-14 at 06:30 — 2 hours ago$/);
+  assert.match(section.checks[2].text, /calendar could not be checked/);
+
+  const empty = await buildStatusModel({ env: {}, kv: makeKv(), now: () => NOW_MS });
+  assert.equal(empty.sections.some(({ title }) => title === "Recent activity"), false);
+});
+
 test("the rendered page is safe, read-only HTML without secrets", async () => {
   const model = await buildStatusModel({
     env: workerEnv({ PHPSESSID: "super-secret-cookie<script>" }),
