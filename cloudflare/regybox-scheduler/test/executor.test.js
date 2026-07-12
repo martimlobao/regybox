@@ -103,21 +103,41 @@ test("worker execution writes the Action-compatible success and noop cache state
 
   const writes = Object.fromEntries(stateWrites(kv).map(({ key, value }) => [key, JSON.parse(value)]));
   assert.equal(writes.preserved.state, "enrolled");
-  assert.equal(writes.preserved.classType, "Resolved WOD");
-  assert.equal(writes.preserved.failureNotificationFingerprint, "old-failure");
+  assert.equal(writes.preserved.classType, "WOD");
+  // Recovery clears the stored failure fingerprint (parity with
+  // cloudflare_kv.py) so a later recurrence of the same failure notifies again.
+  assert.equal(writes.preserved.failureNotificationFingerprint, undefined);
   assert.equal(writes.unenroll.state, "unenrolled");
   assert.equal(writes.noop.state, "enrolled");
   assert.deepEqual(writes["not-open"], {
     state: "not_open",
     classDate: "2026-07-12",
     classTime: "06:30",
-    classType: "Resolved WOD",
+    classType: "WOD",
     calendarEventName: "Crossfit",
     calendarFingerprint: "calendar-fingerprint",
     enrollmentOpensAt: "2026-07-12T05:00:00+01:00",
     lastCheckedAt: "2026-07-12T04:00:00+01:00",
   });
   assert.ok(stateWrites(kv).every(({ options }) => options.expirationTtl === 2592000));
+});
+
+test("worker cache state retains the dispatched fallback class type for slot matching", async () => {
+  const kv = makeKv();
+  const classType = "WOD, Weekend WOD";
+  await executePlan({
+    env: workerEnv,
+    kv,
+    dispatches: [dispatch({ classType })],
+    createClient: fakeClient,
+    runOperationImpl: async () => ({ status: "success", classType: "Weekend WOD" }),
+  });
+
+  const cached = JSON.parse(stateWrites(kv)[0].value);
+  assert.equal(cached.classType, classType);
+  const cachedSlotKey = `${cached.classDate}T${cached.classTime}:${cached.classType}`;
+  const eventSlotKey = `2026-07-12T06:30:${classType}`;
+  assert.equal(cachedSlotKey, eventSlotKey);
 });
 
 test("not_open without an opening timer deliberately does not update cached state", async () => {
@@ -166,6 +186,78 @@ test("one operation failure leaves state untouched and does not prevent later op
     (await readLastRun(kv)).operations.map(({ outcome, errorCode }) => [outcome, errorCode]),
     [["failure", "login_error"], ["success", undefined]],
   );
+});
+
+test("bootstrap failure reports every planned operation, writes the summary, and rethrows", async () => {
+  const kv = makeKv();
+  const loginError = new RegyboxLoginError();
+  const failures = [];
+  const dispatches = [dispatch({ cacheKey: "first" }), dispatch({ operation: "unenroll", cacheKey: "second" })];
+
+  await assert.rejects(
+    executePlan({
+      env: workerEnv,
+      kv,
+      dispatches,
+      createClient: () => ({ bootstrapSession: async () => { throw loginError; } }),
+      onFailure: async (failure) => failures.push(failure),
+    }),
+    (error) => error === loginError,
+  );
+
+  assert.equal(failures.length, dispatches.length);
+  assert.deepEqual(
+    failures.map(({ payload, fingerprint }) => [payload.errorCode, fingerprint]),
+    [
+      ["login_error", "failure:enroll:login_error:Unable to log in to Regybox"],
+      ["login_error", "failure:unenroll:login_error:Unable to log in to Regybox"],
+    ],
+  );
+  assert.deepEqual(
+    (await readLastRun(kv)).operations.map(({ operation, outcome, errorCode }) => [operation, outcome, errorCode]),
+    [
+      ["enroll", "failure", "login_error"],
+      ["unenroll", "failure", "login_error"],
+    ],
+  );
+});
+
+test("last-run write failure does not mask a dispatch failure or a successful run", async () => {
+  const kv = makeKv();
+  const put = kv.put;
+  const lastRunError = new Error("last-run unavailable");
+  kv.put = async (key, ...args) => {
+    if (key === "regybox:v1:last_run") {
+      throw lastRunError;
+    }
+    return put(key, ...args);
+  };
+  const dispatchError = new Error("operation failed");
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    await assert.rejects(
+      executePlan({
+        env: { ...workerEnv, GITHUB_TOKEN: "token", GITHUB_OWNER: "martim", GITHUB_REPO: "regybox" },
+        kv,
+        dispatches: [dispatch()],
+        dispatchWorkflowImpl: async () => { throw dispatchError; },
+      }),
+      (error) => error === dispatchError,
+    );
+    const summary = await executePlan({
+      env: { ...workerEnv, GITHUB_TOKEN: "token", GITHUB_OWNER: "martim", GITHUB_REPO: "regybox" },
+      kv,
+      dispatches: [dispatch({ cacheKey: "success" })],
+      dispatchWorkflowImpl: async () => {},
+    });
+    assert.equal(summary.operations[0].outcome, "dispatched");
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warnings.length, 2);
+  assert.ok(warnings.every(([message, error]) => message === "Regybox last-run state write failed:" && error === lastRunError));
 });
 
 test("worker skips operations when the remaining invocation budget is below thirty seconds", async () => {

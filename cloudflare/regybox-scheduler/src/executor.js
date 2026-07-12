@@ -73,12 +73,14 @@ async function writeState({ kv, details, result }) {
     : details.operation === "unenroll"
       ? "unenrolled"
       : "enrolled";
-  const existing = parseCachedValue(await kv.get(details.cacheKey));
+  // A fresh state payload deliberately drops failureNotificationFingerprint,
+  // matching cloudflare_kv.py: once an operation recovers, a later recurrence
+  // of the same failure must notify again.
   const payload = {
     state,
     classDate: details.classDate,
     classTime: details.classTime,
-    classType: result.classType,
+    classType: details.classType,
     calendarEventName: details.calendarEventName,
     calendarFingerprint: details.calendarFingerprint,
   };
@@ -87,9 +89,6 @@ async function writeState({ kv, details, result }) {
   }
   if (result.lastCheckedAt) {
     payload.lastCheckedAt = result.lastCheckedAt;
-  }
-  if (existing.failureNotificationFingerprint) {
-    payload.failureNotificationFingerprint = existing.failureNotificationFingerprint;
   }
   await kv.put(details.cacheKey, JSON.stringify(payload), { expirationTtl: STATE_TTL_SECONDS });
   return true;
@@ -183,7 +182,22 @@ export async function executePlan({
       regyboxUser: env.REGYBOX_USER,
       timezone: env.TIMEZONE || "Europe/Lisbon",
     });
-    await client.bootstrapSession();
+    try {
+      await client.bootstrapSession();
+    } catch (error) {
+      for (const dispatch of dispatches) {
+        const details = operationDetails(dispatch);
+        const payload = errorPayload(error);
+        const fingerprint = buildFailureFingerprint({ operation: dispatch.operation, error });
+        operations.push(summaryOperation(details, "failure", { errorCode: payload.errorCode }));
+        try {
+          await reportFailure({ dispatch, error, payload, fingerprint });
+        } catch (notificationError) {
+          console.warn("Regybox bootstrap failure notification failed:", notificationError);
+        }
+      }
+      throw error;
+    }
     for (const dispatch of dispatches) {
       const details = operationDetails(dispatch);
       const remainingMs = startedAt + WALL_BUDGET_MS - now();
@@ -216,6 +230,10 @@ export async function executePlan({
     }
     return summary;
   } finally {
-    await writeLastRun(kv, summary);
+    try {
+      await writeLastRun(kv, summary);
+    } catch (error) {
+      console.warn("Regybox last-run state write failed:", error);
+    }
   }
 }
