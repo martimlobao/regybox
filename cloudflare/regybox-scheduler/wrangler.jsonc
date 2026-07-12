@@ -4,8 +4,15 @@
   "main": "src/index.js",
   "compatibility_date": "2026-06-17",
   "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
   "preview_urls": false,
   "keep_vars": true,
+  "vars": {
+    "CALENDAR_EVENT_NAMES": "CrossFit",
+    "CLASS_TYPE": "WOD",
+    "TIMEZONE": "Europe/Lisbon",
+    "LOOKAHEAD_HOURS": "73"
+  },
   "kv_namespaces": [
     {
       "binding": "REGYBOX_STATE",

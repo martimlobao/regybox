@@ -5,11 +5,80 @@
 
 Automatically enroll in a CrossFit class on the Regybox platform.
 
-This project powers a GitHub Action that books a class for you and can send a
-confirmation email when it finishes. You can run it on a schedule (for example every
-morning) or trigger it manually.
+Add your classes to your calendar (or delete one to skip a day), and this project
+books and cancels the matching Regybox classes for you, optionally emailing you a
+confirmation. There are three ways to run it — pick one:
 
-## Usage
+1. **[One-click Cloudflare setup](#recommended-one-click-cloudflare-setup)**
+   (recommended): a Cloudflare Worker checks your calendar every half hour and
+   books classes directly. Easiest to set up, no fixed schedule to maintain.
+2. **[GitHub Action with a fixed schedule](#alternative-github-action-with-a-fixed-schedule)**:
+   books the same class at the same time every week. No Cloudflare account needed.
+3. **[Cloudflare Worker → GitHub Actions dispatch](#advanced-calendar-driven-sync-with-cloudflare-and-github)**
+   (advanced): the original calendar-driven setup, kept for existing users.
+
+## Recommended: One-Click Cloudflare Setup
+
+Everything runs in a free Cloudflare account that you own: your credentials stay
+with you, and there is no server to maintain. You need a Cloudflare account and a
+GitHub account (both free — GitHub is only used to store your copy of the code).
+
+### 1. Copy Your Regybox Cookies
+
+1. Open [regybox.pt](https://www.regybox.pt/app/app_nova/index.php) and sign in.
+2. Open your browser's developer tools (`Cmd+Option+I` on macOS or `Ctrl+Shift+I` on
+   Windows/Linux) and select the **Application** tab.
+3. Find the cookies named `PHPSESSID` and `regybox_user` and copy their values
+   somewhere handy — you will paste them during the deploy step.
+
+![Browser dev tools showing how to copy the PHPSESSID and regybox_user cookies.](./static/cookies.png)
+
+### 2. Copy Your Secret Calendar Link
+
+1. In [Google Calendar settings](https://calendar.google.com/calendar/r/settings),
+   pick your calendar under **Settings for my calendars** and open
+   **Integrate calendar**.
+2. Copy the **Secret address in iCal format**.
+
+![Secret Google Calendar address](./static/gcal.png)
+
+### 3. Deploy to Cloudflare
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/martimlobao/regybox/tree/main/cloudflare/regybox-scheduler)
+
+1. Click the button above and sign in to Cloudflare (and GitHub, when asked).
+2. Fill in the values it asks for:
+    - `PHPSESSID` and `REGYBOX_USER` — the cookie values from step 1.
+    - `CALENDAR_URL` — the secret calendar link from step 2.
+    - `CALENDAR_EVENT_NAMES` — the event title on your calendar that means
+      "class", for example `CrossFit`.
+    - `CLASS_TYPE` — the exact class name in Regybox, for example `WOD`.
+    - `EMAIL_USERNAME`, `EMAIL_PASSWORD`, `EMAIL_TO` — optional; fill these in if
+      you want a confirmation email (for Gmail, use an
+      [App Password](https://myaccount.google.com/apppasswords), not your normal
+      password).
+3. Click **Create and deploy**. Cloudflare creates the storage and the half-hourly
+   schedule automatically.
+
+### 4. Check That It Works
+
+Open your Worker's page (Cloudflare dashboard → **Workers & Pages** →
+**regybox-scheduler** → the `workers.dev` link). It shows a plain-English
+checklist: whether your login works, whether your calendar is reachable, how many
+upcoming classes it found, and what the last run did. If something is red, the
+page tells you how to fix it.
+
+From then on it books any class that appears on your calendar (usually the moment
+enrollment opens) and cancels a booking if you delete the event. When your
+Regybox login eventually expires, the status page and the notification email will
+tell you — copy fresh cookie values from regybox.pt and update `PHPSESSID` under
+**Settings → Variables and Secrets**, then you're back in business.
+
+## Alternative: GitHub Action with a Fixed Schedule
+
+Use this if you want the same class booked at the same times every week and prefer
+not to create a Cloudflare account. Note that GitHub's scheduler can start runs
+several minutes late, which can matter for classes that fill up quickly.
 
 ### 1. Fetch the Cookie Values from the Regybox Website
 
@@ -18,8 +87,6 @@ morning) or trigger it manually.
    Windows/Linux) and select the **Application** tab.
 3. Find the cookies named `PHPSESSID` and `regybox_user`, then copy their values. You
    will store them later as GitHub Action secrets.
-
-![Browser dev tools showing how to copy the PHPSESSID and regybox_user cookies.](./static/cookies.png)
 
 ### 2. Create a Repository with the GitHub Action
 
@@ -35,9 +102,9 @@ morning) or trigger it manually.
    ![Repository secrets list.](./static/repo-secrets.png)
 
    > [!NOTE]
-   > If you want your calendar to drive enrollments and unenrollments at `:28` and `:58`, use the
-   > [Cloudflare calendar sync](#calendar-driven-sync-with-cloudflare) approach
-   > instead of a fixed-class GitHub schedule.
+   > If you want your calendar to drive enrollments and unenrollments, use the
+   > [one-click Cloudflare setup](#recommended-one-click-cloudflare-setup) instead of a
+   > fixed-class GitHub schedule.
 
 3. Add the workflow file at `.github/workflows/regybox.yml` using the example below.
    Update the values under the `with:` section (class time, type, secrets, etc.) so they
@@ -134,7 +201,15 @@ automatically in the class.
 > The calendar match is case-insensitive and ignores leading/trailing spaces. By default, the
 > action looks for an event whose title matches `CrossFit`.
 
-## Calendar-Driven Sync with Cloudflare
+## Advanced: Calendar-Driven Sync with Cloudflare and GitHub
+
+> [!NOTE]
+> This is the original calendar-driven setup, kept for people who already run it or who want
+> GitHub Actions to perform the enrollment. New users should prefer the
+> [one-click Cloudflare setup](#recommended-one-click-cloudflare-setup), which does the same
+> thing without GitHub tokens or Cloudflare API tokens. The same Worker powers both: if the
+> `GITHUB_TOKEN`, `GITHUB_OWNER`, and `GITHUB_REPO` variables are set it dispatches GitHub
+> Actions as described below; otherwise it books classes itself.
 
 GitHub scheduled workflows can run late. For calendar-driven scheduling, use a Cloudflare Worker
 Cron Trigger to check your calendar at `:28` and `:58` every hour and dispatch a GitHub workflow
@@ -250,13 +325,13 @@ and run the Worker package from [`cloudflare/regybox-scheduler`](cloudflare/regy
 
 ```bash
 cd cloudflare/regybox-scheduler
-CF_KV_NAMESPACE_ID=<your-kv-namespace-id> npm run deploy
+CF_KV_NAMESPACE_ID=<your-kv-namespace-id> bun run deploy
 ```
 
 From the repository root you can also run `make deploy-worker` after exporting
 `CF_KV_NAMESPACE_ID`.
 
-`npm run deploy` renders `.wrangler.deploy.jsonc` from `wrangler.jsonc` and deploys with
+`bun run deploy` renders `.wrangler.deploy.jsonc` from `wrangler.jsonc` and deploys with
 Wrangler. The committed `wrangler.jsonc` keeps a placeholder namespace ID so the repository stays
 portable. Worker text variables are not committed: set them in the Cloudflare dashboard (step 6) or
 provide them as environment variables when deploying. `keep_vars` is enabled so deploys update
@@ -280,7 +355,7 @@ Keep `GITHUB_TOKEN` and `CALENDAR_URL` as Worker secrets in the dashboard, not i
 If the Worker is connected to GitHub, set the **Deploy command** to:
 
 ```bash
-npm run deploy
+bun run deploy
 ```
 
 In **Settings → Builds → Variables and secrets**, add secrets as needed:
@@ -289,7 +364,7 @@ In **Settings → Builds → Variables and secrets**, add secrets as needed:
 - Any optional deploy-time text variables listed above if you want Git deploys to set them instead
   of using only the dashboard.
 
-Workers Builds injects build secrets as environment variables, so `npm run deploy` can render the
+Workers Builds injects build secrets as environment variables, so `bun run deploy` can render the
 Wrangler config at deploy time without committing your namespace ID or account-specific settings.
 
 #### 6. Add Worker Variables and Secrets
@@ -369,6 +444,10 @@ Useful references:
 - [GitHub workflow dispatch API](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)
 
 ## Summary of Secrets
+
+These are the GitHub repository secrets used by the two GitHub-based setups above. The
+one-click Cloudflare setup does not use GitHub secrets — the deploy screen and the Worker's
+**Settings → Variables and Secrets** page cover everything it needs.
 
 | Secret name          | Required | Description                                                                        |
 | -------------------- | :------: | ---------------------------------------------------------------------------------- |

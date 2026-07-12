@@ -1,0 +1,11 @@
+# Required for direct Worker enrollment. Copy these cookie values from regybox.pt developer tools.
+PHPSESSID=
+REGYBOX_USER=
+
+# Required. Copy the "Secret address in iCal format" from Google Calendar settings.
+CALENDAR_URL=
+
+# Optional email notifications. Use a Gmail address and its app password.
+EMAIL_USERNAME=
+EMAIL_PASSWORD=
+EMAIL_TO=

@@ -12,12 +12,18 @@ import {
 
 const template = `{
   "keep_vars": true,
+  "vars": {
+    "CALENDAR_EVENT_NAMES": "CrossFit",
+    "CLASS_TYPE": "WOD",
+    "TIMEZONE": "Europe/Lisbon",
+    "LOOKAHEAD_HOURS": "73"
+  },
   "kv_namespaces": [
     { "binding": "REGYBOX_STATE", "id": "replace-with-your-kv-namespace-id" }
   ]
 }`;
 
-test("renderWranglerConfig substitutes the kv namespace id", () => {
+test("renderWranglerConfig strips deploy-button defaults for manual deploys", () => {
   const rendered = JSON.parse(renderWranglerConfig(template, "test-kv-namespace-id"));
   assert.equal(rendered.kv_namespaces[0].id, "test-kv-namespace-id");
   assert.equal(rendered.vars, undefined);
