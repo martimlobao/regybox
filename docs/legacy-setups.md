@@ -75,8 +75,9 @@ several minutes late, which can matter for classes that fill up quickly.
 
 4. Adjust the `cron` schedules to control when the workflow runs. Cron expressions follow the
    format `minute hour day-of-month month day-of-week` in **UTC**:
-    - The example above (`15 5 * * 1-5`) runs **every weekday at 05:15 UTC**, which is 06:15 in
-      Lisbon during standard time.
+    - The example above books at **06:15 Lisbon time** year-round by using two schedules:
+      `15 6 …` runs at 06:15 UTC during Lisbon standard time (WET, UTC+0, November–March) and
+      `15 5 …` runs at 05:15 UTC during daylight saving time (WEST, UTC+1, April–October).
     - If enrollment opens 48 hours before each class, schedule the job to run **two days before**
       the class start time.
     - Start the job **5–15 minutes before** the signup window opens so the booking begins as soon

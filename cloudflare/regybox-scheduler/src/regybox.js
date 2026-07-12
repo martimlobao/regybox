@@ -352,6 +352,24 @@ export function parseClasses(html, { date, timezone = "Europe/Lisbon" } = {}) {
   return classBlocks(String(html)).map((block) => parseClassBlock(block, { timezone }));
 }
 
+function parseClassesAtTime(html, { classTime, date, timezone = "Europe/Lisbon" } = {}) {
+  void date; // The timestamp embedded in each card is the Python source of truth.
+  const blocks = classBlocks(String(html));
+  return {
+    total: blocks.length,
+    classes: blocks
+      .filter((block) => hasClassTime(block, classTime))
+      .map((block) => parseClassBlock(block, { timezone })),
+  };
+}
+
+function hasClassTime(block, classTime) {
+  const [hour, minute] = String(classTime).split(":");
+  const escapedHour = hour.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedMinute = String(minute ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return block.includes(classTime) || new RegExp(`${escapedHour}&#(?:0*58|x0*3a);${escapedMinute}`, "i").test(block);
+}
+
 export function parseClass(html, { timezone = "Europe/Lisbon" } = {}) {
   return parseClassBlock(String(html), { timezone });
 }
@@ -570,14 +588,21 @@ function closedResult({ classType, timeToEnroll, now, timezone }) {
 
 async function loadClasses(
   client,
-  { classDate, timezone, sleep = defaultSleep, emptyRetryTotal = 3, emptyRetryBackoffMs = 50 },
+  {
+    classDate,
+    classTime,
+    timezone,
+    sleep = defaultSleep,
+    emptyRetryTotal = 3,
+    emptyRetryBackoffMs = 50,
+  },
 ) {
   // Python's _get_classes_tags_with_retry treats an empty class list as
   // transient; a bounded retry keeps that behavior within the subrequest cap.
   for (let attempt = 0; ; attempt += 1) {
     const html = await client.fetchClassesHtml(zonedMidnightMs(classDate, timezone));
-    const classes = parseClasses(html, { date: classDate, timezone });
-    if (classes.length > 0) {
+    const { total, classes } = parseClassesAtTime(html, { classTime, date: classDate, timezone });
+    if (total > 0) {
       return classes;
     }
     if (attempt >= emptyRetryTotal) {
@@ -612,7 +637,9 @@ export async function runOperation({
   }
   const timezone = client.timezone ?? "Europe/Lisbon";
   if (operation === "unenroll") {
-    const classes = await loadClasses(client, { classDate, timezone, sleep });
+    const classes = await loadClasses(client, {
+      classDate, classTime: normalizedClassTime, timezone, sleep,
+    });
     let firstMatch = null;
     for (const candidate of classTypes) {
       try {
@@ -643,7 +670,9 @@ export async function runOperation({
   let lastSelected = null;
   while (polls < maxPolls && now() - startedAt < timeoutSeconds * 1000) {
     polls += 1;
-    const classes = await loadClasses(client, { classDate, timezone, sleep });
+    const classes = await loadClasses(client, {
+      classDate, classTime: normalizedClassTime, timezone, sleep,
+    });
     const selected = pickFirstClass(classes, {
       classTime: normalizedClassTime,
       classTypes,

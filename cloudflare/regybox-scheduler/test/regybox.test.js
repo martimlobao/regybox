@@ -251,6 +251,52 @@ test("runOperation retries a transient empty class list like Python's get_classe
   assert.equal(alwaysEmpty.calls.fetch, 4);
 });
 
+test("runOperation filters class cards by time without changing missing-class semantics", async () => {
+  const open = await fixture("open.html");
+  const otherTime = open.replaceAll("06:30", "05:30").replaceAll("07:20", "06:20");
+  const allClasses = parseClasses(`${otherTime}${open}`, { timezone: "Europe/Lisbon" });
+  const expected = pickFirstClass(allClasses, {
+    classTime: "06:30", classTypes: "WOD Rato", classDate: "2024-07-01",
+  });
+  const matchingClient = makeStubClient([`${otherTime}${open}`]);
+  assert.deepEqual(
+    await runOperation({
+      client: matchingClient, classDate: "2024-07-01", classTime: "06:30", classType: "WOD Rato",
+      timeoutSeconds: 60,
+    }),
+    { operation: "enroll", status: "success", classType: expected.name },
+  );
+
+  const encodedTimeClient = makeStubClient([open.replaceAll("06:30", "06&#58;30")]);
+  assert.deepEqual(
+    await runOperation({
+      client: encodedTimeClient, classDate: "2024-07-01", classTime: "06:30", classType: "WOD Rato",
+      timeoutSeconds: 60,
+    }),
+    { operation: "enroll", status: "success", classType: expected.name },
+  );
+
+  const wrongTimeClient = makeStubClient([open]);
+  await assert.rejects(
+    runOperation({
+      client: wrongTimeClient, classDate: "2024-07-01", classTime: "07:30", classType: "WOD Rato",
+      timeoutSeconds: 60,
+    }),
+    ClassNotFoundError,
+  );
+  assert.equal(wrongTimeClient.calls.fetch, 1);
+
+  const emptyClient = makeStubClient(["<html></html>"]);
+  await assert.rejects(
+    runOperation({
+      client: emptyClient, classDate: "2024-07-01", classTime: "06:30", classType: "WOD Rato",
+      timeoutSeconds: 60, sleep: async () => {},
+    }),
+    NoClassesFoundError,
+  );
+  assert.equal(emptyClient.calls.fetch, 4);
+});
+
 test("runOperation enrolls, waitlists, and handles enrollment noops", async () => {
   const open = await fixture("open.html");
   const full = await fixture("full.html");

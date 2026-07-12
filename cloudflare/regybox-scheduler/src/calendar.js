@@ -156,6 +156,21 @@ function recurrenceInstances(start, rrule, windowStart, windowEnd, excludedDates
   const stepDays = freq === "WEEKLY" ? (byday === null ? 7 * interval : 1) : interval;
   const maxIterations = 4000;
 
+  if (count === null && interval > 0 && windowStart > start) {
+    const elapsedDays = Math.floor((windowStart - start) / 86_400_000);
+    if (freq === "WEEKLY" && byday !== null) {
+      // A BYDAY rule still checks one day at a time, but we only need to scan
+      // the relevant interval week (and its few weekdays), not every day since
+      // a calendar's original series start.
+      const elapsedWeeks = Math.floor(elapsedDays / 7);
+      const firstRelevantWeek = Math.ceil(elapsedWeeks / interval) * interval;
+      cursor = addDays(start, firstRelevantWeek * 7);
+    } else {
+      const steps = Math.floor(elapsedDays / stepDays);
+      cursor = addDays(start, steps * stepDays);
+    }
+  }
+
   for (let index = 0; index < maxIterations; index += 1) {
     const dayOffset = Math.floor((cursor - start) / 86_400_000);
     const intervalMatch =
@@ -192,18 +207,104 @@ function recurrenceInstances(start, rrule, windowStart, windowEnd, excludedDates
   return instances;
 }
 
-function parseEvents(icsText) {
-  const lines = unfoldLines(icsText);
+function parseEventChunk(chunk) {
+  const lines = unfoldLines(chunk);
+  const begin = lines.indexOf("BEGIN:VEVENT");
+  const end = lines.lastIndexOf("END:VEVENT");
+  return begin === -1 || end === -1 ? null : parseProperties(lines.slice(begin + 1, end));
+}
+
+function lineEnd(text, from, end) {
+  const newline = text.indexOf("\n", from);
+  return newline === -1 || newline >= end ? end : newline;
+}
+
+function propertyValue(text, propertyName, begin, end) {
+  const needle = `\n${propertyName}`;
+  let from = begin;
+  while (from < end) {
+    const propertyStart = text.indexOf(needle, from);
+    if (propertyStart === -1 || propertyStart >= end) {
+      return null;
+    }
+    const nameEnd = propertyStart + needle.length;
+    if (text[nameEnd] !== ":" && text[nameEnd] !== ";") {
+      from = nameEnd;
+      continue;
+    }
+
+    let propertyEnd = lineEnd(text, nameEnd, end);
+    while (propertyEnd < end && (text[propertyEnd + 1] === " " || text[propertyEnd + 1] === "\t")) {
+      propertyEnd = lineEnd(text, propertyEnd + 1, end);
+    }
+    const valueStart = text.indexOf(":", nameEnd);
+    if (valueStart !== -1 && valueStart < propertyEnd) {
+      return text.slice(valueStart + 1, propertyEnd).replace(/\r?\n[ \t]/g, "");
+    }
+    from = nameEnd;
+  }
+  return null;
+}
+
+function parseRelevantEvents(icsText, ruleNames, now) {
   const events = [];
-  let current = null;
-  for (const line of lines) {
-    if (line === "BEGIN:VEVENT") {
-      current = [];
-    } else if (line === "END:VEVENT" && current) {
-      events.push(parseProperties(current));
-      current = null;
-    } else if (current) {
-      current.push(line);
+  const text = String(icsText);
+  let from = 0;
+  let nextRecurrenceId = text.indexOf("RECURRENCE-ID", from);
+  let nextRrule = text.indexOf("RRULE", from);
+  while (from < text.length) {
+    const begin = text.indexOf("BEGIN:VEVENT", from);
+    if (begin === -1) {
+      break;
+    }
+    const endMarker = text.indexOf("END:VEVENT", begin + "BEGIN:VEVENT".length);
+    if (endMarker === -1) {
+      break;
+    }
+    const end = endMarker + "END:VEVENT".length;
+
+    // Google Calendar and the other iCalendar producers we support emit uppercase property names.
+    // Reuse the next index so a dropped event never causes a scan of the remaining feed.
+    if (nextRecurrenceId !== -1 && nextRecurrenceId < begin) {
+      nextRecurrenceId = text.indexOf("RECURRENCE-ID", begin);
+    }
+    if (nextRrule !== -1 && nextRrule < begin) {
+      nextRrule = text.indexOf("RRULE", begin);
+    }
+    const isOverride = nextRecurrenceId !== -1 && nextRecurrenceId < end;
+    const isRecurring = nextRrule !== -1 && nextRrule < end;
+    // Overrides are kept unconditionally (their SUMMARY may differ from the
+    // master's; UID filtering happens after masters are known). Masters —
+    // recurring or not — can only be tracked when their SUMMARY matches a
+    // rule name, so anything else is dropped before the expensive parse.
+    if (!isOverride) {
+      const summary = propertyValue(text, "SUMMARY", begin, end);
+      const hasTrackedName = summary !== null && ruleNames.includes(summary.trim().toLowerCase());
+      if (!hasTrackedName) {
+        from = end;
+        if (isRecurring) {
+          nextRrule = text.indexOf("RRULE", from);
+        }
+        continue;
+      }
+      if (!isRecurring) {
+        const start = tryParseDate(propertyValue(text, "DTSTART", begin, end));
+        if (start && start < now) {
+          from = end;
+          continue;
+        }
+      }
+    }
+    const props = parseEventChunk(text.slice(begin, end));
+    if (props) {
+      events.push(props);
+    }
+    from = end;
+    if (isOverride) {
+      nextRecurrenceId = text.indexOf("RECURRENCE-ID", from);
+    }
+    if (isRecurring) {
+      nextRrule = text.indexOf("RRULE", from);
     }
   }
   return events;
@@ -348,12 +449,13 @@ export function expandCalendarEvents({
   const rulesByEventName = new Map(
     resolvedRules.map((rule) => [rule.eventName.trim().toLowerCase(), rule]),
   );
+  const ruleNames = [...rulesByEventName.keys()].filter(Boolean);
   const windowEnd = new Date(now.getTime() + lookaheadHours * 60 * 60 * 1000);
   const zonedDateParts = createZonedDateParts(timeZone);
   const overridesByUid = new Map();
   const masterEvents = [];
 
-  for (const props of parseEvents(icsText)) {
+  for (const props of parseRelevantEvents(icsText, ruleNames, now)) {
     if (isRecurrenceOverride(props)) {
       const uid = props.UID;
       if (!uid) {
