@@ -232,3 +232,6 @@ temp/
 node_modules/
 .worktrees/
 cloudflare/regybox-scheduler/.wrangler.deploy.jsonc
+
+# Wrangler local dev state
+.wrangler/

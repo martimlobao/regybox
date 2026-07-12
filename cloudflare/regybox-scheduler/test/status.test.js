@@ -133,6 +133,24 @@ test("the last run section summarizes results and failures", async () => {
   assert.match(summary.text, /failed \(login_error\)/);
 });
 
+test("a calendar-level failure is described without class placeholders", async () => {
+  const lastRun = {
+    ranAt: new Date(NOW_MS - 5 * 60_000).toISOString(),
+    mode: "worker",
+    plannedOperations: 0,
+    operations: [{ operation: "calendar", outcome: "failure", errorCode: "calendar_or_plan_failure" }],
+  };
+  const model = await buildStatusModel({
+    env: {},
+    kv: makeKv({ "regybox:v1:last_run": JSON.stringify(lastRun) }),
+    now: () => NOW_MS,
+  });
+  const summary = flatChecks(model).find((item) => item.text.startsWith("Last check:"));
+  assert.equal(summary?.level, "bad");
+  assert.ok(!summary.text.includes("undefined"));
+  assert.match(summary.text, /calendar could not be checked \(calendar_or_plan_failure\)/);
+});
+
 test("the rendered page is safe, read-only HTML without secrets", async () => {
   const model = await buildStatusModel({
     env: workerEnv({ PHPSESSID: "super-secret-cookie<script>" }),

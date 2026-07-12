@@ -20,10 +20,10 @@ const STYLES = `
   .sub { color: #777; margin-top: 0; }
   ul { list-style: none; padding: 0; margin: 0.25rem 0; }
   li { padding: 0.6rem 0.2rem; border-bottom: 1px solid #eee; }
-  .ok::before   { content: "\\2705 "; }
-  .bad::before  { content: "\\274C "; }
-  .warn::before { content: "\\26A0\\FE0F "; }
-  .off::before  { content: "\\2796 "; }
+  .ok::before   { content: "\\2705\\00a0 "; }
+  .bad::before  { content: "\\274C\\00a0 "; }
+  .warn::before { content: "\\26A0\\FE0F\\00a0 "; }
+  .off::before  { content: "\\2796\\00a0 "; }
   .hint { display: block; color: #777; font-size: 0.88rem; margin-top: 0.15rem; }
   footer { margin-top: 2rem; color: #777; font-size: 0.85rem; }
 `;
@@ -197,6 +197,11 @@ async function regyboxCheck(env, { createClient, nowMs }) {
 }
 
 function describeOperation(operation) {
+  if (!operation.classDate || !operation.classTime) {
+    return operation.outcome === "failure"
+      ? `the calendar could not be checked (${operation.errorCode || "unknown error"})`
+      : `${operation.operation} ran without class details`;
+  }
   const what = `${operation.classType || "class"} on ${operation.classDate} at ${operation.classTime}`;
   switch (operation.outcome) {
     case "success":
