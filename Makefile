@@ -2,7 +2,7 @@
 JOBS ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 MAKEFLAGS += -j$(JOBS) --output-sync=target
 
-.PHONY: check lint typecheck test test-python test-worker deploy-worker test-strict-roundtrip test-roundtrip-verbose fix repl \
+.PHONY: check lint typecheck test test-python test-worker check-worker-fixtures deploy-worker test-strict-roundtrip test-roundtrip-verbose fix repl \
         lint-ruff lint-ruff-format lint-docfmt lint-bandit lint-yamllint lint-rumdl lint-tombi \
         type-ty type-pyright
 
@@ -50,13 +50,23 @@ type-ty:
 ########
 # Tests
 ########
-test: test-python test-worker
+test: test-python test-worker check-worker-fixtures
 
 test-python:
 	uv run pytest
 
 test-worker:
-	cd cloudflare/regybox-scheduler && npm test
+	# npm test was the previous runner; Worker tests now use bun as required by this repository task.
+	cd cloudflare/regybox-scheduler && bun run test
+
+check-worker-fixtures:
+	@set -e; \
+	if [ ! -d tests/html_examples ]; then exit 0; fi; \
+	for source in tests/html_examples/*.html; do \
+		fixture=cloudflare/regybox-scheduler/test/fixtures/$${source##*/}; \
+		diff -u "$$source" "$$fixture"; \
+	done; \
+	test "$$(find tests/html_examples -maxdepth 1 -type f -name '*.html' -exec basename {} \; | sort)" = "$$(find cloudflare/regybox-scheduler/test/fixtures -maxdepth 1 -type f -name '*.html' -exec basename {} \; | sort)"
 
 deploy-worker:
 	cd cloudflare/regybox-scheduler && npm run deploy
