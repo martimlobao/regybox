@@ -6,7 +6,7 @@ import {
   defaultLookaheadHours,
   expandCalendarEvents,
   normalizeList,
-} from "../worker.js";
+} from "../src/index.js";
 
 const baseEnv = {
   GITHUB_OWNER: "martim",

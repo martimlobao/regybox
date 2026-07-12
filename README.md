@@ -239,9 +239,10 @@ The Worker needs a GitHub token that can call the workflow dispatch endpoint.
 4. Rename the Worker to `regybox-scheduler`.
 5. Click **Deploy**.
 6. Click **Edit code**.
-7. Paste the contents of
-   [`cloudflare/regybox-scheduler/worker.js`](cloudflare/regybox-scheduler/worker.js) from this
-   repository into the `worker.js` tab.
+7. Create the `src/calendar.js` and `src/index.js` modules, then paste the contents of
+   [`cloudflare/regybox-scheduler/src/calendar.js`](cloudflare/regybox-scheduler/src/calendar.js) and
+   [`cloudflare/regybox-scheduler/src/index.js`](cloudflare/regybox-scheduler/src/index.js) into the
+   corresponding tabs.
 8. Click **Deploy**.
 
 If you deploy with Wrangler instead, set `CF_KV_NAMESPACE_ID` to the KV namespace ID from step 2
