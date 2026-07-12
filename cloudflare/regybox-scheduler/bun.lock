@@ -1,0 +1,15 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "regybox-scheduler",
+      "dependencies": {
+        "worker-mailer": "^1.1.5",
+      },
+    },
+  },
+  "packages": {
+    "worker-mailer": ["worker-mailer@1.2.1", "", {}, "sha512-gS2ei/mrpRqNs+AHmqxhT6vFPwCLw2qnz5ShmyGD0ULaU0Q9hxnFAcx9jhAip/MnD6+MjgnQu6hQQgA8mlOkVA=="],
+  }
+}

@@ -3,6 +3,7 @@
   "name": "regybox-scheduler",
   "main": "src/index.js",
   "compatibility_date": "2026-06-17",
+  "compatibility_flags": ["nodejs_compat"],
   "preview_urls": false,
   "keep_vars": true,
   "kv_namespaces": [

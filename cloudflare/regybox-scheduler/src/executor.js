@@ -1,4 +1,5 @@
 import { buildFailureFingerprint, errorPayload } from "./failures.js";
+import { notifyFailure, notifyResult } from "./notify.js";
 import { createRegyboxClient, runOperation } from "./regybox.js";
 
 const LAST_RUN_KEY = "regybox:v1:last_run";
@@ -145,11 +146,19 @@ export async function executePlan({
   createClient = createRegyboxClient,
   runOperationImpl = runOperation,
   dispatchWorkflowImpl = dispatchWorkflow,
+  notifyFailureImpl = notifyFailure,
+  notifyResultImpl = notifyResult,
   sleep,
-  onFailure = () => {},
-  onResult = () => {},
+  onFailure,
+  onResult,
 }) {
   const mode = executionMode(env);
+  const reportFailure =
+    onFailure ??
+    ((notification) =>
+      notifyFailureImpl({ env, kv, ...notification, statusUrl: env.STATUS_URL }));
+  const reportResult =
+    onResult ?? ((notification) => notifyResultImpl({ env, kv, ...notification, statusUrl: env.STATUS_URL }));
   const startedAt = now();
   const operations = [];
   const summary = {
@@ -198,11 +207,11 @@ export async function executePlan({
         const payload = errorPayload(error);
         const fingerprint = buildFailureFingerprint({ operation: details.operation, error });
         operations.push(summaryOperation(details, "failure", { errorCode: payload.errorCode }));
-        await onFailure({ dispatch, error, payload, fingerprint });
+        await reportFailure({ dispatch, error, payload, fingerprint });
         continue;
       }
       await writeState({ kv, details, result });
-      await onResult({ dispatch, result });
+      await reportResult({ dispatch, result });
       operations.push(summaryOperation(details, result.status));
     }
     return summary;

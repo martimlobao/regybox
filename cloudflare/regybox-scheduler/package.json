@@ -5,5 +5,8 @@
   "scripts": {
     "test": "node --test",
     "deploy": "node scripts/render-wrangler-config.mjs && npx wrangler deploy -c .wrangler.deploy.jsonc"
+  },
+  "dependencies": {
+    "worker-mailer": "^1.1.5"
   }
 }
