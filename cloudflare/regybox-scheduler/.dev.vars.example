@@ -5,5 +5,10 @@ REGYBOX_USER=
 # Required. Copy the "Secret address in iCal format" from Google Calendar settings.
 CALENDAR_URL=
 
+# Required. Which calendar events book which Regybox classes, like: CrossFit = WOD
+# Separate several rules with ';' and give backup class names with commas, like:
+# Weightlifting = Weightlifting Rato; CrossFit = WOD, Weekend WOD
+CLASS_MAP=
+
 # Email notifications are optional. Add EMAIL_USERNAME, EMAIL_PASSWORD and EMAIL_TO after deploy
 # under the Worker's Settings -> Variables and Secrets; the status page shows whether they are active.

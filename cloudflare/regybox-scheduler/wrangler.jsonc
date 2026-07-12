@@ -8,7 +8,6 @@
   "preview_urls": false,
   "keep_vars": true,
   "vars": {
-    "CLASS_MAP": "CrossFit = WOD",
     "TIMEZONE": "Europe/Lisbon",
     "LOOKAHEAD_HOURS": "73"
   },
