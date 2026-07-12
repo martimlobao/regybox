@@ -71,7 +71,9 @@ GitHub account (both free — GitHub is only used to store your copy of the code
 
 To change any of these values later, open the Worker in the Cloudflare dashboard
 and edit them under **Settings → Variables and Secrets** — the status page (step 5)
-always shows the booking rules currently in effect.
+always shows the booking rules currently in effect. (One caveat: if you ever
+redeploy from your copy of the code, `CLASS_MAP` resets to what you entered at
+deploy time — re-check it afterwards.)
 
 ### 4. Optional: Turn on Email Notifications
 

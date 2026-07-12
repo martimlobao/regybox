@@ -28,7 +28,7 @@
         "description": "Paste the secret iCal address from your Google Calendar settings."
       },
       "CLASS_MAP": {
-        "description": "Which calendar events book which Regybox classes, for example: CrossFit = WOD. Add more rules separated by semicolons, and backup class names with commas."
+        "description": "Which calendar events book which Regybox classes, for example: CrossFit books the WOD class. Separate extra rules with semicolons and add backup class names with commas."
       },
       "TIMEZONE": {
         "description": "Timezone used to interpret class times."
