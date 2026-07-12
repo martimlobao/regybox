@@ -5,6 +5,7 @@ import {
   normalizeList,
 } from "./calendar.js";
 import { dispatchWorkflow, executePlan, executionMode, writeLastRun } from "./executor.js";
+import { handleStatusRequest } from "./status.js";
 
 export {
   buildPlan,
@@ -54,9 +55,7 @@ export default {
   async scheduled(_event, env, _ctx) {
     await handleScheduled(env);
   },
-  async fetch(_request, _env, _ctx) {
-    return new Response("Regybox scheduler Worker is healthy.\n", {
-      headers: { "content-type": "text/plain; charset=utf-8" },
-    });
+  async fetch(_request, env, _ctx) {
+    return handleStatusRequest(env, env.REGYBOX_STATE);
   },
 };
