@@ -4,6 +4,38 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "deploy": "node scripts/render-wrangler-config.mjs && npx wrangler deploy -c .wrangler.deploy.jsonc"
+    "deploy": "wrangler deploy",
+    "deploy:manual": "node scripts/render-wrangler-config.mjs && wrangler deploy -c .wrangler.deploy.jsonc"
+  },
+  "dependencies": {
+    "worker-mailer": "^1.1.5"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  },
+  "cloudflare": {
+    "bindings": {
+      "REGYBOX_STATE": {
+        "description": "Created automatically to remember which classes have already been handled."
+      },
+      "PHPSESSID": {
+        "description": "Copy this cookie value from regybox.pt developer tools so the Worker can sign in."
+      },
+      "REGYBOX_USER": {
+        "description": "Copy this cookie value from regybox.pt developer tools so the Worker can identify your account."
+      },
+      "CALENDAR_URL": {
+        "description": "Paste the secret iCal address from your Google Calendar settings."
+      },
+      "CLASS_MAP": {
+        "description": "Which calendar events book which Regybox classes, like: CrossFit = WOD. Separate several rules with ';' and give backup class names with commas: Weightlifting = Weightlifting Rato; CrossFit = WOD, Weekend WOD."
+      },
+      "TIMEZONE": {
+        "description": "Timezone used to interpret class times."
+      },
+      "LOOKAHEAD_HOURS": {
+        "description": "How many hours ahead the Worker looks for classes."
+      }
+    }
   }
 }
