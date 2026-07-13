@@ -3,6 +3,8 @@
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://docs.astral.sh/uv/)
 [![codecov](https://codecov.io/gh/martimlobao/regybox/graph/badge.svg?branch=main)](https://codecov.io/gh/martimlobao/regybox)
 
+![The Worker's status page: green setup and live checks, the last run, and recent activity including an enrollment.](./static/status-page.png)
+
 Automatically enroll in a CrossFit class on the Regybox platform.
 
 Add your classes to your calendar (or delete one to skip a day), and this project
@@ -64,6 +66,9 @@ GitHub account (both free — GitHub is only used to store your copy of the code
       The second example books `Weightlifting Rato` for calendar events titled
       "Weightlifting", and for events titled "CrossFit" tries `WOD` first and
       `Weekend WOD` if there is no `WOD` at that time.
+
+   ![The Create a Worker screen prompting for the KV namespace, cookie values, calendar link, and CLASS_MAP.](./static/deploy-screen.png)
+
 3. Click **Create and deploy**. Cloudflare creates the storage and the half-hourly
    schedule automatically. You can skip everything under **Advanced settings** —
    the "Variable name/value" fields there are build-time settings and do not
@@ -71,7 +76,9 @@ GitHub account (both free — GitHub is only used to store your copy of the code
 
 To change any of these values later, open the Worker in the Cloudflare dashboard
 and edit them under **Settings → Variables and Secrets** — the status page (step 5)
-always shows the booking rules currently in effect.
+always shows the booking rules currently in effect. (One caveat: if you ever
+redeploy from your copy of the code, `CLASS_MAP` resets to what you entered at
+deploy time — re-check it afterwards.)
 
 ### 4. Optional: Turn on Email Notifications
 
