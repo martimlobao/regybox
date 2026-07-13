@@ -76,14 +76,35 @@ GitHub account (both free — GitHub is only used to store your copy of the code
 
 To change any of these values later, open the Worker in the Cloudflare dashboard
 and edit them under **Settings → Variables and Secrets** — the status page (step 5)
-always shows the booking rules currently in effect. (One caveat: if you ever
-redeploy from your copy of the code, `CLASS_MAP` resets to what you entered at
-deploy time — re-check it afterwards.)
+always shows the booking rules currently in effect. Your dashboard values stay in
+place when the Worker is redeployed; in particular, updates do not replace your
+`CLASS_MAP`, cookies, calendar URL, or email settings.
+
+### Automatic Updates
+
+The Worker copy created in your GitHub account checks for Regybox updates every
+day and installs them automatically. Cloudflare then deploys the update for you.
+Your Worker name, storage, variables, and secrets stay yours; only the Regybox
+code and its shared scheduling configuration are updated. A small monthly
+heartbeat keeps the update workflow enabled even when GitHub would otherwise
+disable scheduled workflows for an inactive public repository.
+
+To update immediately, open your GitHub copy, choose **Actions → Regybox
+Automatic Updates → Run workflow**. If you have changed the code yourself and
+want to maintain it independently, disable that workflow in the **Actions** tab.
+
+The workflow's **Commit and deploy the update** step pushes directly to the
+repository's default branch. If you add branch protection that requires pull
+request approval or status checks before every push, allow this workflow to
+bypass that rule or automatic updates will fail.
 
 ### 4. Optional: Turn on Email Notifications
 
 You will get an email when a class is booked or cancelled, or when something needs
-your attention (like an expired login). Runs that change nothing stay silent.
+your attention (like an expired login). Runs that change nothing stay silent. Failure
+emails include a private, hard-to-guess link to a sanitized incident report with the
+details needed for troubleshooting. Reports expire after seven days and never contain
+cookies, passwords, calendar links, full booking URLs, or URL query tokens.
 
 1. If you use Gmail, create an [App Password](https://myaccount.google.com/apppasswords)
    — a special password just for this Worker; your normal password never leaves
@@ -121,6 +142,10 @@ tell you — copy fresh cookie values from regybox.pt and update `PHPSESSID` und
 - **Status page** (the `workers.dev` link): the **Recent activity** section lists the
   last bookings, cancellations, and failures with timestamps, and **Last run** shows
   what the most recent half-hourly check did — including "nothing to do".
+- **Failure email link**: opens a read-only incident report containing safe parser and
+  operation details. The link works for seven days. Open the status page once after
+  deployment so scheduled runs know the Worker's public address; alternatively set
+  `STATUS_URL` to that address under **Settings → Variables and Secrets**.
 - **Cloudflare logs**: in the dashboard, open the Worker → **Logs** to see every run
   (searchable, kept for a few days). Every log line the scheduler writes starts with
   `regybox:`, for example `regybox: enroll WOD on 2026-07-14 at 06:30 -> success`.

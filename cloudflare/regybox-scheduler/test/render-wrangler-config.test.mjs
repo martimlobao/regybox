@@ -8,6 +8,7 @@ import {
   collectWorkerVars,
   loadRepoDotEnv,
   renderWranglerConfig,
+  stripJsoncComments,
 } from "../scripts/render-wrangler-config.mjs";
 
 const template = `{
@@ -26,6 +27,21 @@ test("renderWranglerConfig strips deploy-button defaults for manual deploys", ()
   const rendered = JSON.parse(renderWranglerConfig(template, "test-kv-namespace-id"));
   assert.equal(rendered.kv_namespaces[0].id, "test-kv-namespace-id");
   assert.equal(rendered.vars, undefined);
+});
+
+test("stripJsoncComments preserves comment markers inside strings", () => {
+  const parsed = JSON.parse(
+    stripJsoncComments(`{
+      // deployment metadata
+      "$schema": "https://example.test/wrangler.schema.json",
+      "escaped": "quote: \\\" // still a string",
+      "status": "https://worker.example.test/regybox" /* configured route */
+    }`),
+  );
+
+  assert.equal(parsed.$schema, "https://example.test/wrangler.schema.json");
+  assert.equal(parsed.escaped, 'quote: " // still a string');
+  assert.equal(parsed.status, "https://worker.example.test/regybox");
 });
 
 test("renderWranglerConfig injects worker vars from env", () => {

@@ -47,7 +47,57 @@ export function loadRepoDotEnv(repoRoot) {
 }
 
 export function stripJsoncComments(text) {
-  return text.replace(/\/\/.*$/gm, "");
+  let result = "";
+  let inString = false;
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    const nextCharacter = text[index + 1];
+
+    if (inLineComment) {
+      if (character === "\n") {
+        inLineComment = false;
+        result += character;
+      }
+      continue;
+    }
+    if (inBlockComment) {
+      if (character === "*" && nextCharacter === "/") {
+        inBlockComment = false;
+        index += 1;
+      } else if (character === "\n") {
+        result += character;
+      }
+      continue;
+    }
+    if (inString) {
+      result += character;
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      result += character;
+    } else if (character === "/" && nextCharacter === "/") {
+      inLineComment = true;
+      index += 1;
+    } else if (character === "/" && nextCharacter === "*") {
+      inBlockComment = true;
+      index += 1;
+    } else {
+      result += character;
+    }
+  }
+  return result;
 }
 
 export function collectWorkerVars(env) {

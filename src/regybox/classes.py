@@ -4,7 +4,7 @@ import datetime
 import re
 import time
 from dataclasses import dataclass, field
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import ftfy
 from bs4 import BeautifulSoup
@@ -174,11 +174,19 @@ class Class:
             * enroll_url
 
         Raises:
-            TypeError: If the button object is not of the expected type.
-            ValueError: If the button object has unexpected properties.
+            UnparseableError: If class action buttons are ambiguous or use an
+                unknown booking endpoint.
         """
-        button: Tag | NavigableString | None = self._tag.find("button")
-        self.is_open = bool(button)
+        button_actions, unknown_action_endpoints = self._get_button_actions()
+        if unknown_action_endpoints:
+            raise UnparseableError(
+                f"Unknown class action endpoint: {', '.join(unknown_action_endpoints)}"
+            )
+        if len(button_actions) > 1:
+            endpoints = [urlparse(url).path for _, url in button_actions]
+            raise UnparseableError(f"Ambiguous class action controls: {', '.join(endpoints)}")
+        button_action = button_actions[0] if button_actions else None
+        self.is_open = bool(button_action)
         if self._tag.find(
             "div", attrs={"class": "letra_10", "style": re.compile(r"padding-top:\s*7px")}
         ):
@@ -186,8 +194,6 @@ class Class:
             # another class
             self.is_open = True
 
-        if isinstance(button, NavigableString):
-            raise TypeError(f"Unexpected button format: {button}")
         if (
             self._tag.find(
                 "div",
@@ -200,16 +206,51 @@ class Class:
             is not None
         ):
             self.user_is_enrolled = True
-        elif button is None:
+        elif button_action is None:
             self.user_is_enrolled = False
-        elif "color-red" in button.attrs["class"]:
+        elif button_action[0] == "unenroll":
             self.user_is_enrolled = True
-            self.unenroll_url = self._get_button_url(button)
-        elif all(attr in button.attrs["class"] for attr in ["buts_inscrever", "color-green"]):
+            self.unenroll_url = button_action[1]
+        elif button_action[0] == "enroll":
             self.user_is_enrolled = False
-            self.enroll_url = self._get_button_url(button)
-        else:
-            raise ValueError(f"Unexpected properties in button object: {button.attrs['class']}")
+            self.enroll_url = button_action[1]
+
+    def _get_button_actions(self) -> tuple[list[tuple[str, str]], list[str]]:
+        """Return known booking actions and unknown booking-like endpoints.
+
+        Raises:
+            UnparseableError: If a known action uses an unexpected origin or
+                path.
+        """
+        buttons: list[Tag] = self._tag.find_all("button")
+        button_actions: list[tuple[str, str]] = []
+        unknown_action_endpoints: list[str] = []
+        domain = urlparse(DOMAIN)
+        action_path_prefix = "/app/app_nova/php/aulas/"
+        for button in buttons:
+            button_classes = set(button.get("class", []))
+            looks_like_booking_control = "buts_inscrever" in button_classes
+            for button_url in self._get_button_urls(button):
+                parsed_url = urlparse(button_url)
+                pathname = parsed_url.path
+                known_action = pathname.endswith(("/marca_aulas.php", "/cancela_aula.php"))
+                if known_action and (
+                    parsed_url.scheme != domain.scheme
+                    or parsed_url.netloc != domain.netloc
+                    or not pathname.startswith(action_path_prefix)
+                ):
+                    raise UnparseableError(
+                        "Class action control used an unexpected origin or path"
+                    )
+                if pathname == f"{action_path_prefix}marca_aulas.php":
+                    button_actions.append(("enroll", button_url))
+                elif pathname == f"{action_path_prefix}cancela_aula.php":
+                    button_actions.append(("unenroll", button_url))
+                elif looks_like_booking_control and re.search(
+                    r"/aulas/[^/]+\.php$", pathname, re.IGNORECASE
+                ):
+                    unknown_action_endpoints.append(pathname)
+        return button_actions, unknown_action_endpoints
 
     def _init_state(self) -> None:
         """Sets class attributes mainly using class descriptors.
@@ -263,15 +304,12 @@ class Class:
                 self.time_to_start = int(timer.attrs["value"])
 
     @staticmethod
-    def _get_button_url(button: Tag) -> str:
-        onclick: str = button.attrs["onclick"]
-        LOGGER.debug(f"Found button onclick action: '{onclick}")
-        button_urls: list[str] = [part for part in onclick.split("'") if ".php" in part]
-        if len(button_urls) != 1:
-            raise UnparseableError(
-                f"Expecting one url in button, found {len(button_urls)}: {onclick}"
-            )
-        return urljoin(DOMAIN, button_urls[0])
+    def _get_button_urls(button: Tag) -> list[str]:
+        onclick = str(button.attrs.get("onclick", ""))
+        raw_urls = re.findall(r"[^'\"\s,(]+\.php(?:\?[^'\"\s,)]*)?", onclick, re.IGNORECASE)
+        urls = [urljoin(DOMAIN, raw_url) for raw_url in raw_urls]
+        LOGGER.debug("Found %d PHP button endpoint(s)", len(urls))
+        return urls
 
     def enroll(self) -> str:
         """Enroll the student in the CrossFit class.

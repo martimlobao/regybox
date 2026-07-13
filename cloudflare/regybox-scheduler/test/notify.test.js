@@ -10,6 +10,7 @@ import {
   notifyResult,
   sendEmail,
 } from "../src/notify.js";
+import { incidentConstants } from "../src/incidents.js";
 import { RegyboxLoginError } from "../src/regybox.js";
 
 const emailEnv = {
@@ -107,6 +108,20 @@ test("failure email includes recovery steps and structured technical details", (
         "What to do next:\n1. Refresh the saved cookies.\n2. Run the workflow again.\n\n" +
         "Technical details (for support):\nTechnical message: RegyboxLoginError: missing session",
     },
+  );
+});
+
+test("failure email includes the short-lived incident link when available", () => {
+  const email = composeEmail({
+    kind: "failure",
+    operation: "enroll",
+    classSummary: "WOD on 2026-07-12 at 06:30",
+    payload: failurePayload,
+    incidentUrl: "https://worker.example.test/incidents/0123456789abcdef0123456789abcdef0123",
+  });
+  assert.match(
+    email.body,
+    /More details \(available for 7 days\): https:\/\/worker\.example\.test\/incidents\//,
   );
 });
 
@@ -265,7 +280,9 @@ test("noop results and unconfigured SMTP settings do not send or touch KV", asyn
 
 test("executor's worker default notification hook sends failures, while dispatch mode does not", async () => {
   const sent = [];
-  const kv = makeKv();
+  const kv = makeKv(
+    new Map([[incidentConstants.STATUS_ORIGIN_KEY, "https://worker.example.test"]]),
+  );
   await executePlan({
     env: workerEnv,
     kv,
@@ -279,6 +296,7 @@ test("executor's worker default notification hook sends failures, while dispatch
   });
   assert.equal(sent.length, 1);
   assert.match(sent[0].subject, /failure - Unable to log in to Regybox$/);
+  assert.match(sent[0].body, /https:\/\/worker\.example\.test\/incidents\/[a-f0-9]{36}/);
 
   let dispatchNotifications = 0;
   await executePlan({

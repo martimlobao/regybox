@@ -297,6 +297,99 @@ test("runOperation filters class cards by time without changing missing-class se
   assert.equal(emptyClient.calls.fetch, 4);
 });
 
+test("action controls are classified by endpoint instead of CSS classes", async () => {
+  const open = await fixture("open.html");
+  const registered = await fixture("registered.html");
+  const classlessOpen = open.replace(/<button class="[^"]+"/, "<button");
+  const classlessRegistered = registered.replace(/<button class="[^"]+"/, "<button");
+
+  assert.ok(parseClass(classlessOpen).enrollUrl?.includes("/marca_aulas.php?"));
+  assert.ok(parseClass(classlessRegistered).unenrollUrl?.includes("/cancela_aula.php?"));
+
+  const withUnrelatedButton = open.replace(
+    /(<button\b)/,
+    '<button onclick="show_help()">Help</button>$1',
+  );
+  assert.ok(parseClass(withUnrelatedButton).enrollUrl?.includes("/marca_aulas.php?"));
+
+  const withUnrelatedPhpButton = open.replace(
+    /(<button\b)/,
+    '<button onclick="php/aulas/class_details.php?id=private">Details</button>$1',
+  );
+  assert.ok(parseClass(withUnrelatedPhpButton).enrollUrl?.includes("/marca_aulas.php?"));
+
+  const withColoredHelpButton = open.replace(
+    /(<button\b)/,
+    '<button class="button color-green" onclick="php/aulas/class_details.php?id=private">Help</button>$1',
+  );
+  assert.ok(parseClass(withColoredHelpButton).enrollUrl?.includes("/marca_aulas.php?"));
+});
+
+test("unknown and ambiguous class action endpoints fail with secret-safe diagnostics", async () => {
+  const open = await fixture("open.html");
+  const unknown = open.replace("marca_aulas.php", "new_booking_action.php");
+  assert.throws(
+    () => parseClass(unknown),
+    (error) => {
+      assert.ok(error instanceof UnparseableError);
+      assert.match(error.message, /\/new_booking_action\.php/);
+      assert.doesNotMatch(error.message, /id_aula|00113455677789aabcddddeeefff/);
+      return true;
+    },
+  );
+
+  const offOrigin = open.replace(
+    /\.\.\/app_nova\/php\/aulas\/marca_aulas\.php/,
+    "https://attacker.example/app/app_nova/php/aulas/marca_aulas.php",
+  );
+  assert.throws(
+    () => parseClass(offOrigin),
+    (error) => {
+      assert.ok(error instanceof UnparseableError);
+      assert.match(error.message, /unexpected origin or path/);
+      assert.doesNotMatch(error.message, /attacker\.example|id_aula/);
+      assert.deepEqual(error.safeDiagnostics, {
+        actionEndpoints: [],
+        unexpectedOriginEndpoints: ["/app/app_nova/php/aulas/marca_aulas.php"],
+      });
+      return true;
+    },
+  );
+
+  const ambiguous = open.replace(
+    /(<button\b)/,
+    '<button onclick="php/aulas/cancela_aula.php?id_aula=secret-token">Cancel</button>$1',
+  );
+  assert.throws(
+    () => parseClass(ambiguous),
+    (error) => {
+      assert.ok(error instanceof UnparseableError);
+      assert.match(error.message, /Ambiguous class action controls/);
+      assert.doesNotMatch(error.message, /secret-token|id_aula/);
+      return true;
+    },
+  );
+});
+
+test("an unrelated malformed same-time class cannot abort the requested class", async () => {
+  const open = await fixture("open.html");
+  const unrelatedMalformed = open
+    .replace("WOD Rato", "Yoga")
+    .replace("marca_aulas.php", "unknown_action.php");
+  const client = makeStubClient([`${unrelatedMalformed}${open}`]);
+
+  assert.deepEqual(
+    await runOperation({
+      client,
+      classDate: "2024-07-01",
+      classTime: "06:30",
+      classType: "WOD Rato, Weekend WOD Rato",
+      timeoutSeconds: 60,
+    }),
+    { operation: "enroll", status: "success", classType: "WOD Rato" },
+  );
+});
+
 test("runOperation enrolls, waitlists, and handles enrollment noops", async () => {
   const open = await fixture("open.html");
   const full = await fixture("full.html");

@@ -1,3 +1,5 @@
+import { incidentConstants } from "./incidents.js";
+
 const STATE_TTL_SECONDS = 2592000;
 const MAX_APPENDIX_LINES = 12;
 
@@ -52,7 +54,7 @@ export function classSummary({ classType, classDate, classTime }) {
 }
 
 /** Build the plain-text email content for a completed worker operation. */
-export function composeEmail({ kind, operation, classSummary: summary, payload = {}, statusUrl }) {
+export function composeEmail({ kind, operation, classSummary: summary, payload = {}, statusUrl, incidentUrl }) {
   const operationName = operationLabel(operation);
   const operationNoun = operationName === "unenroll" ? "unenrollment" : "enrollment";
 
@@ -88,6 +90,12 @@ export function composeEmail({ kind, operation, classSummary: summary, payload =
       "",
       "Technical details (for support):",
       trimAppendix(`Technical message: ${payload.technicalMessage}`),
+    );
+  }
+  if (incidentUrl) {
+    bodyLines.push(
+      "",
+      `More details (available for ${incidentConstants.INCIDENT_RETENTION_DAYS} days): ${incidentUrl}`,
     );
   }
   if (statusUrl) {
@@ -168,6 +176,7 @@ export async function notifyFailure({
   payload,
   fingerprint,
   statusUrl,
+  incidentUrl,
   send = sendEmail,
 }) {
   if (!emailConfigured(env)) {
@@ -200,6 +209,7 @@ export async function notifyFailure({
         }),
         payload,
         statusUrl,
+        incidentUrl,
       }),
     );
   } catch (notificationError) {

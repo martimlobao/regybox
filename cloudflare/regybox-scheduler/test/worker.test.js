@@ -7,6 +7,7 @@ import {
   expandCalendarEvents,
   normalizeList,
 } from "../src/index.js";
+import worker from "../src/index.js";
 
 const baseEnv = {
   GITHUB_OWNER: "martim",
@@ -76,6 +77,27 @@ test("default lookahead is 73 hours", () => {
 
 test("normalizeList accepts comma-separated values", () => {
   assert.deepEqual(normalizeList(" Crossfit, Strength ,, "), ["Crossfit", "Strength"]);
+});
+
+test("path-prefixed incident links route to the incident handler", async () => {
+  const id = "0123456789abcdef0123456789abcdef0123";
+  const kv = makeKv(
+    new Map([
+      [
+        `regybox:v1:incident:${id}`,
+        JSON.stringify({ timestamp: "2026-07-13T12:00:00.000Z", errorName: "Error" }),
+      ],
+    ]),
+  );
+
+  const response = await worker.fetch(
+    new Request(`https://worker.example.test/regybox/incidents/${id}`),
+    { REGYBOX_STATE: kv },
+    {},
+  );
+
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /Regybox incident details/);
 });
 
 test("recurring calendar events expand inside the lookahead window", () => {

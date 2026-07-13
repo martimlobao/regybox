@@ -4,8 +4,10 @@ const DIV_TAG_RE = /<\/?div\b[^>]*>/gi;
 const TAG_RE = /<[^>]+>/g;
 const SCRIPT_RE = /<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi;
 const ATTR_RE = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
-const BUTTON_RE = /<button\b([^>]*)>/i;
+const BUTTON_RE = /<button\b([^>]*)>/gi;
 const INPUT_RE = /<input\b([^>]*)>/gi;
+const DOMAIN_ORIGIN = new URL(DOMAIN).origin;
+const CLASS_ACTION_PATH_PREFIX = "/app/app_nova/php/aulas/";
 
 export class RegyboxLoginError extends Error {
   constructor(message = "Unable to log in") {
@@ -54,9 +56,12 @@ export class RegyboxTimeoutError extends Error {
 }
 
 export class UnparseableError extends Error {
-  constructor(message = "Unable to parse HTML") {
+  constructor(message = "Unable to parse HTML", diagnostics = undefined) {
     super(message);
     this.name = "UnparseableError";
+    if (diagnostics) {
+      this.safeDiagnostics = diagnostics;
+    }
   }
 }
 
@@ -167,25 +172,58 @@ function hasStyle(attrs, pattern) {
   return pattern.test(String(attrs.style ?? ""));
 }
 
-function buttonUrl(block, expectedClasses) {
-  const match = block.match(BUTTON_RE);
-  if (!match) {
-    return null;
+function buttonActions(block) {
+  const actions = [];
+  const unknownActionEndpoints = [];
+  for (const match of block.matchAll(BUTTON_RE)) {
+    const attrs = parseAttributes(match[1]);
+    const looksLikeBookingControl = hasClass(attrs, "buts_inscrever");
+    const urls = String(attrs.onclick ?? "").match(/[^'"\s,(]+\.php(?:\?[^'"\s,)]*)?/gi) ?? [];
+    for (const rawUrl of urls) {
+      let url;
+      try {
+        url = new URL(decodeEntities(rawUrl), DOMAIN);
+      } catch {
+        continue;
+      }
+      const pathname = url.pathname;
+      const knownAction =
+        pathname.endsWith("/marca_aulas.php") || pathname.endsWith("/cancela_aula.php");
+      if (
+        knownAction &&
+        (url.origin !== DOMAIN_ORIGIN || !pathname.startsWith(CLASS_ACTION_PATH_PREFIX))
+      ) {
+        throw new UnparseableError("Class action control used an unexpected origin or path", {
+          actionEndpoints: actions.map(({ pathname: actionPath }) => actionPath),
+          unexpectedOriginEndpoints: [pathname],
+        });
+      }
+      if (pathname === `${CLASS_ACTION_PATH_PREFIX}marca_aulas.php`) {
+        actions.push({ operation: "enroll", url: url.href, pathname });
+      } else if (pathname === `${CLASS_ACTION_PATH_PREFIX}cancela_aula.php`) {
+        actions.push({ operation: "unenroll", url: url.href, pathname });
+      } else if (looksLikeBookingControl && /\/aulas\/[^/]+\.php$/i.test(pathname)) {
+        unknownActionEndpoints.push(pathname);
+      }
+    }
   }
-  const attrs = parseAttributes(match[1]);
-  if (!hasClass(attrs, ...expectedClasses)) {
-    return null;
+  const diagnostics = {
+    actionEndpoints: actions.map(({ pathname }) => pathname),
+    unknownActionEndpoints,
+  };
+  if (unknownActionEndpoints.length > 0) {
+    throw new UnparseableError(
+      `Unknown class action endpoint: ${unknownActionEndpoints.join(", ")}`,
+      diagnostics,
+    );
   }
-  const urls = String(attrs.onclick ?? "").match(/[^'"\s]+\.php[^'"\s]*/g) ?? [];
-  if (urls.length !== 1) {
-    throw new UnparseableError(`Expected one action URL in button, found ${urls.length}`);
+  if (actions.length > 1) {
+    throw new UnparseableError(
+      `Ambiguous class action controls: ${actions.map(({ pathname }) => pathname).join(", ")}`,
+      diagnostics,
+    );
   }
-  return new URL(decodeEntities(urls[0]), DOMAIN).href;
-}
-
-function firstButtonAttrs(block) {
-  const match = block.match(BUTTON_RE);
-  return match ? parseAttributes(match[1]) : null;
+  return actions[0] ?? null;
 }
 
 function timerValue(block) {
@@ -257,11 +295,11 @@ function parseClassBlock(block, { timezone }) {
     throw new UnparseableError(`Unexpected capacity value: ${capacity[1]}`);
   }
   const maxCapacity = parseCapacity(capacity[2]);
-  const button = firstButtonAttrs(block);
+  const buttonAction = buttonActions(block);
   const isOpenByOtherEnrollment = nodes.some(
     (node) => hasClass(node.attrs, "letra_10") && hasStyle(node.attrs, /padding-top:\s*7px/i),
   );
-  const isOpen = Boolean(button) || isOpenByOtherEnrollment;
+  const isOpen = Boolean(buttonAction) || isOpenByOtherEnrollment;
   const enrolledStatus = nodes.some(
     (node) =>
       node.attrs.align === "right" &&
@@ -271,15 +309,11 @@ function parseClassBlock(block, { timezone }) {
   let userIsEnrolled = enrolledStatus;
   let enrollUrl = null;
   let unenrollUrl = null;
-  if (!enrolledStatus && button) {
-    if (hasClass(button, "color-red")) {
-      userIsEnrolled = true;
-      unenrollUrl = buttonUrl(block, ["color-red"]);
-    } else if (hasClass(button, "buts_inscrever", "color-green")) {
-      enrollUrl = buttonUrl(block, ["buts_inscrever", "color-green"]);
-    } else {
-      throw new UnparseableError(`Unexpected button classes: ${button.class ?? ""}`);
-    }
+  if (!enrolledStatus && buttonAction?.operation === "unenroll") {
+    userIsEnrolled = true;
+    unenrollUrl = buttonAction.url;
+  } else if (!enrolledStatus && buttonAction?.operation === "enroll") {
+    enrollUrl = buttonAction.url;
   }
   const error = /<span\b[^>]*\bclass\s*=\s*(["'])[^"']*\berro_color\b[^"']*\1/i.test(block);
   const userIsWaitlisted = nodes.some((node) => hasClass(node.attrs, "preloader", "color-orange"));
@@ -352,15 +386,35 @@ export function parseClasses(html, { date, timezone = "Europe/Lisbon" } = {}) {
   return classBlocks(String(html)).map((block) => parseClassBlock(block, { timezone }));
 }
 
-function parseClassesAtTime(html, { classTime, date, timezone = "Europe/Lisbon" } = {}) {
+function parseClassesAtTime(
+  html,
+  { classTime, classTypes = [], date, timezone = "Europe/Lisbon" } = {},
+) {
   void date; // The timestamp embedded in each card is the Python source of truth.
   const blocks = classBlocks(String(html));
   return {
     total: blocks.length,
     classes: blocks
-      .filter((block) => hasClassTime(block, classTime))
+      .filter(
+        (block) => hasClassTime(block, classTime) && hasCandidateClassName(block, classTypes),
+      )
       .map((block) => parseClassBlock(block, { timezone })),
   };
+}
+
+function hasCandidateClassName(block, classTypes) {
+  const candidates = new Set(
+    (Array.isArray(classTypes) ? classTypes : parseClassTypes(classTypes)).map((name) =>
+      String(name).toUpperCase(),
+    ),
+  );
+  if (candidates.size === 0) {
+    return true;
+  }
+  const nameNode = divNodes(block).find(
+    (node) => node.attrs.align === "left" && hasClass(node.attrs, "col-50"),
+  );
+  return Boolean(nameNode && candidates.has(textContent(nameNode.inner).toUpperCase()));
 }
 
 function hasClassTime(block, classTime) {
@@ -591,6 +645,7 @@ async function loadClasses(
   {
     classDate,
     classTime,
+    classTypes,
     timezone,
     sleep = defaultSleep,
     emptyRetryTotal = 3,
@@ -601,7 +656,12 @@ async function loadClasses(
   // transient; a bounded retry keeps that behavior within the subrequest cap.
   for (let attempt = 0; ; attempt += 1) {
     const html = await client.fetchClassesHtml(zonedMidnightMs(classDate, timezone));
-    const { total, classes } = parseClassesAtTime(html, { classTime, date: classDate, timezone });
+    const { total, classes } = parseClassesAtTime(html, {
+      classTime,
+      classTypes,
+      date: classDate,
+      timezone,
+    });
     if (total > 0) {
       return classes;
     }
@@ -638,7 +698,7 @@ export async function runOperation({
   const timezone = client.timezone ?? "Europe/Lisbon";
   if (operation === "unenroll") {
     const classes = await loadClasses(client, {
-      classDate, classTime: normalizedClassTime, timezone, sleep,
+      classDate, classTime: normalizedClassTime, classTypes, timezone, sleep,
     });
     let firstMatch = null;
     for (const candidate of classTypes) {
@@ -671,7 +731,7 @@ export async function runOperation({
   while (polls < maxPolls && now() - startedAt < timeoutSeconds * 1000) {
     polls += 1;
     const classes = await loadClasses(client, {
-      classDate, classTime: normalizedClassTime, timezone, sleep,
+      classDate, classTime: normalizedClassTime, classTypes, timezone, sleep,
     });
     const selected = pickFirstClass(classes, {
       classTime: normalizedClassTime,
