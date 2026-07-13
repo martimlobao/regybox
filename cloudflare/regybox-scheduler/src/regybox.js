@@ -194,7 +194,8 @@ function buttonActions(block) {
         (url.origin !== DOMAIN_ORIGIN || !pathname.startsWith(CLASS_ACTION_PATH_PREFIX))
       ) {
         throw new UnparseableError("Class action control used an unexpected origin or path", {
-          unknownActionEndpoints: [pathname],
+          actionEndpoints: actions.map(({ pathname: actionPath }) => actionPath),
+          unexpectedOriginEndpoints: [pathname],
         });
       }
       if (pathname === `${CLASS_ACTION_PATH_PREFIX}marca_aulas.php`) {

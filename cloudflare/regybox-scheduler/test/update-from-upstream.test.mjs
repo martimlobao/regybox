@@ -10,13 +10,14 @@ import {
 } from "../scripts/update-from-upstream.mjs";
 
 const upstreamConfig = `{
+  "$schema": "https://example.test/wrangler.schema.json",
   "name": "regybox-scheduler",
   "vars": {
     "CLASS_MAP": "CrossFit = WOD",
     "TIMEZONE": "Europe/Lisbon"
   },
   "kv_namespaces": [{ "binding": "REGYBOX_STATE" }],
-  "triggers": { "crons": ["28,58 * * * *"] }
+  "triggers": { "crons": ["28,58 * * * *"] } // keep schedule current
 }`;
 
 const deploymentConfig = `{
@@ -24,7 +25,8 @@ const deploymentConfig = `{
   "keep_vars": true,
   "vars": {
     "CLASS_MAP": "Yoga = Yoga",
-    "TIMEZONE": "Europe/Madrid"
+    "TIMEZONE": "Europe/Madrid",
+    "STATUS_URL": "https://worker.example.test/regybox"
   },
   "kv_namespaces": [{ "binding": "REGYBOX_STATE", "id": "ana-kv" }]
 }`;
@@ -39,6 +41,7 @@ test("automatic updates keep the Worker identity and dashboard-owned variables",
   assert.equal(merged.kv_namespaces[0].id, "ana-kv");
   assert.equal(merged.vars, undefined);
   assert.deepEqual(merged.triggers, { crons: ["28,58 * * * *"] });
+  assert.equal(merged.$schema, "https://example.test/wrangler.schema.json");
 });
 
 test("automatic updates replace managed code while leaving personal files alone", () => {

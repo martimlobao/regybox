@@ -74,7 +74,7 @@ export default {
   },
   async fetch(request, env, _ctx) {
     const url = new URL(request.url);
-    const incidentMatch = url.pathname.match(/^\/incidents\/([a-f0-9]{36})\/?$/);
+    const incidentMatch = url.pathname.match(/\/incidents\/([a-f0-9]{36})\/?$/);
     if (incidentMatch) {
       return handleIncidentRequest(env.REGYBOX_STATE, incidentMatch[1]);
     }

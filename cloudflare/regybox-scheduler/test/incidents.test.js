@@ -38,18 +38,20 @@ function dispatch() {
 
 test("status origin is remembered and STATUS_URL remains an override", async () => {
   const kv = makeKv();
-  await rememberStatusOrigin(kv, "https://worker.example.test/status?ignored=yes");
-  assert.equal(await resolveStatusUrl({}, kv), "https://worker.example.test");
+  await rememberStatusOrigin(kv, "https://worker.example.test/regybox?ignored=yes");
+  assert.equal(await resolveStatusUrl({}, kv), "https://worker.example.test/regybox");
   assert.equal(
-    await resolveStatusUrl({ STATUS_URL: "https://custom.example.test/regybox" }, kv),
-    "https://custom.example.test",
+    await resolveStatusUrl({ STATUS_URL: "https://custom.example.test/custom/status/" }, kv),
+    "https://custom.example.test/custom/status",
   );
   assert.equal(
     await resolveStatusUrl({ STATUS_URL: "not a URL" }, kv),
-    "https://worker.example.test",
+    "https://worker.example.test/regybox",
   );
   assert.equal(kv.writes[0].key, incidentConstants.STATUS_ORIGIN_KEY);
   assert.equal(kv.writes[0].options, undefined);
+  await rememberStatusOrigin(kv, "https://worker.example.test/regybox?ignored=again");
+  assert.equal(kv.writes.length, 1);
 });
 
 test("incident records are short-lived, sanitized, and render read-only", async () => {
@@ -70,10 +72,11 @@ test("incident records are short-lived, sanitized, and render read-only", async 
     dispatch: unsafeDispatch,
     error,
     payload: { errorCode: "unparseable_response", technicalMessage: error.message },
-    statusUrl: "https://worker.example.test",
+    statusUrl: "https://worker.example.test/regybox",
     now: () => Date.parse("2026-07-13T12:00:00Z"),
   });
   const id = incidentUrl.split("/").at(-1);
+  assert.equal(incidentUrl, `https://worker.example.test/regybox/incidents/${id}`);
   const record = await readIncident(kv, id);
 
   assert.equal(kv.writes[0].options.expirationTtl, 604800);

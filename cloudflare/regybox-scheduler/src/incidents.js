@@ -7,10 +7,20 @@ function configured(value) {
   return Boolean(String(value ?? "").trim());
 }
 
-function safeOrigin(value) {
+function safeStatusUrl(value) {
   try {
     const url = new URL(String(value));
-    return url.protocol === "https:" || url.hostname === "localhost" ? url.origin : null;
+    if (
+      (url.protocol !== "https:" && url.hostname !== "localhost") ||
+      url.username ||
+      url.password
+    ) {
+      return null;
+    }
+    url.search = "";
+    url.hash = "";
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return url.pathname === "/" ? url.origin : `${url.origin}${url.pathname}`;
   } catch {
     return null;
   }
@@ -46,7 +56,11 @@ function safeDiagnostics(error) {
     return undefined;
   }
   const result = {};
-  for (const key of ["actionEndpoints", "unknownActionEndpoints"]) {
+  for (const key of [
+    "actionEndpoints",
+    "unknownActionEndpoints",
+    "unexpectedOriginEndpoints",
+  ]) {
     if (Array.isArray(diagnostics[key])) {
       result[key] = diagnostics[key]
         .slice(0, 10)
@@ -57,7 +71,7 @@ function safeDiagnostics(error) {
 }
 
 function randomIncidentId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(18));
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(18));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
@@ -66,28 +80,31 @@ function incidentKey(id) {
 }
 
 export async function rememberStatusOrigin(kv, requestUrl) {
-  const origin = safeOrigin(requestUrl);
-  if (!kv || !origin) {
+  const statusUrl = safeStatusUrl(requestUrl);
+  if (!kv || !statusUrl) {
     return null;
   }
-  // The origin is public routing metadata, not a credential. Keep it for the
-  // lifetime of the deployment so set-and-forget users retain incident links.
-  await kv.put(STATUS_ORIGIN_KEY, origin);
-  return origin;
+  // The status address is public routing metadata, not a credential. Keep it
+  // for the deployment lifetime so set-and-forget users retain incident links.
+  if ((await kv.get(STATUS_ORIGIN_KEY)) === statusUrl) {
+    return statusUrl;
+  }
+  await kv.put(STATUS_ORIGIN_KEY, statusUrl);
+  return statusUrl;
 }
 
 export async function resolveStatusUrl(env, kv) {
   if (configured(env?.STATUS_URL)) {
-    const configuredOrigin = safeOrigin(env.STATUS_URL);
-    if (configuredOrigin) {
-      return configuredOrigin;
+    const configuredStatusUrl = safeStatusUrl(env.STATUS_URL);
+    if (configuredStatusUrl) {
+      return configuredStatusUrl;
     }
   }
   if (!kv) {
     return null;
   }
   try {
-    return safeOrigin(await kv.get(STATUS_ORIGIN_KEY));
+    return safeStatusUrl(await kv.get(STATUS_ORIGIN_KEY));
   } catch (error) {
     console.warn("regybox: status origin read failed:", error);
     return null;
@@ -119,8 +136,8 @@ export async function recordIncident({ kv, dispatch, error, payload, statusUrl, 
     record.parserDiagnostics = parserDiagnostics;
   }
   await kv.put(incidentKey(id), JSON.stringify(record), { expirationTtl: INCIDENT_TTL_SECONDS });
-  const origin = safeOrigin(statusUrl);
-  return origin ? `${origin}/incidents/${id}` : null;
+  const baseUrl = safeStatusUrl(statusUrl);
+  return baseUrl ? `${baseUrl}/incidents/${id}` : null;
 }
 
 export async function readIncident(kv, id) {

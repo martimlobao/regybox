@@ -348,6 +348,10 @@ test("unknown and ambiguous class action endpoints fail with secret-safe diagnos
       assert.ok(error instanceof UnparseableError);
       assert.match(error.message, /unexpected origin or path/);
       assert.doesNotMatch(error.message, /attacker\.example|id_aula/);
+      assert.deepEqual(error.safeDiagnostics, {
+        actionEndpoints: [],
+        unexpectedOriginEndpoints: ["/app/app_nova/php/aulas/marca_aulas.php"],
+      });
       return true;
     },
   );
