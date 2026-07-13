@@ -1,4 +1,5 @@
 import logging
+import re
 from importlib import resources
 from unittest.mock import patch
 
@@ -75,6 +76,58 @@ def test_open() -> None:
     assert class_.time_to_enroll is None
     assert bool(class_.enroll_url)
     assert class_.unenroll_url is None
+
+
+def test_classless_action_buttons_are_classified_by_endpoint() -> None:
+    open_html = resources.files(html_examples).joinpath("open.html").read_text()
+    registered_html = resources.files(html_examples).joinpath("registered.html").read_text()
+
+    classless_open = re.sub(r'<button class="[^"]+"', "<button", open_html, count=1)
+    classless_registered = re.sub(r'<button class="[^"]+"', "<button", registered_html, count=1)
+
+    assert "/marca_aulas.php?" in (extract_class_from_html(classless_open).enroll_url or "")
+    assert "/cancela_aula.php?" in (
+        extract_class_from_html(classless_registered).unenroll_url or ""
+    )
+
+
+def test_unrelated_buttons_are_ignored_and_action_errors_do_not_leak_queries() -> None:
+    open_html = resources.files(html_examples).joinpath("open.html").read_text()
+    unrelated = open_html.replace(
+        "<button ", '<button onclick="show_help()">Help</button><button ', 1
+    )
+    assert extract_class_from_html(unrelated).enroll_url
+
+    unrelated_php = open_html.replace(
+        "<button ",
+        '<button onclick="php/aulas/class_details.php?id=private">Details</button><button ',
+        1,
+    )
+    assert extract_class_from_html(unrelated_php).enroll_url
+
+    colored_help = open_html.replace(
+        "<button ",
+        '<button class="button color-green" '
+        'onclick="php/aulas/class_details.php?id=private">Help</button><button ',
+        1,
+    )
+    assert extract_class_from_html(colored_help).enroll_url
+
+    unknown = open_html.replace("marca_aulas.php", "new_booking_action.php")
+    with pytest.raises(UnparseableError) as error:
+        extract_class_from_html(unknown)
+    assert "/new_booking_action.php" in str(error.value)
+    assert "id_aula" not in str(error.value)
+    assert "00113455677789aabcddddeeefff" not in str(error.value)
+
+    off_origin = open_html.replace(
+        "../app_nova/php/aulas/marca_aulas.php",
+        "https://attacker.example/app/app_nova/php/aulas/marca_aulas.php",
+    )
+    with pytest.raises(UnparseableError, match="unexpected origin or path") as error:
+        extract_class_from_html(off_origin)
+    assert "attacker.example" not in str(error.value)
+    assert "id_aula" not in str(error.value)
 
 
 def test_registered() -> None:

@@ -2,6 +2,7 @@ import { defaultLookaheadHours, expandCalendarEvents, resolveClassRules } from "
 import { executionMode, readActivity, readLastRun } from "./executor.js";
 import { emailConfigured } from "./notify.js";
 import { RegyboxLoginError, createRegyboxClient } from "./regybox.js";
+import { readIncident } from "./incidents.js";
 
 const STYLES = `
   :root { color-scheme: light dark; }
@@ -367,6 +368,72 @@ export async function handleStatusRequest(env, kv, options = {}) {
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
+    },
+  });
+}
+
+export function renderIncidentPage(incident) {
+  const rows = [
+    ["Time", incident.timestamp],
+    ["Operation", incident.operation],
+    ["Class candidates", Array.isArray(incident.classCandidates) ? incident.classCandidates.join(", ") : ""],
+    ["Class date", incident.classDate],
+    ["Class time", incident.classTime],
+    ["Error code", incident.errorCode],
+    ["Error type", incident.errorName],
+    ["Technical message", incident.technicalMessage],
+  ];
+  if (incident.parserDiagnostics) {
+    rows.push(["Safe parser diagnostics", JSON.stringify(incident.parserDiagnostics, null, 2)]);
+  }
+  const details = rows
+    .filter(([, value]) => String(value ?? "").trim())
+    .map(
+      ([label, value]) =>
+        `  <dt>${escapeHtml(label)}</dt>\n  <dd><pre>${escapeHtml(value)}</pre></dd>`,
+    )
+    .join("\n");
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Regybox incident details</title>
+<style>${STYLES}
+  dt { font-weight: 650; margin-top: 1rem; }
+  dd { margin: 0.2rem 0 0; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+</style>
+</head>
+<body>
+  <h1>Regybox incident details</h1>
+  <p class="sub">This sanitized diagnostic record expires automatically after seven days.</p>
+  <dl>
+${details}
+  </dl>
+  <footer>This page is read-only. It never stores or displays credentials, full action URLs, or query tokens.</footer>
+</body>
+</html>`;
+}
+
+export async function handleIncidentRequest(kv, id) {
+  const incident = await readIncident(kv, id);
+  if (!incident) {
+    return new Response("Incident not found or expired.", {
+      status: 404,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-store",
+        "x-robots-tag": "noindex, nofollow",
+      },
+    });
+  }
+  return new Response(renderIncidentPage(incident), {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "x-robots-tag": "noindex, nofollow",
     },
   });
 }

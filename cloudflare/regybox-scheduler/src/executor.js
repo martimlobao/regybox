@@ -1,6 +1,7 @@
 import { buildFailureFingerprint, errorPayload } from "./failures.js";
 import { notifyFailure, notifyResult } from "./notify.js";
 import { createRegyboxClient, runOperation } from "./regybox.js";
+import { recordIncident, resolveStatusUrl } from "./incidents.js";
 
 const LAST_RUN_KEY = "regybox:v1:last_run";
 const ACTIVITY_KEY = "regybox:v1:activity";
@@ -202,12 +203,26 @@ export async function executePlan({
   onResult,
 }) {
   const mode = executionMode(env);
+  const statusUrl = await resolveStatusUrl(env, kv);
   const reportFailure =
     onFailure ??
-    ((notification) =>
-      notifyFailureImpl({ env, kv, ...notification, statusUrl: env.STATUS_URL }));
+    (async (notification) => {
+      let incidentUrl = null;
+      try {
+        incidentUrl = await recordIncident({
+          kv,
+          statusUrl,
+          dispatch: notification.dispatch,
+          error: notification.error,
+          payload: notification.payload,
+        });
+      } catch (error) {
+        console.warn("regybox: incident record write failed:", error);
+      }
+      return notifyFailureImpl({ env, kv, ...notification, statusUrl, incidentUrl });
+    });
   const reportResult =
-    onResult ?? ((notification) => notifyResultImpl({ env, kv, ...notification, statusUrl: env.STATUS_URL }));
+    onResult ?? ((notification) => notifyResultImpl({ env, kv, ...notification, statusUrl }));
   const startedAt = now();
   const operations = [];
   const activity = [];

@@ -6,6 +6,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
+  // Setup defaults make the deploy button prompt for these values. After setup,
+  // keep the dashboard as the source of truth for every user-owned variable.
   "keep_vars": true,
   "vars": {
     "CLASS_MAP": "CrossFit = WOD",

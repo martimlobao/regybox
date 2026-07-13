@@ -7,7 +7,8 @@ import {
   resolveClassRules,
 } from "./calendar.js";
 import { appendActivity, dispatchWorkflow, executePlan, executionMode, writeLastRun } from "./executor.js";
-import { handleStatusRequest } from "./status.js";
+import { rememberStatusOrigin } from "./incidents.js";
+import { handleIncidentRequest, handleStatusRequest } from "./status.js";
 
 export {
   buildPlan,
@@ -71,7 +72,17 @@ export default {
   async scheduled(_event, env, _ctx) {
     await handleScheduled(env);
   },
-  async fetch(_request, env, _ctx) {
+  async fetch(request, env, _ctx) {
+    const url = new URL(request.url);
+    const incidentMatch = url.pathname.match(/^\/incidents\/([a-f0-9]{36})\/?$/);
+    if (incidentMatch) {
+      return handleIncidentRequest(env.REGYBOX_STATE, incidentMatch[1]);
+    }
+    try {
+      await rememberStatusOrigin(env.REGYBOX_STATE, url.origin);
+    } catch (error) {
+      console.warn("regybox: status origin write failed:", error);
+    }
     return handleStatusRequest(env, env.REGYBOX_STATE);
   },
 };
