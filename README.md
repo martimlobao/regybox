@@ -93,6 +93,11 @@ To update immediately, open your GitHub copy, choose **Actions → Regybox
 Automatic Updates → Run workflow**. If you have changed the code yourself and
 want to maintain it independently, disable that workflow in the **Actions** tab.
 
+The workflow's **Commit and deploy the update** step pushes directly to the
+repository's default branch. If you add branch protection that requires pull
+request approval or status checks before every push, allow this workflow to
+bypass that rule or automatic updates will fail.
+
 ### 4. Optional: Turn on Email Notifications
 
 You will get an email when a class is booked or cancelled, or when something needs

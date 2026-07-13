@@ -43,11 +43,13 @@ export function mergeDeploymentConfig({ deploymentText, upstreamText }) {
   if (deployment.name) {
     merged.name = deployment.name;
   }
-  if (upstream.kv_namespaces) {
+  if (Array.isArray(upstream.kv_namespaces) && upstream.kv_namespaces.length > 0) {
     merged.kv_namespaces = preserveKvNamespaceIds(
       upstream.kv_namespaces,
       deployment.kv_namespaces,
     );
+  } else if (Array.isArray(deployment.kv_namespaces)) {
+    merged.kv_namespaces = deployment.kv_namespaces;
   }
 
   // Variables and secrets belong to the user's Cloudflare dashboard. Keeping

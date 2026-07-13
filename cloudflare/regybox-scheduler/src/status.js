@@ -2,7 +2,7 @@ import { defaultLookaheadHours, expandCalendarEvents, resolveClassRules } from "
 import { executionMode, readActivity, readLastRun } from "./executor.js";
 import { emailConfigured } from "./notify.js";
 import { RegyboxLoginError, createRegyboxClient } from "./regybox.js";
-import { readIncident } from "./incidents.js";
+import { incidentConstants, readIncident } from "./incidents.js";
 
 const STYLES = `
   :root { color-scheme: light dark; }
@@ -408,7 +408,7 @@ export function renderIncidentPage(incident) {
 </head>
 <body>
   <h1>Regybox incident details</h1>
-  <p class="sub">This sanitized diagnostic record expires automatically after seven days.</p>
+  <p class="sub">This sanitized diagnostic record expires automatically after ${incidentConstants.INCIDENT_RETENTION_DAYS} days.</p>
   <dl>
 ${details}
   </dl>

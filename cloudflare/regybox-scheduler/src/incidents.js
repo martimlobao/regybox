@@ -151,12 +151,14 @@ export async function readIncident(kv, id) {
     }
     const parsed = JSON.parse(value);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
-  } catch {
+  } catch (error) {
+    console.warn("regybox: incident read failed:", error);
     return null;
   }
 }
 
 export const incidentConstants = {
   INCIDENT_TTL_SECONDS,
+  INCIDENT_RETENTION_DAYS: INCIDENT_TTL_SECONDS / (24 * 60 * 60),
   STATUS_ORIGIN_KEY,
 };

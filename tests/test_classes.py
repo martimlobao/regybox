@@ -129,6 +129,17 @@ def test_unrelated_buttons_are_ignored_and_action_errors_do_not_leak_queries() -
     assert "attacker.example" not in str(error.value)
     assert "id_aula" not in str(error.value)
 
+    ambiguous = open_html.replace(
+        "<button ",
+        '<button onclick="php/aulas/cancela_aula.php?id_aula=secret-token">'
+        "Cancel</button><button ",
+        1,
+    )
+    with pytest.raises(UnparseableError, match="Ambiguous class action controls") as error:
+        extract_class_from_html(ambiguous)
+    assert "secret-token" not in str(error.value)
+    assert "id_aula" not in str(error.value)
+
 
 def test_registered() -> None:
     class_: Class = extract_class("registered.html")

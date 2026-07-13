@@ -11,8 +11,7 @@ import {
 import { handleIncidentRequest } from "../src/status.js";
 import { UnparseableError } from "../src/regybox.js";
 
-function makeKv() {
-  const entries = new Map();
+function makeKv(entries = new Map()) {
   const writes = [];
   return {
     entries,
@@ -91,11 +90,26 @@ test("incident records are short-lived, sanitized, and render read-only", async 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow");
-  assert.match(await response.text(), /expires automatically after seven days/);
+  assert.match(await response.text(), /expires automatically after 7 days/);
 });
 
 test("invalid or expired incident IDs return a no-store 404", async () => {
   const response = await handleIncidentRequest(makeKv(), "not-an-id");
   assert.equal(response.status, 404);
   assert.equal(response.headers.get("cache-control"), "no-store");
+});
+
+test("corrupt incident records return 404 and leave a diagnostic warning", async () => {
+  const id = "0123456789abcdef0123456789abcdef0123";
+  const kv = makeKv(new Map([[`regybox:v1:incident:${id}`, "not-json"]]));
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    const response = await handleIncidentRequest(kv, id);
+    assert.equal(response.status, 404);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.match(String(warnings[0]?.[0]), /incident read failed/);
 });

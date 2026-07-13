@@ -8,6 +8,7 @@ import {
   mergeDeploymentConfig,
   updateFromUpstream,
 } from "../scripts/update-from-upstream.mjs";
+import { stripJsoncComments } from "../scripts/render-wrangler-config.mjs";
 
 const upstreamConfig = `{
   "$schema": "https://example.test/wrangler.schema.json",
@@ -42,6 +43,26 @@ test("automatic updates keep the Worker identity and dashboard-owned variables",
   assert.equal(merged.vars, undefined);
   assert.deepEqual(merged.triggers, { crons: ["28,58 * * * *"] });
   assert.equal(merged.$schema, "https://example.test/wrangler.schema.json");
+});
+
+test("automatic updates preserve deployment KV bindings when upstream bindings are absent", () => {
+  for (const upstreamNamespaces of [undefined, []]) {
+    const upstream = JSON.parse(stripJsoncComments(upstreamConfig));
+    if (upstreamNamespaces === undefined) {
+      delete upstream.kv_namespaces;
+    } else {
+      upstream.kv_namespaces = upstreamNamespaces;
+    }
+    const merged = JSON.parse(
+      mergeDeploymentConfig({
+        deploymentText: deploymentConfig,
+        upstreamText: JSON.stringify(upstream),
+      }),
+    );
+    assert.deepEqual(merged.kv_namespaces, [
+      { binding: "REGYBOX_STATE", id: "ana-kv" },
+    ]);
+  }
 });
 
 test("automatic updates replace managed code while leaving personal files alone", () => {

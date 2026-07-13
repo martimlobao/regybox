@@ -1,3 +1,5 @@
+import { incidentConstants } from "./incidents.js";
+
 const STATE_TTL_SECONDS = 2592000;
 const MAX_APPENDIX_LINES = 12;
 
@@ -91,7 +93,10 @@ export function composeEmail({ kind, operation, classSummary: summary, payload =
     );
   }
   if (incidentUrl) {
-    bodyLines.push("", `More details (available for 7 days): ${incidentUrl}`);
+    bodyLines.push(
+      "",
+      `More details (available for ${incidentConstants.INCIDENT_RETENTION_DAYS} days): ${incidentUrl}`,
+    );
   }
   if (statusUrl) {
     bodyLines.push("", `Status page: ${statusUrl}`);
