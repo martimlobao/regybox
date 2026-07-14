@@ -1,5 +1,5 @@
 const KV_PREFIX = "regybox:v1:calendar:";
-const NOT_OPEN_REFRESH_MS = 24 * 60 * 60 * 1000;
+const NOT_OPEN_REFRESH_MS = 6 * 60 * 60 * 1000;
 const NOT_OPEN_DISPATCH_WINDOW_MS = 60 * 60 * 1000;
 
 export function normalizeList(value) {
