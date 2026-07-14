@@ -158,7 +158,8 @@ function isSafeRelativePath(file) {
   return (
     typeof file === "string" &&
     file.length > 0 &&
-    !file.startsWith("/") &&
+    !/^[/\\]/.test(file) &&
+    !/^[A-Za-z]:/.test(file) &&
     !file.split(/[\\/]/).includes("..")
   );
 }

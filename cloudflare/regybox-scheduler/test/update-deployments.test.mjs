@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { generateKeyPairSync } from "node:crypto";
+import { generateKeyPairSync, verify } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -48,7 +48,7 @@ function markerResponse(marker = validMarker) {
 }
 
 test("GitHub App JWTs use RS256 and the configured app id", () => {
-  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const jwt = createAppJwt({
     appId: "12345",
     privateKey: privateKey.export({ type: "pkcs8", format: "pem" }),
@@ -58,6 +58,15 @@ test("GitHub App JWTs use RS256 and the configured app id", () => {
   assert.deepEqual(JSON.parse(Buffer.from(header, "base64url")), { alg: "RS256", typ: "JWT" });
   assert.equal(JSON.parse(Buffer.from(payload, "base64url")).iss, "12345");
   assert.ok(signature.length > 100);
+  assert.equal(
+    verify(
+      "RSA-SHA256",
+      Buffer.from(`${header}.${payload}`),
+      publicKey,
+      Buffer.from(signature, "base64url"),
+    ),
+    true,
+  );
 });
 
 test("deployment marker validation fails closed", () => {
@@ -364,6 +373,7 @@ test("no-op reconciliation does not commit or push", async () => {
     clone: ({ directory }) => {
       const targetDirectory = join(directory, "deployment");
       mkdirSync(targetDirectory, { recursive: true });
+      writeFileSync(join(targetDirectory, ".regybox-deployment.json"), JSON.stringify(validMarker));
       return { targetDirectory, env: {} };
     },
     applyUpdate: () => {},
@@ -394,6 +404,7 @@ test("dry-run applies and inspects an update without commit, push, or API writes
     clone: ({ directory }) => {
       const targetDirectory = join(directory, "deployment");
       mkdirSync(targetDirectory, { recursive: true });
+      writeFileSync(join(targetDirectory, ".regybox-deployment.json"), JSON.stringify(validMarker));
       return { targetDirectory, env: {} };
     },
     applyUpdate: (options) => {
@@ -413,6 +424,38 @@ test("dry-run applies and inspects an update without commit, push, or API writes
   assert.deepEqual(gitCalls, [["status", "--porcelain"]]);
   assert.equal(apiCalls.length, 1);
   assert.equal(apiCalls[0].method, undefined);
+});
+
+test("a checked-out opt-out is honored before any update mutation", async () => {
+  const temporaryDirectory = mkdtempSync(join(tmpdir(), "regybox-consent-race-"));
+  let applied = false;
+  const result = await reconcileRepository({
+    repo: { full_name: "ana/regybox", default_branch: "main" },
+    token: "token",
+    sourceDirectory: "/source",
+    upstreamCommit: "abc123",
+    request: async () => markerResponse(),
+    makeTemporaryDirectory: () => temporaryDirectory,
+    clone: ({ directory }) => {
+      const targetDirectory = join(directory, "deployment");
+      mkdirSync(targetDirectory, { recursive: true });
+      writeFileSync(
+        join(targetDirectory, ".regybox-deployment.json"),
+        JSON.stringify({ ...validMarker, mode: "paused" }),
+      );
+      return { targetDirectory, env: {} };
+    },
+    applyUpdate: () => {
+      applied = true;
+    },
+    git: () => {
+      throw new Error("git must not run after the checked-out opt-out");
+    },
+  });
+
+  assert.equal(result.outcome, "skipped");
+  assert.match(result.reason, /automatic updates disabled/);
+  assert.equal(applied, false);
 });
 
 test("publishing pushes directly when the default branch accepts updates", async () => {
@@ -461,6 +504,9 @@ test("a rejected direct push uses a deterministic branch and opens an update PR"
     },
     request: async (options) => {
       apiCalls.push(options);
+      if (options.path.includes("/contents/.regybox-deployment.json")) {
+        return markerResponse();
+      }
       return options.method === "POST"
         ? { data: { number: 42 }, headers: new Headers() }
         : { data: [], headers: new Headers() };
@@ -498,12 +544,49 @@ test("PR fallback reuses an existing updater pull request", async () => {
     },
     request: async (options) => {
       apiCalls.push(options);
+      if (options.path.includes("/contents/.regybox-deployment.json")) {
+        return markerResponse();
+      }
       return { data: [{ number: 7 }], headers: new Headers() };
     },
   });
   assert.equal(result.pullRequest.number, 7);
   assert.equal(result.reused, true);
+  assert.equal(apiCalls.length, 2);
+});
+
+test("fallback stops when consent is withdrawn after a rejected direct push", async () => {
+  const gitCalls = [];
+  const apiCalls = [];
+  const result = await publishUpdate({
+    repo: { full_name: "ana/regybox", default_branch: "main" },
+    token: "token",
+    targetDirectory: "/deployment",
+    env: {},
+    git: (args) => {
+      gitCalls.push(args);
+      if (
+        args.join(" ") ===
+        "-c credential.helper= push --no-verify origin HEAD:main"
+      ) {
+        throw new Error("protected branch");
+      }
+      return "";
+    },
+    request: async (options) => {
+      apiCalls.push(options);
+      return markerResponse({ ...validMarker, mode: "paused" });
+    },
+  });
+
+  assert.equal(result.outcome, "skipped");
+  assert.match(result.reason, /automatic updates disabled/);
+  assert.equal(
+    gitCalls.some((args) => args.includes("--force")),
+    false,
+  );
   assert.equal(apiCalls.length, 1);
+  assert.equal(apiCalls.some(({ method }) => method === "POST"), false);
 });
 
 test("one eligible repository failure does not prevent later reconciliation", async () => {

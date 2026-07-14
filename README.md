@@ -99,10 +99,13 @@ If branch protection rejects the direct push, it creates or updates a
 
 Updates preserve the Worker name, KV namespace IDs, dashboard variables and
 secrets, local environment files, personal files, and anything under `.github`.
-The App cannot see your Cloudflare or Regybox credentials. Its least-privilege
-GitHub permissions are **Metadata: read**, **Contents: read and write**, and
-**Pull requests: read and write**; it does not request Actions or Workflows
-permissions.
+The App cannot access credentials stored only as variables or secrets in your
+Cloudflare dashboard. Because its selected-repository **Contents** permission
+can read anything committed to those repositories, never commit Cloudflare or
+Regybox credentials, cookies, calendar URLs, or email passwords. Its
+least-privilege GitHub permissions are **Metadata: read**, **Contents: read and
+write**, and **Pull requests: read and write**; it does not request Actions or
+Workflows permissions.
 
 To stop updates, uninstall **Regybox Updater** from that repository. Advanced
 users can instead change `mode` from `auto` in `.regybox-deployment.json`; the

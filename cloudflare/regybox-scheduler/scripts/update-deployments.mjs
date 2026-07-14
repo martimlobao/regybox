@@ -1,4 +1,11 @@
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -363,6 +370,19 @@ export async function readDeploymentMarker({ repo, token, request = githubReques
   }
 }
 
+function readCheckedOutDeploymentMarker(targetDirectory) {
+  const markerPath = join(targetDirectory, MARKER_FILE);
+  try {
+    const stat = lstatSync(markerPath);
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+      return null;
+    }
+    return JSON.parse(readFileSync(markerPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 function assertRepositoryName(fullName) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(fullName))) {
     throw new Error("GitHub returned an invalid repository name");
@@ -552,6 +572,17 @@ export async function publishUpdate({
     );
     return { outcome: "pushed" };
   } catch (directPushError) {
+    checkDeadline();
+    const marker = await readDeploymentMarker({ repo, token, request });
+    checkDeadline();
+    const validation = validateMarker(marker);
+    if (!validation.eligible) {
+      return {
+        outcome: "skipped",
+        reason: `fallback consent check failed: ${validation.reason}`,
+        directPushError,
+      };
+    }
     git(
       [
         "-c",
@@ -643,6 +674,14 @@ export async function reconcileRepository({
       maxCheckoutBytes,
     });
     checkDeadline();
+    const checkedOutMarker = readCheckedOutDeploymentMarker(targetDirectory);
+    const checkedOutValidation = validateMarker(checkedOutMarker);
+    if (!checkedOutValidation.eligible) {
+      return {
+        outcome: "skipped",
+        reason: `checked-out consent check failed: ${checkedOutValidation.reason}`,
+      };
+    }
     applyUpdate({
       sourceDirectory,
       targetDirectory,

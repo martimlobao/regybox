@@ -214,7 +214,7 @@ test("the synchronous update walk observes the shared repository deadline", () =
   assert.equal(readFileSync(join(target, "src", "worker.js"), "utf8"), "old bytes\n");
 });
 
-test("automatic updates ignore unsafe paths from an old updater manifest", () => {
+test("automatic updates reject POSIX and Windows absolute paths from old manifests", () => {
   const root = mkdtempSync(join(tmpdir(), "regybox-updater-"));
   const source = join(root, "source");
   const target = join(root, "target");
@@ -224,14 +224,33 @@ test("automatic updates ignore unsafe paths from an old updater manifest", () =>
   writeFileSync(join(source, "wrangler.jsonc"), upstreamConfig);
   writeFileSync(join(target, "wrangler.jsonc"), deploymentConfig);
   writeFileSync(outside, "keep me\n");
+  const windowsPaths = [
+    "C:\\absolute.txt",
+    "C:drive-relative.txt",
+    "\\root-relative.txt",
+    "\\\\server\\share.txt",
+  ];
+  for (const path of windowsPaths) {
+    writeFileSync(join(target, path), `keep ${path}\n`);
+  }
   writeFileSync(
     join(target, ".regybox-updater-files.json"),
-    '{"files":["../../do-not-delete.txt"]}\n',
+    JSON.stringify({
+      files: [
+        "../../do-not-delete.txt",
+        outside,
+        "/root",
+        ...windowsPaths,
+      ],
+    }),
   );
 
   updateFromUpstream({ sourceDirectory: source, targetDirectory: target });
 
   assert.equal(readFileSync(outside, "utf8"), "keep me\n");
+  for (const path of windowsPaths) {
+    assert.equal(readFileSync(join(target, path), "utf8"), `keep ${path}\n`);
+  }
 });
 
 test("automatic updates reject a symlinked managed file without changing external bytes", () => {
