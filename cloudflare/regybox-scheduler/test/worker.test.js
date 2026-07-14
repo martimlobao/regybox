@@ -291,8 +291,8 @@ test("buildPlan sweeps stale enrolled entries across paginated KV listings", asy
   );
 });
 
-test("not-open KV entry skips dispatch when opening is far away and recently checked", async () => {
-  const key = "regybox:v1:calendar:one-class:2026-06-18T05:30:00.000Z";
+test("not-open KV entry skips dispatch before the six-hour refresh boundary", async () => {
+  const key = "regybox:v1:calendar:one-class:2026-06-18T10:30:00.000Z";
   const kv = makeKv(
     new Map([
       [
@@ -300,9 +300,9 @@ test("not-open KV entry skips dispatch when opening is far away and recently che
         JSON.stringify({
           state: "not_open",
           classDate: "2026-06-18",
-          classTime: "06:30",
+          classTime: "11:30",
           classType: "WOD",
-          enrollmentOpensAt: "2026-06-18T05:00:00.000Z",
+          enrollmentOpensAt: "2026-06-18T10:00:00.000Z",
           lastCheckedAt: "2026-06-18T00:00:00.000Z",
         }),
       ],
@@ -313,7 +313,7 @@ test("not-open KV entry skips dispatch when opening is far away and recently che
     "BEGIN:VEVENT",
     "UID:one-class",
     "SUMMARY:Crossfit",
-    "DTSTART:20260618T053000Z",
+    "DTSTART:20260618T103000Z",
     "END:VEVENT",
     "END:VCALENDAR",
   ].join("\r\n");
@@ -322,7 +322,7 @@ test("not-open KV entry skips dispatch when opening is far away and recently che
     env: baseEnv,
     kv,
     icsText: ics,
-    now: new Date("2026-06-18T00:30:00Z"),
+    now: new Date("2026-06-18T05:59:59.999Z"),
   });
 
   assert.deepEqual(plan.dispatches, []);
@@ -441,19 +441,19 @@ test("not-open KV entry dispatches when last check time is invalid", async () =>
   assert.equal(plan.dispatches[0].operation, "enroll");
 });
 
-test("not-open KV entry dispatches when last check is over 24 hours old", async () => {
-  const key = "regybox:v1:calendar:one-class:2026-06-19T05:30:00.000Z";
+test("not-open KV entry dispatches at the six-hour refresh boundary", async () => {
+  const key = "regybox:v1:calendar:one-class:2026-06-18T10:30:00.000Z";
   const kv = makeKv(
     new Map([
       [
         key,
         JSON.stringify({
           state: "not_open",
-          classDate: "2026-06-19",
-          classTime: "06:30",
+          classDate: "2026-06-18",
+          classTime: "11:30",
           classType: "WOD",
-          enrollmentOpensAt: "2026-06-19T05:00:00.000Z",
-          lastCheckedAt: "2026-06-17T00:00:00.000Z",
+          enrollmentOpensAt: "2026-06-18T10:00:00.000Z",
+          lastCheckedAt: "2026-06-18T00:00:00.000Z",
         }),
       ],
     ]),
@@ -463,7 +463,7 @@ test("not-open KV entry dispatches when last check is over 24 hours old", async 
     "BEGIN:VEVENT",
     "UID:one-class",
     "SUMMARY:Crossfit",
-    "DTSTART:20260619T053000Z",
+    "DTSTART:20260618T103000Z",
     "END:VEVENT",
     "END:VCALENDAR",
   ].join("\r\n");
@@ -472,7 +472,7 @@ test("not-open KV entry dispatches when last check is over 24 hours old", async 
     env: baseEnv,
     kv,
     icsText: ics,
-    now: new Date("2026-06-18T00:30:00Z"),
+    now: new Date("2026-06-18T06:00:00Z"),
   });
 
   assert.equal(plan.dispatches.length, 1);

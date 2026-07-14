@@ -80,6 +80,42 @@ always shows the booking rules currently in effect. Your dashboard values stay i
 place when the Worker is redeployed; in particular, updates do not replace your
 `CLASS_MAP`, cookies, calendar URL, or email settings.
 
+#### Keep the Status Page Private (Recommended)
+
+Use [Cloudflare Access](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/#manage-access-to-workersdev)
+to let only your email address open the status page and incident reports:
+
+1. Open the Worker, then go to **Settings → Domains & Routes**.
+2. Beside `workers.dev`, select **Enable Cloudflare Access**, then **Manage
+   Cloudflare Access**.
+3. Edit the new **Allow** policy. Under **Include**, choose **Emails** and enter
+   only the exact email address that should have access.
+   If `EMAIL_TO` is different and must open emailed incident links, add that
+   exact address too. It must also be able to sign in through a configured
+   identity provider. For a non-account-member address, go to **Zero Trust →
+   Integrations → Identity providers → Add new identity provider →
+   One-time PIN** ([instructions](https://developers.cloudflare.com/cloudflare-one/integrations/identity-providers/one-time-pin/)),
+   or add another provider. Keep **Include → Emails** limited to exact addresses.
+4. Inspect every policy in this Access application. For strict single-user
+   access, keep one exact-email **Allow** policy and remove any other broader
+   **Allow** or **Bypass** policy. A narrow exact-email rule does not override a
+   second policy that grants broader access. Also remove any broader **Include**
+   rule: **Everyone**, **Login Methods → One-time PIN** (which includes all valid
+   email addresses), an email-domain rule such as **Emails ending in**, or
+   **Cloudflare Account Member**. One-time PIN itself is fine as a sign-in method
+   or **Require** rule when **Include → Emails** stays limited to exact addresses.
+   See Cloudflare's
+   [Access policy guide](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/)
+   for details.
+5. Save the changes, then test the `workers.dev` link in a private/incognito
+   window. With one-time PIN sign-in, Cloudflare emails a single-use code only
+   to an address allowed by the policy; for privacy, the screen still says a
+   code was sent when a blocked address tries to sign in.
+
+After this, the status page and incident-report links require the allowed
+identity. The Worker's scheduled checks, enrollment, and cancellation continue
+normally in the background.
+
 ### 4. Turn on Automatic Updates (Recommended)
 
 Step 3 did two things: Cloudflare created a new GitHub repository for your copy
