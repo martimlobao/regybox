@@ -75,30 +75,41 @@ GitHub account (both free — GitHub is only used to store your copy of the code
    affect the running Worker.
 
 To change any of these values later, open the Worker in the Cloudflare dashboard
-and edit them under **Settings → Variables and Secrets** — the status page (step 5)
+and edit them under **Settings → Variables and Secrets** — the status page (step 6)
 always shows the booking rules currently in effect. Your dashboard values stay in
 place when the Worker is redeployed; in particular, updates do not replace your
 `CLASS_MAP`, cookies, calendar URL, or email settings.
 
-### Automatic Updates
+### 4. Turn on Automatic Updates (Recommended)
 
-The Worker copy created in your GitHub account checks for Regybox updates every
-day and installs them automatically. Cloudflare then deploys the update for you.
-Your Worker name, storage, variables, and secrets stay yours; only the Regybox
-code and its shared scheduling configuration are updated. A small monthly
-heartbeat keeps the update workflow enabled even when GitHub would otherwise
-disable scheduled workflows for an inactive public repository.
+Cloudflare creates the Worker and its GitHub repository in step 3, but it does
+not copy GitHub Actions workflows from the template. Complete this one extra
+consent step to make future fixes set-and-forget:
 
-To update immediately, open your GitHub copy, choose **Actions → Regybox
-Automatic Updates → Run workflow**. If you have changed the code yourself and
-want to maintain it independently, disable that workflow in the **Actions** tab.
+1. Open the [Regybox Updater installation page](https://github.com/apps/regybox-updater/installations/new).
+2. Choose **Only select repositories** and select the new repository that
+   Cloudflare created for this Worker.
+3. Approve the installation.
 
-The workflow's **Commit and deploy the update** step pushes directly to the
-repository's default branch. If you add branch protection that requires pull
-request approval or status checks before every push, allow this workflow to
-bypass that rule or automatic updates will fail.
+The Regybox Updater checks installed repositories after changes and once a day.
+It updates only repositories containing Regybox's deployment marker, pushes the
+new Worker code directly to the default branch, and lets Cloudflare deploy it.
+If branch protection rejects the direct push, it creates or updates a
+`regybox-updater/main` branch and opens an update pull request instead.
 
-### 4. Optional: Turn on Email Notifications
+Updates preserve the Worker name, KV namespace IDs, dashboard variables and
+secrets, local environment files, personal files, and anything under `.github`.
+The App cannot see your Cloudflare or Regybox credentials. Its least-privilege
+GitHub permissions are **Metadata: read**, **Contents: read and write**, and
+**Pull requests: read and write**; it does not request Actions or Workflows
+permission.
+
+To stop updates, uninstall **Regybox Updater** from that repository. Advanced
+users can instead change `mode` from `auto` in `.regybox-deployment.json`; the
+central updater fails closed and skips repositories whose marker is missing,
+disabled, or does not identify this Regybox upstream.
+
+### 5. Optional: Turn on Email Notifications
 
 You will get an email when a class is booked or cancelled, or when something needs
 your attention (like an expired login). Runs that change nothing stay silent. Failure
@@ -121,9 +132,9 @@ cookies, passwords, calendar links, full booking URLs, or URL query tokens.
     - `EMAIL_TO` — the address that receives notifications (usually the same as
       `EMAIL_USERNAME`).
 
-3. Refresh the status page (step 5) — it should now say "Email notifications are on".
+3. Refresh the status page (step 6) — it should now say "Email notifications are on".
 
-### 5. Check That It Works
+### 6. Check That It Works
 
 Open your Worker's page (Cloudflare dashboard → **Workers & Pages** →
 **regybox-scheduler** → the `workers.dev` link). It shows a plain-English

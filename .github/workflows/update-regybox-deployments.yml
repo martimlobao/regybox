@@ -1,0 +1,39 @@
+---
+name: Update Regybox Deployments
+
+on: # yamllint disable-line rule:truthy
+  push:
+    branches: [main]
+    paths:
+      - cloudflare/regybox-scheduler/**
+      - .github/workflows/update-regybox-deployments.yml
+  schedule:
+    - cron: 17 5 * * *
+  repository_dispatch:
+    types: [regybox_updater_reconcile]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: regybox-fleet-updater
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out the exact updater source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Reconcile installed Regybox Workers
+        env:
+          REGYBOX_UPDATER_APP_ID: ${{ secrets.REGYBOX_UPDATER_APP_ID }}
+          REGYBOX_UPDATER_PRIVATE_KEY: ${{ secrets.REGYBOX_UPDATER_PRIVATE_KEY }}
+          REGYBOX_UPDATER_SOURCE_COMMIT: ${{ github.sha }}
+        run: >-
+          node cloudflare/regybox-scheduler/scripts/update-deployments.mjs
+          ${{ github.event.client_payload.dry_run == true && '--dry-run' || '' }}

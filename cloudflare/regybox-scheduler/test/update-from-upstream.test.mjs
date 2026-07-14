@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -65,6 +72,39 @@ test("automatic updates preserve deployment KV bindings when upstream bindings a
   }
 });
 
+test("automatic updates tolerate absent or empty deployment KV bindings", () => {
+  for (const deploymentNamespaces of [undefined, []]) {
+    const deployment = JSON.parse(deploymentConfig);
+    if (deploymentNamespaces === undefined) {
+      delete deployment.kv_namespaces;
+    } else {
+      deployment.kv_namespaces = deploymentNamespaces;
+    }
+    const merged = JSON.parse(
+      mergeDeploymentConfig({
+        deploymentText: JSON.stringify(deployment),
+        upstreamText: upstreamConfig,
+      }),
+    );
+    assert.deepEqual(merged.kv_namespaces, [{ binding: "REGYBOX_STATE" }]);
+  }
+});
+
+test("automatic updates retain deployment-owned extra KV bindings", () => {
+  const deployment = JSON.parse(deploymentConfig);
+  deployment.kv_namespaces.push({ binding: "PERSONAL_DATA", id: "personal-kv" });
+  const merged = JSON.parse(
+    mergeDeploymentConfig({
+      deploymentText: JSON.stringify(deployment),
+      upstreamText: upstreamConfig,
+    }),
+  );
+  assert.deepEqual(merged.kv_namespaces, [
+    { binding: "REGYBOX_STATE", id: "ana-kv" },
+    { binding: "PERSONAL_DATA", id: "personal-kv" },
+  ]);
+});
+
 test("automatic updates replace managed code while leaving personal files alone", () => {
   const root = mkdtempSync(join(tmpdir(), "regybox-updater-"));
   const source = join(root, "source");
@@ -72,13 +112,17 @@ test("automatic updates replace managed code while leaving personal files alone"
   mkdirSync(join(source, "src"), { recursive: true });
   mkdirSync(join(target, "src"), { recursive: true });
   mkdirSync(join(source, ".git"), { recursive: true });
+  mkdirSync(join(source, ".github", "workflows"), { recursive: true });
   mkdirSync(join(target, ".git"), { recursive: true });
+  mkdirSync(join(target, ".github", "workflows"), { recursive: true });
   writeFileSync(join(source, "wrangler.jsonc"), upstreamConfig);
   writeFileSync(join(source, "src", "worker.js"), "export const version = 2;\n");
   writeFileSync(join(source, ".git", "HEAD"), "upstream metadata\n");
+  writeFileSync(join(source, ".github", "workflows", "upstream.yml"), "upstream\n");
   writeFileSync(join(target, "wrangler.jsonc"), deploymentConfig);
   writeFileSync(join(target, "src", "worker.js"), "export const version = 1;\n");
   writeFileSync(join(target, ".git", "HEAD"), "personal metadata\n");
+  writeFileSync(join(target, ".github", "workflows", "personal.yml"), "personal\n");
   writeFileSync(join(target, ".dev.vars"), "PHPSESSID=personal\n");
 
   updateFromUpstream({ sourceDirectory: source, targetDirectory: target });
@@ -86,9 +130,88 @@ test("automatic updates replace managed code while leaving personal files alone"
   assert.equal(readFileSync(join(target, "src", "worker.js"), "utf8"), "export const version = 2;\n");
   assert.equal(readFileSync(join(target, ".dev.vars"), "utf8"), "PHPSESSID=personal\n");
   assert.equal(readFileSync(join(target, ".git", "HEAD"), "utf8"), "personal metadata\n");
+  assert.equal(
+    readFileSync(join(target, ".github", "workflows", "personal.yml"), "utf8"),
+    "personal\n",
+  );
+  assert.equal(
+    existsSync(join(target, ".github", "workflows", "upstream.yml")),
+    false,
+  );
   const updatedConfig = JSON.parse(readFileSync(join(target, "wrangler.jsonc"), "utf8"));
   assert.equal(updatedConfig.name, "ana-regybox");
   assert.equal(updatedConfig.vars, undefined);
+});
+
+test("central updates record the installed commit without changing deployment mode", () => {
+  const root = mkdtempSync(join(tmpdir(), "regybox-updater-marker-"));
+  const source = join(root, "source");
+  const target = join(root, "target");
+  mkdirSync(source, { recursive: true });
+  mkdirSync(target, { recursive: true });
+  writeFileSync(join(source, "wrangler.jsonc"), upstreamConfig);
+  writeFileSync(join(target, "wrangler.jsonc"), deploymentConfig);
+  writeFileSync(
+    join(source, ".regybox-deployment.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      upstream: "martimlobao/regybox",
+      channel: "main",
+      mode: "auto",
+      installedCommit: "",
+    }),
+  );
+  writeFileSync(
+    join(target, ".regybox-deployment.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      upstream: "martimlobao/regybox",
+      channel: "main",
+      mode: "paused",
+      installedCommit: "old",
+    }),
+  );
+
+  updateFromUpstream({
+    sourceDirectory: source,
+    targetDirectory: target,
+    installedCommit: "abc123",
+  });
+
+  const marker = JSON.parse(readFileSync(join(target, ".regybox-deployment.json"), "utf8"));
+  assert.equal(marker.installedCommit, "abc123");
+  assert.equal(marker.mode, "paused");
+  const manifest = JSON.parse(readFileSync(join(target, ".regybox-updater-files.json"), "utf8"));
+  assert.equal(manifest.files.includes(".regybox-deployment.json"), false);
+});
+
+test("the synchronous update walk observes the shared repository deadline", () => {
+  const root = mkdtempSync(join(tmpdir(), "regybox-updater-deadline-"));
+  const source = join(root, "source");
+  const target = join(root, "target");
+  mkdirSync(join(source, "src"), { recursive: true });
+  mkdirSync(join(target, "src"), { recursive: true });
+  writeFileSync(join(source, "wrangler.jsonc"), upstreamConfig);
+  writeFileSync(join(source, "src", "worker.js"), "new bytes\n");
+  writeFileSync(join(target, "wrangler.jsonc"), deploymentConfig);
+  writeFileSync(join(target, "src", "worker.js"), "old bytes\n");
+  let checks = 0;
+
+  assert.throws(
+    () =>
+      updateFromUpstream({
+        sourceDirectory: source,
+        targetDirectory: target,
+        checkDeadline: () => {
+          checks += 1;
+          if (checks === 2) {
+            throw new Error("repository deadline exceeded");
+          }
+        },
+      }),
+    /repository deadline exceeded/,
+  );
+  assert.equal(readFileSync(join(target, "src", "worker.js"), "utf8"), "old bytes\n");
 });
 
 test("automatic updates ignore unsafe paths from an old updater manifest", () => {
@@ -109,4 +232,50 @@ test("automatic updates ignore unsafe paths from an old updater manifest", () =>
   updateFromUpstream({ sourceDirectory: source, targetDirectory: target });
 
   assert.equal(readFileSync(outside, "utf8"), "keep me\n");
+});
+
+test("automatic updates reject a symlinked managed file without changing external bytes", () => {
+  const root = mkdtempSync(join(tmpdir(), "regybox-updater-symlink-file-"));
+  const source = join(root, "source");
+  const target = join(root, "target");
+  const external = join(root, "external-worker.js");
+  mkdirSync(join(source, "src"), { recursive: true });
+  mkdirSync(join(target, "src"), { recursive: true });
+  writeFileSync(join(source, "wrangler.jsonc"), upstreamConfig);
+  writeFileSync(join(source, "src", "worker.js"), "trusted source\n");
+  writeFileSync(join(target, "wrangler.jsonc"), deploymentConfig);
+  writeFileSync(external, "external bytes\n");
+  symlinkSync(external, join(target, "src", "worker.js"));
+
+  assert.throws(
+    () => updateFromUpstream({ sourceDirectory: source, targetDirectory: target }),
+    /tree containing a symlink/,
+  );
+  assert.equal(readFileSync(external, "utf8"), "external bytes\n");
+  assert.equal(readFileSync(join(source, "src", "worker.js"), "utf8"), "trusted source\n");
+});
+
+test("automatic updates reject a symlinked manifest parent without deleting external bytes", () => {
+  const root = mkdtempSync(join(tmpdir(), "regybox-updater-symlink-parent-"));
+  const source = join(root, "source");
+  const target = join(root, "target");
+  const externalDirectory = join(root, "external");
+  mkdirSync(source, { recursive: true });
+  mkdirSync(target, { recursive: true });
+  mkdirSync(externalDirectory, { recursive: true });
+  writeFileSync(join(source, "wrangler.jsonc"), upstreamConfig);
+  writeFileSync(join(target, "wrangler.jsonc"), deploymentConfig);
+  writeFileSync(join(externalDirectory, "obsolete.js"), "do not delete\n");
+  symlinkSync(externalDirectory, join(target, "managed"));
+  writeFileSync(
+    join(target, ".regybox-updater-files.json"),
+    JSON.stringify({ files: ["managed/obsolete.js"] }),
+  );
+
+  assert.throws(
+    () => updateFromUpstream({ sourceDirectory: source, targetDirectory: target }),
+    /tree containing a symlink/,
+  );
+  assert.equal(readFileSync(join(externalDirectory, "obsolete.js"), "utf8"), "do not delete\n");
+  assert.equal(readFileSync(join(source, "wrangler.jsonc"), "utf8"), upstreamConfig);
 });
