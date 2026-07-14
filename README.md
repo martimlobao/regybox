@@ -82,35 +82,74 @@ place when the Worker is redeployed; in particular, updates do not replace your
 
 ### 4. Turn on Automatic Updates (Recommended)
 
-Cloudflare creates the Worker and its GitHub repository in step 3, but it does
-not copy GitHub Actions workflows from the template. Complete this one extra
-consent step to make future fixes set-and-forget:
+Step 3 did two things: Cloudflare created a new GitHub repository for your copy
+of Regybox, then deployed the Worker from that repository. That new repository
+does **not** contain or need a Regybox updater GitHub Action. Updates are handled
+centrally from [`martimlobao/regybox`](https://github.com/martimlobao/regybox).
+
+There is one final, one-time setup step:
 
 1. Open the [Regybox Updater installation page](https://github.com/apps/regybox-updater/installations/new).
-2. Choose **Only select repositories** and select the new repository that
-   Cloudflare created for this Worker.
-3. Approve the installation.
+2. Choose **Only select repositories**.
+3. Select only the new repository that Cloudflare created in step 3, then
+   approve the installation.
 
-The Regybox Updater checks installed repositories after changes and once a day.
-It updates only repositories containing Regybox's deployment marker, pushes the
-new Worker code directly to the default branch, and lets Cloudflare deploy it.
-If branch protection rejects the direct push, it creates or updates a
-`regybox-updater/main` branch and opens an update pull request instead.
+That is all you need to configure. Do not copy an updater workflow into your
+repository and do not add a GitHub token.
 
-Updates preserve the Worker name, KV namespace IDs, dashboard variables and
-secrets, local environment files, personal files, and anything under `.github`.
-The App cannot access credentials stored only as variables or secrets in your
-Cloudflare dashboard. Because its selected-repository **Contents** permission
-can read anything committed to those repositories, never commit Cloudflare or
-Regybox credentials, cookies, calendar URLs, or email passwords. Its
-least-privilege GitHub permissions are **Metadata: read**, **Contents: read and
-write**, and **Pull requests: read and write**; it does not request Actions or
-Workflows permissions.
+#### What Happens After Setup
 
-To stop updates, uninstall **Regybox Updater** from that repository. Advanced
-users can instead change `mode` from `auto` in `.regybox-deployment.json`; the
-central updater fails closed and skips repositories whose marker is missing,
-disabled, or does not identify this Regybox upstream.
+1. A relevant Worker or updater change merged into the `main` branch of
+   `martimlobao/regybox` starts the central updater. A daily reconciliation also
+   catches anything that was temporarily missed.
+2. The updater looks only at repositories where the Regybox Updater App is
+   installed and checks the `.regybox-deployment.json` marker. Missing,
+   malformed, disabled, or mismatched identity/schema markers are skipped. The
+   updater itself maintains the marker's `installedCommit` value.
+3. For an opted-in repository, it replaces upstream-managed Worker files and
+   deletes managed files that were removed upstream. User-added, unmanaged files
+   are generally left alone. It explicitly protects the top-level `.github`,
+   `.wrangler`, `node_modules`, `.regybox-deployment.json`, `.env`, `.env.*`,
+   `.dev.vars`, and `.dev.vars.*` areas.
+4. Its configuration merge preserves the Worker name and KV namespace IDs and
+   tells Cloudflare to keep dashboard-owned variables and secrets. That is why
+   values such as `CLASS_MAP`, cookies, calendar settings, and email settings
+   remain unchanged.
+5. It commits the update to the repository's default branch. Cloudflare's Git
+   integration sees that commit and deploys it.
+6. If branch protection blocks the direct push, the updater opens or refreshes
+   a `regybox-updater/main` pull request instead. You must approve and merge that
+   pull request; otherwise the normal path is fully automatic.
+
+#### Check, Pause, or Troubleshoot Updates
+
+- **Check an update:** open the repository's commit history and look for
+  `chore: update Regybox scheduler`, then confirm the same commit has a
+  successful deployment in the Cloudflare dashboard. A daily check creates no
+  commit when the repository is already current.
+- **Pause or disable:** remove the repository from the Regybox Updater App or
+  uninstall the App. Advanced users can temporarily change `mode` from `auto`
+  in `.regybox-deployment.json`; change it back to `auto` to resume.
+- **Nothing is updating:** confirm that the App installation still includes the
+  correct repository and that `.regybox-deployment.json` exists at the
+  repository root with the expected Regybox upstream, `main` channel, and
+  `"mode": "auto"`. Also check for an open updater pull request, which means
+  branch protection requires your approval.
+
+#### App Access and Credential Safety
+
+The App cannot directly read variables or secrets from your Cloudflare dashboard
+through GitHub, and the routine configuration merge preserves those values.
+However, its **Contents: read and write** permission lets the central updater
+commit upstream Worker code, which Cloudflare then deploys automatically.
+Deployed Worker code can use that Worker's bindings and secrets at runtime, so
+installing the App means trusting the Regybox updater and upstream code as an
+automatic update channel.
+
+Never commit Cloudflare or Regybox credentials, cookies, calendar URLs, or email
+passwords to the repository. The App's least-privilege GitHub permissions are
+**Metadata: read**, **Contents: read and write**, and **Pull requests: read and
+write**; it does not request Actions or Workflows permissions.
 
 ### 5. Optional: Turn on Email Notifications
 
