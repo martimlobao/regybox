@@ -102,7 +102,7 @@ secrets, local environment files, personal files, and anything under `.github`.
 The App cannot see your Cloudflare or Regybox credentials. Its least-privilege
 GitHub permissions are **Metadata: read**, **Contents: read and write**, and
 **Pull requests: read and write**; it does not request Actions or Workflows
-permission.
+permissions.
 
 To stop updates, uninstall **Regybox Updater** from that repository. Advanced
 users can instead change `mode` from `auto` in `.regybox-deployment.json`; the
