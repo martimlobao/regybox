@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "upstream": "martimlobao/regybox",
+  "channel": "main",
+  "mode": "auto",
+  "installedCommit": ""
+}
