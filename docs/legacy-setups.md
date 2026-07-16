@@ -2,7 +2,7 @@
 
 These are the original ways to run the Regybox auto-enroller. They keep working and are
 fully supported, but new users should start with the
-[one-click Cloudflare setup](../README.md#recommended-one-click-cloudflare-setup) in the
+[one-click Cloudflare setup](../README.md#one-click-cloudflare-setup) in the
 main README.
 
 ## Alternative: GitHub Action with a Fixed Schedule
@@ -34,7 +34,7 @@ several minutes late, which can matter for classes that fill up quickly.
 
    > [!NOTE]
    > If you want your calendar to drive enrollments and unenrollments, use the
-   > [one-click Cloudflare setup](../README.md#recommended-one-click-cloudflare-setup) instead of a
+   > [one-click Cloudflare setup](../README.md#one-click-cloudflare-setup) instead of a
    > fixed-class GitHub schedule.
 
 3. Add the workflow file at `.github/workflows/regybox.yml` using the example below.
@@ -138,7 +138,7 @@ automatically in the class.
 > [!NOTE]
 > This is the original calendar-driven setup, kept for people who already run it or who want
 > GitHub Actions to perform the enrollment. New users should prefer the
-> [one-click Cloudflare setup](../README.md#recommended-one-click-cloudflare-setup), which does the same
+> [one-click Cloudflare setup](../README.md#one-click-cloudflare-setup), which does the same
 > thing without GitHub tokens or Cloudflare API tokens. The same Worker powers both: if the
 > `GITHUB_TOKEN`, `GITHUB_OWNER`, and `GITHUB_REPO` variables are set it dispatches GitHub
 > Actions as described below; otherwise it books classes itself.

@@ -9,19 +9,12 @@ Automatically enroll in a CrossFit class on the Regybox platform.
 
 Add your classes to your calendar (or delete one to skip a day), and this project
 books and cancels the matching Regybox classes for you, optionally emailing you a
-confirmation. There are three ways to run it — pick one:
+confirmation. Use the [one-click Cloudflare setup](#one-click-cloudflare-setup):
+a Cloudflare Worker checks your calendar every half hour and books classes
+directly, with no fixed schedule to maintain. ([Legacy setup instructions](docs/legacy-setups.md)
+remain available for existing installations.)
 
-1. **[One-click Cloudflare setup](#recommended-one-click-cloudflare-setup)**
-   (recommended): a Cloudflare Worker checks your calendar every half hour and
-   books classes directly. Easiest to set up, no fixed schedule to maintain.
-2. **[GitHub Action with a fixed schedule](docs/legacy-setups.md#alternative-github-action-with-a-fixed-schedule)**:
-   books the same class at the same time every week. No Cloudflare account needed.
-3. **[Cloudflare Worker → GitHub Actions dispatch](docs/legacy-setups.md#advanced-calendar-driven-sync-with-cloudflare-and-github)**
-   (advanced): the original calendar-driven setup, kept for existing users.
-
-The last two are documented in [docs/legacy-setups.md](docs/legacy-setups.md).
-
-## Recommended: One-Click Cloudflare Setup
+## One-Click Cloudflare Setup
 
 Everything runs in a free Cloudflare account that you own: your credentials stay
 with you, and there is no server to maintain. You need a Cloudflare account and a
