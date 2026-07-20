@@ -125,6 +125,26 @@ test("failure email includes the short-lived incident link when available", () =
   );
 });
 
+test("result emails can link directly to the retained run timeline", () => {
+  const runUrl = "https://worker.example.test/regybox/runs/0123456789abcdef0123456789abcdef0123";
+  const success = composeEmail({
+    kind: "success",
+    operation: "enroll",
+    classSummary: "WOD on 2026-07-12 at 06:30",
+    runUrl,
+  });
+  const failure = composeEmail({
+    kind: "failure",
+    operation: "enroll",
+    classSummary: "WOD on 2026-07-12 at 06:30",
+    payload: failurePayload,
+    runUrl,
+  });
+
+  assert.match(success.body, new RegExp(`Run details: ${runUrl}`));
+  assert.match(failure.body, new RegExp(`Run timeline: ${runUrl}`));
+});
+
 test("failure technical details are capped at the Python appendix limit", () => {
   const technicalMessage = Array.from({ length: 13 }, (_, index) => `line ${index + 1}`).join("\n");
   const email = composeEmail({

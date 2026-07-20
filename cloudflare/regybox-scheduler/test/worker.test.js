@@ -291,7 +291,7 @@ test("buildPlan sweeps stale enrolled entries across paginated KV listings", asy
   );
 });
 
-test("not-open KV entry skips dispatch before the six-hour refresh boundary", async () => {
+test("not-open KV entry skips dispatch before the five-and-a-half-hour refresh threshold", async () => {
   const key = "regybox:v1:calendar:one-class:2026-06-18T10:30:00.000Z";
   const kv = makeKv(
     new Map([
@@ -322,7 +322,7 @@ test("not-open KV entry skips dispatch before the six-hour refresh boundary", as
     env: baseEnv,
     kv,
     icsText: ics,
-    now: new Date("2026-06-18T05:59:59.999Z"),
+    now: new Date("2026-06-18T05:29:59.999Z"),
   });
 
   assert.deepEqual(plan.dispatches, []);
@@ -441,7 +441,7 @@ test("not-open KV entry dispatches when last check time is invalid", async () =>
   assert.equal(plan.dispatches[0].operation, "enroll");
 });
 
-test("not-open KV entry dispatches at the six-hour refresh boundary", async () => {
+test("not-open KV entry dispatches at the five-and-a-half-hour refresh threshold", async () => {
   const key = "regybox:v1:calendar:one-class:2026-06-18T10:30:00.000Z";
   const kv = makeKv(
     new Map([
@@ -472,11 +472,67 @@ test("not-open KV entry dispatches at the six-hour refresh boundary", async () =
     env: baseEnv,
     kv,
     icsText: ics,
-    now: new Date("2026-06-18T06:00:00Z"),
+    now: new Date("2026-06-18T05:30:00Z"),
   });
 
   assert.equal(plan.dispatches.length, 1);
   assert.equal(plan.dispatches[0].operation, "enroll");
+});
+
+test("half-hour cron cadence retries a not-open class within six hours", async () => {
+  const key = "regybox:v1:calendar:one-class:2026-06-19T10:30:00.000Z";
+  const kv = makeKv(
+    new Map([
+      [
+        key,
+        JSON.stringify({
+          state: "not_open",
+          classDate: "2026-06-19",
+          classTime: "11:30",
+          classType: "WOD",
+          enrollmentOpensAt: "2026-06-20T10:00:00.000Z",
+          lastCheckedAt: "2026-06-18T17:30:01.000Z",
+        }),
+      ],
+    ]),
+  );
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:one-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260619T103000Z",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const beforeThreshold = await buildPlan({
+    env: baseEnv,
+    kv,
+    icsText: ics,
+    now: new Date("2026-06-18T22:58:00.000Z"),
+  });
+  const traces = [];
+  const nextCron = await buildPlan({
+    env: baseEnv,
+    kv,
+    icsText: ics,
+    now: new Date("2026-06-18T23:28:00.000Z"),
+    onTrace: async (event) => traces.push(event),
+  });
+
+  assert.deepEqual(beforeThreshold.dispatches, []);
+  assert.equal(nextCron.dispatches.length, 1);
+  assert.ok(
+    new Date("2026-06-18T23:28:00.000Z").getTime() -
+      new Date("2026-06-18T17:30:01.000Z").getTime() <
+      6 * 60 * 60 * 1000,
+  );
+  const forcedRefresh = traces.find((event) => event.data?.reason === "forced_refresh_due");
+  assert.equal(forcedRefresh.code, "calendar_event_scheduled");
+  assert.equal(forcedRefresh.data.decision, "dispatch");
+  assert.match(forcedRefresh.message, /forced refresh is due/);
+  assert.doesNotMatch(JSON.stringify(traces), /one-class|regybox:v1:calendar/);
 });
 
 test("stale not-open KV entries do not dispatch unenroll", async () => {

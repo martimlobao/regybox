@@ -54,7 +54,15 @@ export function classSummary({ classType, classDate, classTime }) {
 }
 
 /** Build the plain-text email content for a completed worker operation. */
-export function composeEmail({ kind, operation, classSummary: summary, payload = {}, statusUrl, incidentUrl }) {
+export function composeEmail({
+  kind,
+  operation,
+  classSummary: summary,
+  payload = {},
+  statusUrl,
+  incidentUrl,
+  runUrl,
+}) {
   const operationName = operationLabel(operation);
   const operationNoun = operationName === "unenroll" ? "unenrollment" : "enrollment";
 
@@ -68,6 +76,9 @@ export function composeEmail({ kind, operation, classSummary: summary, payload =
     ];
     if (statusUrl) {
       bodyLines.push("", `Status page: ${statusUrl}`);
+    }
+    if (runUrl) {
+      bodyLines.push("", `Run details: ${runUrl}`);
     }
     return {
       subject: `Regybox Auto-${operationName}: success for ${summary}`,
@@ -97,6 +108,9 @@ export function composeEmail({ kind, operation, classSummary: summary, payload =
       "",
       `More details (available for ${incidentConstants.INCIDENT_RETENTION_DAYS} days): ${incidentUrl}`,
     );
+  }
+  if (runUrl) {
+    bodyLines.push("", `Run timeline: ${runUrl}`);
   }
   if (statusUrl) {
     bodyLines.push("", `Status page: ${statusUrl}`);
@@ -143,7 +157,7 @@ export async function sendEmail(env, { subject, body }, { mailerFactory } = {}) 
 }
 
 /** Notify successful worker results; noops are intentionally silent. */
-export async function notifyResult({ env, kv, dispatch, result, statusUrl, send = sendEmail }) {
+export async function notifyResult({ env, kv, dispatch, result, statusUrl, runUrl, send = sendEmail }) {
   if (!emailConfigured(env) || result.status !== "success") {
     return;
   }
@@ -159,6 +173,7 @@ export async function notifyResult({ env, kv, dispatch, result, statusUrl, send 
           classTime: dispatch.inputs?.["class-time"],
         }),
         statusUrl,
+        runUrl,
       }),
     );
     console.log(`regybox: email sent (${dispatch.operation} success)`);
@@ -177,6 +192,7 @@ export async function notifyFailure({
   fingerprint,
   statusUrl,
   incidentUrl,
+  runUrl,
   send = sendEmail,
 }) {
   if (!emailConfigured(env)) {
@@ -210,6 +226,7 @@ export async function notifyFailure({
         payload,
         statusUrl,
         incidentUrl,
+        runUrl,
       }),
     );
   } catch (notificationError) {

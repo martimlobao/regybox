@@ -3,6 +3,7 @@ import { executionMode, readActivity, readLastRun } from "./executor.js";
 import { emailConfigured } from "./notify.js";
 import { RegyboxLoginError, createRegyboxClient } from "./regybox.js";
 import { incidentConstants, readIncident } from "./incidents.js";
+import { readRun, readRuns, runConstants } from "./runs.js";
 
 const STYLES = `
   :root { color-scheme: light dark; }
@@ -27,6 +28,11 @@ const STYLES = `
   .off::before  { content: "\\2796\\00a0 "; }
   .hint { display: block; color: #777; font-size: 0.88rem; margin-top: 0.15rem; }
   footer { margin-top: 2rem; color: #777; font-size: 0.85rem; }
+  a { color: inherit; }
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1.5rem; }
+  th, td { padding: 0.55rem 0.35rem; text-align: left; vertical-align: top; border-bottom: 1px solid #eee; }
+  th { font-size: 0.85rem; color: #777; }
+  code, pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 `;
 
 function escapeHtml(value) {
@@ -275,12 +281,49 @@ function activityCheck(activity, nowMs) {
   return check(level, text);
 }
 
+function runLevel(status) {
+  if (status === "failure") return "bad";
+  if (status === "partial" || status === "running") return "warn";
+  if (status === "success") return "ok";
+  return "off";
+}
+
+function durationText(durationMs) {
+  if (!Number.isFinite(durationMs)) return "still running";
+  if (durationMs < 1000) return `${durationMs}ms`;
+  const seconds = Math.round(durationMs / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+function baseHref(basePath, suffix = "") {
+  const base = String(basePath ?? "").replace(/\/+$/, "");
+  return `${base}${suffix}` || "/";
+}
+
+function runCheck(run, nowMs, basePath) {
+  const when = relativeTime(run.startedAt, nowMs) ?? run.startedAt;
+  const operations = Array.isArray(run.operations) ? run.operations : [];
+  const operationText = operations.length > 0
+    ? operations.map(describeOperation).join("; ")
+    : run.status === "running" ? "run is still in progress" : "nothing to do";
+  return {
+    ...check(
+      runLevel(run.status),
+      `${when} — ${run.status} in ${durationText(run.durationMs)} — ${operationText}`,
+      run.traceTruncated ? "The retained trace reached its 500-event limit." : undefined,
+    ),
+    href: baseHref(basePath, `/runs/${run.id}`),
+  };
+}
+
 export async function buildStatusModel({
   env,
   kv,
   fetchImpl = fetch,
   createClient = createRegyboxClient,
   now = () => Date.now(),
+  basePath = "",
 }) {
   const nowMs = now();
   let mode;
@@ -307,6 +350,12 @@ export async function buildStatusModel({
   } catch {
     activity = [];
   }
+  let runs = [];
+  try {
+    runs = kv ? await readRuns(kv) : [];
+  } catch {
+    runs = [];
+  }
   const sections = [
     { title: "Setup", checks: setupChecks(env) },
     { title: "Live checks", checks: liveChecks },
@@ -319,6 +368,13 @@ export async function buildStatusModel({
     sections.push({
       title: "Recent activity",
       checks: activity.slice(0, 10).map((entry) => activityCheck(entry, nowMs)),
+    });
+  }
+  if (runs.length > 0) {
+    sections.push({
+      title: "Recent runs",
+      checks: runs.slice(0, 10).map((run) => runCheck(run, nowMs, basePath)),
+      moreHref: baseHref(basePath, "/runs"),
     });
   }
   return {
@@ -335,12 +391,12 @@ export function renderStatusPage(model) {
       const rows = section.checks
         .map(
           (item) =>
-            `      <li class="${item.level}">${escapeHtml(item.text)}${
+            `      <li class="${item.level}">${item.href ? `<a href="${escapeHtml(item.href)}">` : ""}${escapeHtml(item.text)}${item.href ? "</a>" : ""}${
               item.hint ? `<span class="hint">${escapeHtml(item.hint)}</span>` : ""
             }</li>`,
         )
         .join("\n");
-      return `    <h2>${escapeHtml(section.title)}</h2>\n    <ul>\n${rows}\n    </ul>`;
+      return `    <h2>${escapeHtml(section.title)}</h2>\n    <ul>\n${rows}\n    </ul>${section.moreHref ? `\n    <p><a href="${escapeHtml(section.moreHref)}">View all retained runs</a></p>` : ""}`;
     })
     .join("\n");
   return `<!doctype html>
@@ -372,7 +428,112 @@ export async function handleStatusRequest(env, kv, options = {}) {
   });
 }
 
-export function renderIncidentPage(incident) {
+function htmlResponse(html, status = 200) {
+  return new Response(html, {
+    status,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "x-robots-tag": "noindex, nofollow",
+    },
+  });
+}
+
+export function renderRunsPage(runs, { basePath = "", nowMs = Date.now() } = {}) {
+  const rows = runs.map((run) => {
+    const operations = Array.isArray(run.operations) ? run.operations : [];
+    const summary = operations.length > 0 ? operations.map(describeOperation).join("; ") : "nothing to do";
+    return `    <tr>
+      <td><a href="${escapeHtml(baseHref(basePath, `/runs/${run.id}`))}">${escapeHtml(relativeTime(run.startedAt, nowMs) ?? run.startedAt)}</a></td>
+      <td>${escapeHtml(run.status)}</td>
+      <td>${escapeHtml(durationText(run.durationMs))}</td>
+      <td>${escapeHtml(summary)}</td>
+    </tr>`;
+  }).join("\n");
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Regybox run history</title>
+<style>${STYLES}</style>
+</head>
+<body>
+  <h1>Regybox run history</h1>
+  <p class="sub">Sanitized timelines are retained for ${runConstants.RUN_RETENTION_DAYS} days.</p>
+  <p><a href="${escapeHtml(baseHref(basePath))}">Back to status</a></p>
+  ${rows ? `<table><thead><tr><th>Started</th><th>Status</th><th>Duration</th><th>Operations</th></tr></thead><tbody>\n${rows}\n  </tbody></table>` : "<p>No retained runs yet.</p>"}
+  <footer>This read-only history never includes credentials, calendar contents, raw HTML, or complete action URLs.</footer>
+</body>
+</html>`;
+}
+
+export function renderRunPage(run, { basePath = "" } = {}) {
+  const operations = Array.isArray(run.operations) ? run.operations : [];
+  const operationRows = operations.map((operation, index) =>
+    `    <tr><td>${index + 1}</td><td>${escapeHtml(describeOperation(operation))}</td><td>${escapeHtml(operation.outcome)}</td></tr>`,
+  ).join("\n");
+  const trace = Array.isArray(run.trace) ? run.trace : [];
+  const traceRows = trace.map((event) => {
+    const data = event.data && Object.keys(event.data).length > 0 ? JSON.stringify(event.data) : "";
+    return `    <tr>
+      <td>${escapeHtml(event.at)}</td>
+      <td>${escapeHtml(`${event.elapsedMs}ms`)}</td>
+      <td>${escapeHtml(event.level)}</td>
+      <td>${escapeHtml(event.scope)}${Number.isInteger(event.operationIndex) ? ` #${event.operationIndex + 1}` : ""}</td>
+      <td><strong>${escapeHtml(event.message)}</strong>${data ? `<span class="hint"><code>${escapeHtml(data)}</code></span>` : ""}</td>
+    </tr>`;
+  }).join("\n");
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Regybox run details</title>
+<style>${STYLES}</style>
+</head>
+<body>
+  <h1>Regybox run details</h1>
+  <p class="sub">Run ${escapeHtml(run.id)} · ${escapeHtml(run.status)} · ${escapeHtml(durationText(run.durationMs))}</p>
+  <p><a href="${escapeHtml(baseHref(basePath, "/runs"))}">Back to run history</a></p>
+  <dl>
+    <dt>Scheduled</dt><dd>${escapeHtml(run.scheduledAt)}</dd>
+    <dt>Started</dt><dd>${escapeHtml(run.startedAt)}</dd>
+    ${run.finishedAt ? `<dt>Finished</dt><dd>${escapeHtml(run.finishedAt)}</dd>` : ""}
+    <dt>Mode</dt><dd>${escapeHtml(run.mode)}</dd>
+  </dl>
+  <h2>Operations</h2>
+  ${operationRows ? `<table><thead><tr><th>#</th><th>Summary</th><th>Outcome</th></tr></thead><tbody>\n${operationRows}\n  </tbody></table>` : "<p>No operations were planned.</p>"}
+  <h2>Timeline</h2>
+  ${traceRows ? `<table><thead><tr><th>Time</th><th>Elapsed</th><th>Level</th><th>Scope</th><th>Event</th></tr></thead><tbody>\n${traceRows}\n  </tbody></table>` : "<p>No trace events were retained.</p>"}
+  ${run.traceTruncated ? `<p class="warn">Trace truncated after ${runConstants.MAX_TRACE_EVENTS} events.</p>` : ""}
+  <footer>This page is read-only. Trace fields are allowlisted and sanitized before storage.</footer>
+</body>
+</html>`;
+}
+
+export async function handleRunsRequest(kv, options = {}) {
+  return htmlResponse(renderRunsPage(await readRuns(kv), options));
+}
+
+export async function handleRunRequest(kv, id, options = {}) {
+  const run = await readRun(kv, id);
+  if (!run) {
+    return new Response("Run not found or expired.", {
+      status: 404,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-store",
+        "x-robots-tag": "noindex, nofollow",
+      },
+    });
+  }
+  return htmlResponse(renderRunPage(run, options));
+}
+
+export function renderIncidentPage(incident, { basePath = "" } = {}) {
   const rows = [
     ["Time", incident.timestamp],
     ["Operation", incident.operation],
@@ -412,12 +573,13 @@ export function renderIncidentPage(incident) {
   <dl>
 ${details}
   </dl>
+  ${incident.runId ? `<p><a href="${escapeHtml(baseHref(basePath, `/runs/${incident.runId}`))}">View the complete run timeline</a></p>` : ""}
   <footer>This page is read-only. It never stores or displays credentials, full action URLs, or query tokens.</footer>
 </body>
 </html>`;
 }
 
-export async function handleIncidentRequest(kv, id) {
+export async function handleIncidentRequest(kv, id, options = {}) {
   const incident = await readIncident(kv, id);
   if (!incident) {
     return new Response("Incident not found or expired.", {
@@ -429,7 +591,7 @@ export async function handleIncidentRequest(kv, id) {
       },
     });
   }
-  return new Response(renderIncidentPage(incident), {
+  return new Response(renderIncidentPage(incident, options), {
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",

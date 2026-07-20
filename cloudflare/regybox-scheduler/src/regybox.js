@@ -1,13 +1,12 @@
+import { parseFragment } from "parse5";
+
 const DOMAIN = "https://www.regybox.pt/app/app_nova/";
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
-const DIV_TAG_RE = /<\/?div\b[^>]*>/gi;
-const TAG_RE = /<[^>]+>/g;
 const SCRIPT_RE = /<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi;
-const ATTR_RE = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
-const BUTTON_RE = /<button\b([^>]*)>/gi;
-const INPUT_RE = /<input\b([^>]*)>/gi;
 const DOMAIN_ORIGIN = new URL(DOMAIN).origin;
 const CLASS_ACTION_PATH_PREFIX = "/app/app_nova/php/aulas/";
+const OPENING_ROLLOVER_GRACE_MS = 30_000;
+const OPENING_ROLLOVER_TOLERANCE_SECONDS = 60;
 
 export class RegyboxLoginError extends Error {
   constructor(message = "Unable to log in") {
@@ -72,24 +71,35 @@ export class NoClassesFoundError extends Error {
   }
 }
 
-function parseAttributes(raw) {
-  const attrs = {};
-  for (const match of raw.matchAll(ATTR_RE)) {
-    const [, name, doubleQuoted, singleQuoted, bare] = match;
-    if (name) {
-      attrs[name.toLowerCase()] = decodeEntities(doubleQuoted ?? singleQuoted ?? bare ?? "");
-    }
-  }
-  return attrs;
+function attributes(node) {
+  return Object.fromEntries((node?.attrs ?? []).map(({ name, value }) => [name.toLowerCase(), value]));
 }
 
-function classTokens(attrs) {
-  return String(attrs.class ?? "").split(/\s+/).filter(Boolean);
+function classTokens(node) {
+  return String(attributes(node).class ?? "").split(/\s+/).filter(Boolean);
 }
 
-function hasClass(attrs, ...names) {
-  const tokens = new Set(classTokens(attrs));
+function hasClass(node, ...names) {
+  const tokens = new Set(classTokens(node));
   return names.every((name) => tokens.has(name));
+}
+
+function elements(root, tagName = null) {
+  const matches = [];
+  const visit = (node) => {
+    if (node?.tagName && (!tagName || node.tagName === tagName)) {
+      matches.push(node);
+    }
+    for (const child of node?.childNodes ?? []) {
+      visit(child);
+    }
+  };
+  visit(root);
+  return matches;
+}
+
+function descendants(root, tagName = null) {
+  return elements({ childNodes: root?.childNodes ?? [] }, tagName);
 }
 
 function decodeEntities(value) {
@@ -125,60 +135,54 @@ function fixText(value) {
   }
 }
 
-function textContent(html) {
-  return fixText(decodeEntities(String(html).replace(TAG_RE, " ")));
-}
-
-function divNodes(html) {
-  const nodes = [];
-  const stack = [];
-  for (const match of html.matchAll(DIV_TAG_RE)) {
-    const tag = match[0];
-    if (tag.startsWith("</")) {
-      const node = stack.pop();
-      if (node) {
-        node.inner = html.slice(node.openEnd, match.index);
-        node.end = match.index + tag.length;
-        nodes.push(node);
-      }
-    } else {
-      const attrs = parseAttributes(tag.slice(4, -1));
-      stack.push({ attrs, start: match.index, openEnd: match.index + tag.length, inner: "", end: null });
+function textContent(node) {
+  const parts = [];
+  const visit = (current) => {
+    if (current?.nodeName === "#text") {
+      parts.push(current.value);
     }
-  }
-  return nodes.sort((left, right) => left.start - right.start);
+    for (const child of current?.childNodes ?? []) {
+      visit(child);
+    }
+  };
+  visit(node);
+  return fixText(parts.join(" "));
 }
 
-function classBlocks(html) {
-  return divNodes(html)
-    .filter((node) => hasClass(node.attrs, "filtro0"))
-    .map((node) => html.slice(node.start, node.end));
+function parseClassDocument(html) {
+  return parseFragment(String(html));
+}
+
+function classBlocks(document) {
+  return elements(document, "div").filter((node) => hasClass(node, "filtro0"));
 }
 
 function findDiv(nodes, predicate) {
-  return nodes.find((node) => predicate(node.attrs, node.inner));
+  return nodes.find((node) => predicate(attributes(node), node));
 }
 
 function findLastDiv(nodes, predicate) {
   for (let index = nodes.length - 1; index >= 0; index -= 1) {
-    if (predicate(nodes[index].attrs, nodes[index].inner)) {
+    if (predicate(attributes(nodes[index]), nodes[index])) {
       return nodes[index];
     }
   }
   return undefined;
 }
 
-function hasStyle(attrs, pattern) {
-  return pattern.test(String(attrs.style ?? ""));
+function hasStyle(node, pattern) {
+  return pattern.test(String(attributes(node).style ?? ""));
 }
 
 function buttonActions(block) {
   const actions = [];
   const unknownActionEndpoints = [];
-  for (const match of block.matchAll(BUTTON_RE)) {
-    const attrs = parseAttributes(match[1]);
-    const looksLikeBookingControl = hasClass(attrs, "buts_inscrever");
+  let malformedBookingControls = 0;
+  for (const button of descendants(block, "button")) {
+    const attrs = attributes(button);
+    const looksLikeBookingControl = hasClass(button, "buts_inscrever");
     const urls = String(attrs.onclick ?? "").match(/[^'"\s,(]+\.php(?:\?[^'"\s,)]*)?/gi) ?? [];
+    let recognizedForButton = false;
     for (const rawUrl of urls) {
       let url;
       try {
@@ -200,16 +204,22 @@ function buttonActions(block) {
       }
       if (pathname === `${CLASS_ACTION_PATH_PREFIX}marca_aulas.php`) {
         actions.push({ operation: "enroll", url: url.href, pathname });
+        recognizedForButton = true;
       } else if (pathname === `${CLASS_ACTION_PATH_PREFIX}cancela_aula.php`) {
         actions.push({ operation: "unenroll", url: url.href, pathname });
+        recognizedForButton = true;
       } else if (looksLikeBookingControl && /\/aulas\/[^/]+\.php$/i.test(pathname)) {
         unknownActionEndpoints.push(pathname);
       }
+    }
+    if (looksLikeBookingControl && !recognizedForButton && unknownActionEndpoints.length === 0) {
+      malformedBookingControls += 1;
     }
   }
   const diagnostics = {
     actionEndpoints: actions.map(({ pathname }) => pathname),
     unknownActionEndpoints,
+    malformedBookingControls,
   };
   if (unknownActionEndpoints.length > 0) {
     throw new UnparseableError(
@@ -223,13 +233,16 @@ function buttonActions(block) {
       diagnostics,
     );
   }
+  if (malformedBookingControls > 0) {
+    throw new UnparseableError("Booking control did not contain a recognizable class action", diagnostics);
+  }
   return actions[0] ?? null;
 }
 
 function timerValue(block) {
-  for (const match of block.matchAll(INPUT_RE)) {
-    const attrs = parseAttributes(match[1]);
-    if (hasClass(attrs, "timers")) {
+  for (const input of descendants(block, "input")) {
+    const attrs = attributes(input);
+    if (hasClass(input, "timers")) {
       const value = Number.parseInt(attrs.value, 10);
       if (!Number.isFinite(value)) {
         throw new UnparseableError(`Unexpected timer value: ${attrs.value}`);
@@ -254,39 +267,38 @@ function zonedDate(epochSeconds, timezone) {
 }
 
 function parseClassBlock(block, { timezone }) {
-  const rootMatch = block.match(/^<div\b([^>]*)>/i);
-  const rootAttrs = rootMatch ? parseAttributes(rootMatch[1]) : null;
+  const rootAttrs = attributes(block);
   const timestamp = String(rootAttrs?.id ?? "").match(/^feed_time_slot(\d+)$/);
   if (!timestamp) {
     throw new UnparseableError("Missing class timestamp");
   }
-  const nodes = divNodes(block);
+  const nodes = descendants(block, "div");
   const leftHalf = nodes.filter(
-    (node) => node.attrs.align === "left" && hasClass(node.attrs, "col-50"),
+    (node) => attributes(node).align === "left" && hasClass(node, "col-50"),
   );
   if (leftHalf.length === 0) {
     throw new UnparseableError("Missing class name");
   }
   const rightHalf = nodes.find(
-    (node) => node.attrs.align === "right" && hasClass(node.attrs, "col-50"),
+    (node) => attributes(node).align === "right" && hasClass(node, "col-50"),
   );
   const timeNode = findDiv(
     nodes,
-    (attrs, inner) =>
+    (attrs, node) =>
       attrs.align === "left" &&
-      hasClass(attrs, "col") &&
-      /\b\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}\b/.test(textContent(inner)),
+      hasClass(node, "col") &&
+      /\b\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}\b/.test(textContent(node)),
   );
   const capacityNode = findDiv(
     nodes,
-    (attrs, inner) =>
-      attrs.align === "center" && hasClass(attrs, "col") && /\S+\s+(?:of|de)\s+\S+/i.test(textContent(inner)),
+    (attrs, node) =>
+      attrs.align === "center" && hasClass(node, "col") && /\S+\s+(?:of|de)\s+\S+/i.test(textContent(node)),
   );
   if (!rightHalf || !timeNode || !capacityNode) {
     throw new UnparseableError("Missing class fields");
   }
-  const time = textContent(timeNode.inner).match(/^(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/);
-  const capacity = textContent(capacityNode.inner).match(/^(\S+)\s+(?:of|de)\s+(\S+)$/i);
+  const time = textContent(timeNode).match(/^(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/);
+  const capacity = textContent(capacityNode).match(/^(\S+)\s+(?:of|de)\s+(\S+)$/i);
   if (!time || !capacity) {
     throw new UnparseableError("Unexpected time or capacity format");
   }
@@ -297,14 +309,14 @@ function parseClassBlock(block, { timezone }) {
   const maxCapacity = parseCapacity(capacity[2]);
   const buttonAction = buttonActions(block);
   const isOpenByOtherEnrollment = nodes.some(
-    (node) => hasClass(node.attrs, "letra_10") && hasStyle(node.attrs, /padding-top:\s*7px/i),
+    (node) => hasClass(node, "letra_10") && hasStyle(node, /padding-top:\s*7px/i),
   );
   const isOpen = Boolean(buttonAction) || isOpenByOtherEnrollment;
   const enrolledStatus = nodes.some(
     (node) =>
-      node.attrs.align === "right" &&
-      hasClass(node.attrs, "ok_color") &&
-      hasStyle(node.attrs, /padding-top:\s*1px/i),
+      attributes(node).align === "right" &&
+      hasClass(node, "ok_color") &&
+      hasStyle(node, /padding-top:\s*1px/i),
   );
   let userIsEnrolled = enrolledStatus;
   let enrollUrl = null;
@@ -315,8 +327,8 @@ function parseClassBlock(block, { timezone }) {
   } else if (!enrolledStatus && buttonAction?.operation === "enroll") {
     enrollUrl = buttonAction.url;
   }
-  const error = /<span\b[^>]*\bclass\s*=\s*(["'])[^"']*\berro_color\b[^"']*\1/i.test(block);
-  const userIsWaitlisted = nodes.some((node) => hasClass(node.attrs, "preloader", "color-orange"));
+  const error = descendants(block, "span").some((node) => hasClass(node, "erro_color"));
+  const userIsWaitlisted = nodes.some((node) => hasClass(node, "preloader", "color-orange"));
   const isFull = maxCapacity === null ? false : curCapacity >= maxCapacity;
   const isOverbooked = isFull && error;
   const enrollmentDeadlineExpired = error && !isFull;
@@ -324,32 +336,32 @@ function parseClassBlock(block, { timezone }) {
   let isOver = false;
   const state = findLastDiv(
     nodes,
-    (attrs) => attrs.align === "right" && hasClass(attrs, "col"),
+    (attrs, node) => attrs.align === "right" && hasClass(node, "col"),
   );
   if (!state) {
     throw new UnparseableError("Missing class state");
   }
-  if (/<span\b[^>]*\bclass\s*=\s*(["'])[^"']*\berro_color\b[^"']*\1/i.test(state.inner)) {
+  if (descendants(state, "span").some((node) => hasClass(node, "erro_color"))) {
     userIsBlocked = true;
   } else {
     const stateChild = findDiv(
-      divNodes(state.inner),
-      (attrs) => hasStyle(attrs, /padding-top:\s*7px/i),
+      descendants(state, "div"),
+      (_attrs, node) => hasStyle(node, /padding-top:\s*7px/i),
     );
     if (stateChild) {
       if (userIsWaitlisted) {
         isOver = false;
-      } else if (!stateChild.attrs.class) {
+      } else if (!attributes(stateChild).class) {
         isOver = true;
-      } else if (hasClass(stateChild.attrs, "letra_10")) {
+      } else if (hasClass(stateChild, "letra_10")) {
         userIsBlocked = true;
       }
     }
   }
   const timer = timerValue(block);
   return {
-    name: textContent(leftHalf[0].inner),
-    details: textContent(rightHalf.inner),
+    name: textContent(leftHalf[0]),
+    details: textContent(rightHalf),
     date: zonedDate(Number.parseInt(timestamp[1], 10), timezone),
     start: time[1],
     end: time[2],
@@ -383,7 +395,7 @@ export function parseCapacity(value) {
 
 export function parseClasses(html, { date, timezone = "Europe/Lisbon" } = {}) {
   void date; // The timestamp embedded in each card is the Python source of truth.
-  return classBlocks(String(html)).map((block) => parseClassBlock(block, { timezone }));
+  return classBlocks(parseClassDocument(html)).map((block) => parseClassBlock(block, { timezone }));
 }
 
 function parseClassesAtTime(
@@ -391,7 +403,7 @@ function parseClassesAtTime(
   { classTime, classTypes = [], date, timezone = "Europe/Lisbon" } = {},
 ) {
   void date; // The timestamp embedded in each card is the Python source of truth.
-  const blocks = classBlocks(String(html));
+  const blocks = classBlocks(parseClassDocument(html));
   return {
     total: blocks.length,
     classes: blocks
@@ -411,21 +423,29 @@ function hasCandidateClassName(block, classTypes) {
   if (candidates.size === 0) {
     return true;
   }
-  const nameNode = divNodes(block).find(
-    (node) => node.attrs.align === "left" && hasClass(node.attrs, "col-50"),
+  const nameNode = descendants(block, "div").find(
+    (node) => attributes(node).align === "left" && hasClass(node, "col-50"),
   );
-  return Boolean(nameNode && candidates.has(textContent(nameNode.inner).toUpperCase()));
+  return Boolean(nameNode && candidates.has(textContent(nameNode).toUpperCase()));
 }
 
 function hasClassTime(block, classTime) {
-  const [hour, minute] = String(classTime).split(":");
-  const escapedHour = hour.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const escapedMinute = String(minute ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return block.includes(classTime) || new RegExp(`${escapedHour}&#(?:0*58|x0*3a);${escapedMinute}`, "i").test(block);
+  const time = String(classTime);
+  return descendants(block, "div").some(
+    (node) =>
+      attributes(node).align === "left" &&
+      hasClass(node, "col") &&
+      textContent(node).startsWith(`${time} -`),
+  );
 }
 
 export function parseClass(html, { timezone = "Europe/Lisbon" } = {}) {
-  return parseClassBlock(String(html), { timezone });
+  const document = parseClassDocument(html);
+  const block = classBlocks(document)[0] ?? elements(document, "div")[0];
+  if (!block) {
+    throw new UnparseableError("Missing class card");
+  }
+  return parseClassBlock(block, { timezone });
 }
 
 export function pickClass(classes, { classTime, classType, classDate }) {
@@ -499,6 +519,8 @@ export function createRegyboxClient({
   retryTotal = 4,
   retryBackoffMs = 50,
   sleep = defaultSleep,
+  now = () => Date.now(),
+  onTrace = async () => {},
 } = {}) {
   if (!phpsessid || !regyboxUser) {
     throw new Error("phpsessid and regyboxUser are required");
@@ -512,6 +534,13 @@ export function createRegyboxClient({
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "X-Requested-With": "XMLHttpRequest",
   };
+  const emitTrace = async (event) => {
+    try {
+      await onTrace(event);
+    } catch (error) {
+      console.warn("regybox: HTTP trace callback failed:", error);
+    }
+  };
 
   async function getHtml(path, params = {}) {
     const url = new URL(path, DOMAIN);
@@ -520,18 +549,57 @@ export function createRegyboxClient({
     }
     let response;
     for (let attempt = 0; attempt <= retryTotal; attempt += 1) {
+      const requestStartedAt = now();
       try {
         response = await fetchImpl(url.href, { headers, method: "GET" });
       } catch (error) {
+        await emitTrace({
+          level: attempt === retryTotal ? "error" : "warn",
+          scope: "http",
+          code: "regybox_request_network_error",
+          message: attempt === retryTotal
+            ? `Regybox request failed after ${attempt + 1} attempt(s)`
+            : `Regybox request failed; retrying attempt ${attempt + 2}`,
+          data: {
+            attempt: attempt + 1,
+            durationMs: Math.max(0, now() - requestStartedAt),
+            endpointPath: url.pathname,
+            nextRetryMs: attempt === retryTotal ? undefined : retryBackoffMs * 2 ** attempt,
+          },
+        });
         if (attempt === retryTotal) {
           throw error;
         }
         await sleep(retryBackoffMs * 2 ** attempt);
         continue;
       }
+      await emitTrace({
+        level: RETRYABLE_STATUS_CODES.has(response.status) ? "warn" : "info",
+        scope: "http",
+        code: "regybox_response_received",
+        message: `Regybox request returned HTTP ${response.status}`,
+        data: {
+          attempt: attempt + 1,
+          durationMs: Math.max(0, now() - requestStartedAt),
+          endpointPath: url.pathname,
+          httpStatus: response.status,
+        },
+      });
       if (!RETRYABLE_STATUS_CODES.has(response.status) || attempt === retryTotal) {
         break;
       }
+      await emitTrace({
+        level: "warn",
+        scope: "http",
+        code: "regybox_request_retry",
+        message: `Regybox returned HTTP ${response.status}; retrying attempt ${attempt + 2}`,
+        data: {
+          attempt: attempt + 1,
+          endpointPath: url.pathname,
+          httpStatus: response.status,
+          nextRetryMs: retryBackoffMs * 2 ** attempt,
+        },
+      });
       await sleep(retryBackoffMs * 2 ** attempt);
     }
     if (!response?.ok) {
@@ -650,11 +718,13 @@ async function loadClasses(
     sleep = defaultSleep,
     emptyRetryTotal = 3,
     emptyRetryBackoffMs = 50,
+    beforeFetch = async () => {},
   },
 ) {
   // Python's _get_classes_tags_with_retry treats an empty class list as
   // transient; a bounded retry keeps that behavior within the subrequest cap.
   for (let attempt = 0; ; attempt += 1) {
+    await beforeFetch();
     const html = await client.fetchClassesHtml(zonedMidnightMs(classDate, timezone));
     const { total, classes } = parseClassesAtTime(html, {
       classTime,
@@ -682,7 +752,8 @@ export async function runOperation({
   notOpenIsNoop = false,
   now = () => Date.now(),
   sleep = defaultSleep,
-  maxPolls = 20,
+  maxPolls = 40,
+  onTrace = async () => {},
 } = {}) {
   if (!client || !classDate || !classTime) {
     throw new Error("client, classDate, and classTime are required");
@@ -696,9 +767,30 @@ export async function runOperation({
     throw new Error("classType must include at least one class name");
   }
   const timezone = client.timezone ?? "Europe/Lisbon";
+  const emitTrace = async (event) => {
+    try {
+      await onTrace(event);
+    } catch (error) {
+      console.warn("regybox: operation trace callback failed:", error);
+    }
+  };
+  let fetches = 0;
+  const beforeFetch = async () => {
+    if (fetches >= maxPolls) {
+      await emitTrace({
+        level: "error",
+        scope: "regybox",
+        code: "class_fetch_limit_reached",
+        message: `Stopped after ${maxPolls} class-page fetches`,
+        data: { fetchCount: fetches, fetchLimit: maxPolls },
+      });
+      throw new RegyboxTimeoutError(timeoutSeconds);
+    }
+    fetches += 1;
+  };
   if (operation === "unenroll") {
     const classes = await loadClasses(client, {
-      classDate, classTime: normalizedClassTime, classTypes, timezone, sleep,
+      classDate, classTime: normalizedClassTime, classTypes, timezone, sleep, beforeFetch,
     });
     let firstMatch = null;
     for (const candidate of classTypes) {
@@ -713,7 +805,19 @@ export async function runOperation({
           if (!selected.unenrollUrl) {
             throw new UnparseableError("Unenroll URL is not set");
           }
+          await emitTrace({
+            level: "info",
+            scope: "regybox",
+            code: "unenrollment_attempt",
+            message: "Attempting to cancel enrollment",
+          });
           await client.unenroll(selected.unenrollUrl);
+          await emitTrace({
+            level: "info",
+            scope: "regybox",
+            code: "unenrollment_success",
+            message: "Enrollment cancelled successfully",
+          });
           return operationResult("unenroll", "success", selected.name);
         }
       } catch (error) {
@@ -726,21 +830,43 @@ export async function runOperation({
   }
 
   const startedAt = now();
-  let polls = 0;
-  let lastSelected = null;
-  while (polls < maxPolls && now() - startedAt < timeoutSeconds * 1000) {
-    polls += 1;
+  let predictedOpeningAt = null;
+  let openingBecameImminent = false;
+  let rolloverGraceStartedAt = null;
+  let hasWaited = false;
+  let previousTimerSeconds = null;
+  while (now() - startedAt < timeoutSeconds * 1000) {
     const classes = await loadClasses(client, {
-      classDate, classTime: normalizedClassTime, classTypes, timezone, sleep,
+      classDate, classTime: normalizedClassTime, classTypes, timezone, sleep, beforeFetch,
     });
     const selected = pickFirstClass(classes, {
       classTime: normalizedClassTime,
       classTypes,
       classDate,
     });
-    lastSelected = selected;
     const resolvedClassType = selected.name || classTypes[0];
+    const observedAt = now();
+    await emitTrace({
+      level: "info",
+      scope: "regybox",
+      code: "class_state_observed",
+      message: "Parsed class state",
+      data: {
+        fetchCount: fetches,
+        isOpen: selected.isOpen,
+        userIsEnrolled: selected.userIsEnrolled,
+        isFull: selected.isFull,
+        enrollmentDeadlineExpired: selected.enrollmentDeadlineExpired,
+        timerSeconds: selected.timeToEnroll,
+      },
+    });
     if (selected.userIsEnrolled) {
+      await emitTrace({
+        level: "info",
+        scope: "regybox",
+        code: "already_enrolled",
+        message: "Skipped because the user is already enrolled",
+      });
       return operationResult("enroll", "noop", resolvedClassType);
     }
     if (selected.isOverbooked && selected.isFull) {
@@ -750,42 +876,132 @@ export async function runOperation({
       if (!selected.enrollUrl) {
         throw new ClassNotOpenError("Class is open but cannot be enrolled");
       }
+      await emitTrace({
+        level: "info",
+        scope: "regybox",
+        code: "enrollment_attempt",
+        message: "Attempting to enroll",
+      });
       try {
         await client.enroll(selected.enrollUrl);
       } catch (error) {
         if (error instanceof UserAlreadyEnrolledError) {
+          await emitTrace({
+            level: "info",
+            scope: "regybox",
+            code: "already_enrolled",
+            message: "Enrollment response reported that the user is already enrolled",
+          });
           return operationResult("enroll", "noop", resolvedClassType);
         }
         throw error;
       }
+      await emitTrace({
+        level: "info",
+        scope: "regybox",
+        code: "enrollment_success",
+        message: "Enrolled successfully",
+      });
       return operationResult("enroll", "success", resolvedClassType);
     }
     const timeToEnroll = selected.timeToEnroll;
-    const elapsedSeconds = Math.max(0, Math.ceil((now() - startedAt) / 1000));
+    const hasTimer = timeToEnroll !== null && timeToEnroll !== undefined;
+    const observedOpeningAt = hasTimer ? observedAt + timeToEnroll * 1000 : null;
+    predictedOpeningAt ??= observedOpeningAt;
+    if (hasTimer && timeToEnroll <= 10) {
+      openingBecameImminent = true;
+    }
+    const timerJumped = Boolean(
+      openingBecameImminent &&
+      observedOpeningAt !== null &&
+      predictedOpeningAt !== null &&
+      observedOpeningAt - predictedOpeningAt > OPENING_ROLLOVER_TOLERANCE_SECONDS * 1000,
+    );
+    const openingStateDisappeared = Boolean(
+      openingBecameImminent && (selected.enrollmentDeadlineExpired || !hasTimer),
+    );
+    if ((timerJumped || openingStateDisappeared) && rolloverGraceStartedAt === null) {
+      rolloverGraceStartedAt = observedAt;
+      const message = timerJumped
+        ? `Timer jumped from ${previousTimerSeconds} seconds to ${timeToEnroll} seconds; treating as an opening-boundary inconsistency`
+        : "Opening countdown disappeared at the enrollment boundary; treating as an opening-boundary inconsistency";
+      await emitTrace({
+        level: "error",
+        scope: "regybox",
+        code: "opening_boundary_inconsistency",
+        message,
+        data: {
+          previousTimerSeconds,
+          timerSeconds: timeToEnroll,
+          enrollmentDeadlineExpired: selected.enrollmentDeadlineExpired,
+        },
+      });
+    }
+    if (rolloverGraceStartedAt !== null) {
+      const graceElapsedMs = observedAt - rolloverGraceStartedAt;
+      if (graceElapsedMs >= OPENING_ROLLOVER_GRACE_MS) {
+        throw new UnparseableError("Enrollment state remained inconsistent after opening", {
+          fetchCount: fetches,
+          graceSeconds: OPENING_ROLLOVER_GRACE_MS / 1000,
+          timerSeconds: timeToEnroll,
+          enrollmentDeadlineExpired: selected.enrollmentDeadlineExpired,
+        });
+      }
+      hasWaited = true;
+      await emitTrace({
+        level: "warn",
+        scope: "regybox",
+        code: "opening_boundary_grace_retry",
+        message: "Opening-boundary state is inconsistent; retrying in 1 second",
+        data: {
+          waitSeconds: 1,
+          graceRemainingSeconds: Math.ceil((OPENING_ROLLOVER_GRACE_MS - graceElapsedMs) / 1000),
+        },
+      });
+      await sleep(1000);
+      previousTimerSeconds = timeToEnroll;
+      continue;
+    }
+    const elapsedSeconds = Math.max(0, Math.ceil((observedAt - startedAt) / 1000));
     const remainingSeconds = Math.max(0, timeoutSeconds - elapsedSeconds);
     const cannotWait =
-      selected.enrollmentDeadlineExpired || timeToEnroll === null || timeToEnroll === undefined || timeToEnroll > remainingSeconds;
+      selected.enrollmentDeadlineExpired || !hasTimer || timeToEnroll > remainingSeconds;
     if (cannotWait) {
-      if (notOpenIsNoop) {
-        return closedResult({ classType: resolvedClassType, timeToEnroll, now: now(), timezone });
+      if (notOpenIsNoop && !hasWaited) {
+        await emitTrace({
+          level: "info",
+          scope: "regybox",
+          code: "class_not_open",
+          message: hasTimer
+            ? `Enrollment opens in ${timeToEnroll} seconds, beyond this run's wait window`
+            : "Class is not open and has no enrollment countdown",
+          data: { timerSeconds: timeToEnroll, remainingSeconds },
+        });
+        return closedResult({ classType: resolvedClassType, timeToEnroll, now: observedAt, timezone });
       }
       if (selected.enrollmentDeadlineExpired || timeToEnroll === null || timeToEnroll === undefined) {
         throw new ClassNotOpenError();
       }
       throw new RegyboxTimeoutError(timeoutSeconds, { timeToEnroll });
     }
-    // One long sleep gets near the opening, then short polls avoid spending
-    // dozens of Worker subrequests on a server-side countdown.
-    const waitSeconds = timeToEnroll > 10 ? timeToEnroll - 10 : Math.min(2, Math.max(1, timeToEnroll));
+    const waitSeconds = timeToEnroll > 60 ? 60 : timeToEnroll > 10 ? 10 : 1;
+    hasWaited = true;
+    await emitTrace({
+      level: "info",
+      scope: "regybox",
+      code: "enrollment_wait",
+      message: `Opening in ${timeToEnroll} seconds; retrying in ${waitSeconds} second${waitSeconds === 1 ? "" : "s"}`,
+      data: { timerSeconds: timeToEnroll, waitSeconds, remainingSeconds },
+    });
+    previousTimerSeconds = timeToEnroll;
     await sleep(waitSeconds * 1000);
   }
-  if (notOpenIsNoop) {
-    return closedResult({
-      classType: lastSelected?.name ?? classTypes[0],
-      timeToEnroll: lastSelected?.timeToEnroll ?? null,
-      now: now(),
-      timezone,
-    });
-  }
+  await emitTrace({
+    level: "error",
+    scope: "regybox",
+    code: "enrollment_wait_timeout",
+    message: `Timed out after waiting ${timeoutSeconds} seconds for enrollment to open`,
+    data: { fetchCount: fetches, timeoutSeconds },
+  });
   throw new RegyboxTimeoutError(timeoutSeconds);
 }

@@ -84,7 +84,9 @@ test("incident records are short-lived, sanitized, and render read-only", async 
     JSON.stringify(record),
     /<html|<body|<b>|private-secret|class-secret|basic\.ics|private\.ics|marca_aulas\.php\?|top-secret|token=abc|json-secret|bearer-secret|php-secret|id_aula=123/,
   );
-  assert.deepEqual(record.parserDiagnostics.actionEndpoints, ["[redacted action URL]"]);
+  assert.deepEqual(record.parserDiagnostics.actionEndpoints, [
+    "/app/app_nova/php/aulas/marca_aulas.php",
+  ]);
 
   const response = await handleIncidentRequest(kv, id);
   assert.equal(response.status, 200);
