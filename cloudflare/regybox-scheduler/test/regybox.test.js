@@ -174,9 +174,11 @@ test("client sends the Python-compatible session and class requests", async () =
 test("client retries bounded statuses, handles login expiry, and parses action responses", async () => {
   let calls = 0;
   const waits = [];
+  const traces = [];
   const client = createRegyboxClient({
     phpsessid: "session", regyboxUser: "123", retryTotal: 2, retryBackoffMs: 3,
     sleep: async (milliseconds) => waits.push(milliseconds),
+    onTrace: async (event) => traces.push(event),
     fetchImpl: async () => {
       calls += 1;
       return calls < 3 ? new Response("retry", { status: 503 }) : new Response('<script>parent.msg_toast_icon("Inscrito", "ok");</script>');
@@ -185,6 +187,9 @@ test("client retries bounded statuses, handles login expiry, and parses action r
   assert.deepEqual(await client.enroll("php/aulas/marca_aulas.php?id=1"), { message: "Inscrito", userIsWaitlisted: false });
   assert.equal(calls, 3);
   assert.deepEqual(waits, [3, 6]);
+  assert.equal(traces.filter((event) => event.code === "regybox_request_retry").length, 2);
+  assert.ok(traces.every((event) => event.data.endpointPath === "/app/app_nova/php/aulas/marca_aulas.php"));
+  assert.doesNotMatch(JSON.stringify(traces), /id=1|PHPSESSID|session/);
   const expired = createRegyboxClient({
     phpsessid: "session", regyboxUser: "123", retryTotal: 0,
     fetchImpl: async () => new Response("app/app_nova/login.php"),
@@ -224,6 +229,10 @@ function makeStubClient(responses) {
     async enroll(url) { calls.enroll.push(url); return { message: "OK", userIsWaitlisted: false }; },
     async unenroll(url) { calls.unenroll.push(url); return { message: "OK", userIsWaitlisted: false }; },
   };
+}
+
+function withTimer(html, seconds) {
+  return html.replace(/(<input\b[^>]*\bclass="[^"]*\btimers\b[^"]*"[^>]*\bvalue=")\d+("[^>]*>)/i, `$1${seconds}$2`);
 }
 
 test("runOperation retries a transient empty class list like Python's get_classes", async () => {
@@ -323,10 +332,31 @@ test("action controls are classified by endpoint instead of CSS classes", async 
     '<button class="button color-green" onclick="php/aulas/class_details.php?id=private">Help</button>$1',
   );
   assert.ok(parseClass(withColoredHelpButton).enrollUrl?.includes("/marca_aulas.php?"));
+
+  const literalGreaterThanInOnclick = open.replace(
+    "javascript:load_script",
+    "javascript:if (1 > 0) load_script",
+  );
+  assert.ok(parseClass(literalGreaterThanInOnclick).enrollUrl?.includes("/marca_aulas.php?"));
 });
 
 test("unknown and ambiguous class action endpoints fail with secret-safe diagnostics", async () => {
   const open = await fixture("open.html");
+  const malformed = open.replace(/\bonclick="[^"]*"/, 'onclick="show_booking_dialog()"');
+  assert.throws(
+    () => parseClass(malformed),
+    (error) => {
+      assert.ok(error instanceof UnparseableError);
+      assert.match(error.message, /recognizable class action/);
+      assert.deepEqual(error.safeDiagnostics, {
+        actionEndpoints: [],
+        unknownActionEndpoints: [],
+        malformedBookingControls: 1,
+      });
+      return true;
+    },
+  );
+
   const unknown = open.replace("marca_aulas.php", "new_booking_action.php");
   assert.throws(
     () => parseClass(unknown),
@@ -435,6 +465,126 @@ test("runOperation waits within the Worker poll cap and returns structured not-o
   });
   assert.match(noop.enrollmentOpensAt, /^2024-07-01T/);
   assert.match(noop.lastCheckedAt, /^2024-07-01T/);
+});
+
+test("runOperation matches Python polling cadence at the enrollment boundary", async () => {
+  const closed = await fixture("not_yet_open.html");
+  const open = (await fixture("open.html")).replaceAll("06:30", "07:30").replaceAll("07:20", "08:20");
+  let clock = Date.parse("2024-07-01T00:00:00Z");
+  const waits = [];
+  const traces = [];
+  const client = makeStubClient([
+    withTimer(closed, 58),
+    withTimer(closed, 4),
+    withTimer(closed, 3),
+    withTimer(closed, 2),
+    open,
+  ]);
+
+  const result = await runOperation({
+    client,
+    classDate: "2024-07-01",
+    classTime: "07:30",
+    classType: "WOD Rato",
+    timeoutSeconds: 120,
+    now: () => clock,
+    sleep: async (milliseconds) => { waits.push(milliseconds); clock += milliseconds; },
+    onTrace: async (event) => traces.push(event),
+  });
+
+  assert.equal(result.status, "success");
+  assert.deepEqual(waits, [10_000, 1_000, 1_000, 1_000]);
+  assert.ok(traces.some((event) => event.message === "Opening in 4 seconds; retrying in 1 second"));
+  assert.equal(client.calls.fetch, 5);
+});
+
+test("runOperation treats a post-countdown timer rollover as an inconsistency and keeps polling", async () => {
+  const closed = await fixture("not_yet_open.html");
+  const open = (await fixture("open.html")).replaceAll("06:30", "07:30").replaceAll("07:20", "08:20");
+  let clock = Date.parse("2024-07-01T00:00:00Z");
+  const traces = [];
+  const client = makeStubClient([withTimer(closed, 2), withTimer(closed, 213_598), open]);
+
+  const result = await runOperation({
+    client,
+    classDate: "2024-07-01",
+    classTime: "07:30",
+    classType: "WOD Rato",
+    timeoutSeconds: 60,
+    notOpenIsNoop: true,
+    now: () => clock,
+    sleep: async (milliseconds) => { clock += milliseconds; },
+    onTrace: async (event) => traces.push(event),
+  });
+
+  assert.equal(result.status, "success");
+  assert.equal(client.calls.fetch, 3);
+  const anomaly = traces.find((event) => event.code === "opening_boundary_inconsistency");
+  assert.ok(anomaly);
+  assert.equal(anomaly.data.timerSeconds, 213_598);
+  assert.doesNotMatch(JSON.stringify(traces), /id_aula|PHPSESSID|<div/i);
+});
+
+test("runOperation fails instead of caching a timer rollover that persists through grace", async () => {
+  const closed = await fixture("not_yet_open.html");
+  let clock = Date.parse("2024-07-01T00:00:00Z");
+  const client = makeStubClient([withTimer(closed, 1), withTimer(closed, 213_598)]);
+
+  await assert.rejects(
+    runOperation({
+      client,
+      classDate: "2024-07-01",
+      classTime: "07:30",
+      classType: "WOD Rato",
+      timeoutSeconds: 60,
+      notOpenIsNoop: true,
+      now: () => clock,
+      sleep: async (milliseconds) => { clock += milliseconds; },
+    }),
+    (error) => {
+      assert.ok(error instanceof UnparseableError);
+      assert.equal(error.safeDiagnostics.timerSeconds, 213_598);
+      return true;
+    },
+  );
+  assert.equal(client.calls.enroll.length, 0);
+  assert.ok(client.calls.fetch >= 30);
+});
+
+test("runOperation fails at the defensive fetch ceiling and after a waited timeout", async () => {
+  const closed = await fixture("not_yet_open.html");
+  let clock = Date.parse("2024-07-01T00:00:00Z");
+  const pollingClient = makeStubClient([withTimer(closed, 1)]);
+  await assert.rejects(
+    runOperation({
+      client: pollingClient,
+      classDate: "2024-07-01",
+      classTime: "07:30",
+      classType: "WOD Rato",
+      timeoutSeconds: 900,
+      notOpenIsNoop: true,
+      maxPolls: 3,
+      now: () => clock,
+      sleep: async (milliseconds) => { clock += milliseconds; },
+    }),
+    RegyboxTimeoutError,
+  );
+  assert.equal(pollingClient.calls.fetch, 3);
+
+  clock = Date.parse("2024-07-01T00:00:00Z");
+  await assert.rejects(
+    runOperation({
+      client: makeStubClient([withTimer(closed, 1)]),
+      classDate: "2024-07-01",
+      classTime: "07:30",
+      classType: "WOD Rato",
+      timeoutSeconds: 2,
+      notOpenIsNoop: true,
+      now: () => clock,
+      sleep: async (milliseconds) => { clock += milliseconds; },
+    }),
+    RegyboxTimeoutError,
+  );
 });
 
 test("runOperation preserves closed, overbooked, and unenroll behavior", async () => {

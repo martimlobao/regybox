@@ -64,7 +64,33 @@ function safeDiagnostics(error) {
     if (Array.isArray(diagnostics[key])) {
       result[key] = diagnostics[key]
         .slice(0, 10)
-        .map((item) => sanitizeText(item, 200));
+        .map((item) => {
+          try {
+            return new URL(String(item), "https://regybox.invalid").pathname;
+          } catch {
+            return "[invalid path]";
+          }
+        });
+    }
+  }
+  for (const key of [
+    "malformedBookingControls",
+    "fetchCount",
+    "graceSeconds",
+    "timerSeconds",
+    "enrollmentDeadlineExpired",
+    "openingJumpSeconds",
+  ]) {
+    if (typeof diagnostics[key] === "boolean") {
+      result[key] = diagnostics[key];
+    } else if (typeof diagnostics[key] === "number" && Number.isFinite(diagnostics[key])) {
+      result[key] = diagnostics[key];
+    }
+  }
+  for (const key of ["previousEnrollmentOpensAt", "claimedEnrollmentOpensAt"]) {
+    const timestamp = Date.parse(String(diagnostics[key] ?? ""));
+    if (Number.isFinite(timestamp)) {
+      result[key] = new Date(timestamp).toISOString();
     }
   }
   return Object.keys(result).length > 0 ? result : undefined;
@@ -111,7 +137,7 @@ export async function resolveStatusUrl(env, kv) {
   }
 }
 
-export async function recordIncident({ kv, dispatch, error, payload, statusUrl, now = () => Date.now() }) {
+export async function recordIncident({ kv, dispatch, error, payload, statusUrl, runId, now = () => Date.now() }) {
   if (!kv) {
     return null;
   }
@@ -131,6 +157,9 @@ export async function recordIncident({ kv, dispatch, error, payload, statusUrl, 
     errorName: sanitizeText(error?.name ?? "Error", 100),
     technicalMessage: sanitizeText(payload?.technicalMessage ?? error?.message),
   };
+  if (/^[a-f0-9]{36}$/.test(String(runId ?? ""))) {
+    record.runId = runId;
+  }
   const parserDiagnostics = safeDiagnostics(error);
   if (parserDiagnostics) {
     record.parserDiagnostics = parserDiagnostics;

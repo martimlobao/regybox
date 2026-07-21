@@ -76,7 +76,9 @@ place when the Worker is redeployed; in particular, updates do not replace your
 #### Keep the Status Page Private (Recommended)
 
 Use [Cloudflare Access](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/#manage-access-to-workersdev)
-to let only your email address open the status page and incident reports:
+to let only your email address open the status page, complete run timelines, and
+incident reports. The run history is deliberately sanitized, but it still reveals
+your class schedule and operational history, so protecting it is strongly recommended:
 
 1. Open the Worker, then go to **Settings → Domains & Routes**.
 2. Beside `workers.dev`, select **Enable Cloudflare Access**, then **Manage
@@ -221,16 +223,25 @@ tell you — copy fresh cookie values from regybox.pt and update `PHPSESSID` und
 
 ### Seeing What It's Doing
 
-- **Status page** (the `workers.dev` link): the **Recent activity** section lists the
-  last bookings, cancellations, and failures with timestamps, and **Last run** shows
-  what the most recent half-hourly check did — including "nothing to do".
+- **Status page** (the `workers.dev` link): **Recent runs** links to a GitHub
+  Actions-style chronological timeline for every half-hourly check. Timelines include
+  calendar and cache decisions, session startup, polling and retry waits, enrollment
+  attempts, notifications, and terminal outcomes. Up to 400 summaries and seven days
+  of detail are retained; each trace is capped at 500 events and clearly marked if
+  truncated. **Recent activity** remains a compact list of bookings, cancellations,
+  and failures, and **Last run** preserves the previous summary view.
 - **Failure email link**: opens a read-only incident report containing safe parser and
   operation details. The link works for seven days. Open the status page once after
   deployment so scheduled runs know the Worker's public address; alternatively set
   `STATUS_URL` to that address under **Settings → Variables and Secrets**.
 - **Cloudflare logs**: in the dashboard, open the Worker → **Logs** to see every run
-  (searchable, kept for a few days). Every log line the scheduler writes starts with
-  `regybox:`, for example `regybox: enroll WOD on 2026-07-14 at 06:30 -> success`.
+  (searchable, kept for a few days). Every structured timeline event is also emitted
+  there and starts with `regybox:` plus its run ID, making website and Cloudflare
+  evidence easy to correlate.
+- **Privacy**: run records use allowlisted fields and never retain cookies, headers,
+  raw HTML, calendar URLs or contents, email-bearing event/cache identifiers, query
+  strings, tokens, stack traces, or complete action URLs. Protect the Worker with
+  Cloudflare Access anyway because class names and times are visible by design.
 - **Live tail** (for the technically inclined): `bunx wrangler tail <worker-name>`
   streams runs as they happen.
 

@@ -1,6 +1,6 @@
 import { buildFailureFingerprint, errorPayload } from "./failures.js";
 import { notifyFailure, notifyResult } from "./notify.js";
-import { createRegyboxClient, runOperation } from "./regybox.js";
+import { UnparseableError, createRegyboxClient, runOperation } from "./regybox.js";
 import { recordIncident, resolveStatusUrl } from "./incidents.js";
 
 const LAST_RUN_KEY = "regybox:v1:last_run";
@@ -9,6 +9,8 @@ const LAST_RUN_TTL_SECONDS = 604800;
 const STATE_TTL_SECONDS = 2592000;
 const WALL_BUDGET_MS = 13 * 60 * 1000;
 const MINIMUM_OPERATION_BUDGET_MS = 30 * 1000;
+const NOT_OPEN_DISPATCH_WINDOW_MS = 60 * 60 * 1000;
+const NOT_OPEN_OPENING_JUMP_TOLERANCE_MS = 2 * 60 * 1000;
 
 function configured(value) {
   return Boolean(String(value ?? "").trim());
@@ -66,9 +68,18 @@ function operationDescription(details) {
   const classDetails = [details.classType, "on", details.classDate, "at", details.classTime]
     .filter(Boolean)
     .join(" ");
-  return `${details.operation} ${classDetails}${
-    details.calendarEventName ? ` (${details.calendarEventName})` : ""
-  }`;
+  return `${details.operation} ${classDetails}`;
+}
+
+async function recordTrace(recorder, event) {
+  if (!recorder) {
+    return;
+  }
+  try {
+    await recorder.trace(event);
+  } catch (error) {
+    console.warn("regybox: run trace write failed:", error);
+  }
 }
 
 function parseCachedValue(value) {
@@ -115,8 +126,38 @@ async function writeState({ kv, details, result }) {
     payload.lastCheckedAt = result.lastCheckedAt;
   }
   await kv.put(details.cacheKey, JSON.stringify(payload), { expirationTtl: STATE_TTL_SECONDS });
-  console.log(`regybox: cached state=${state} for ${details.cacheKey}`);
+  console.log(`regybox: cached state=${state} for ${operationDescription(details)}`);
   return state;
+}
+
+async function assertSafeNotOpenTransition({ kv, details, result, now }) {
+  if (result.status !== "noop" || result.cacheState !== "not_open" || !result.enrollmentOpensAt) {
+    return;
+  }
+  const cached = parseCachedValue(await kv.get(details.cacheKey));
+  if (cached.state !== "not_open") {
+    return;
+  }
+  const previousOpeningMs = Date.parse(String(cached.enrollmentOpensAt ?? ""));
+  const claimedOpeningMs = Date.parse(String(result.enrollmentOpensAt));
+  if (!Number.isFinite(previousOpeningMs) || !Number.isFinite(claimedOpeningMs)) {
+    return;
+  }
+  const previousOpeningIsDueSoon = previousOpeningMs - now() <= NOT_OPEN_DISPATCH_WINDOW_MS;
+  const openingJumpMs = claimedOpeningMs - previousOpeningMs;
+  if (
+    previousOpeningIsDueSoon &&
+    openingJumpMs > NOT_OPEN_OPENING_JUMP_TOLERANCE_MS
+  ) {
+    throw new UnparseableError(
+      "Regybox moved an already-due enrollment opening unexpectedly far into the future",
+      {
+        previousEnrollmentOpensAt: new Date(previousOpeningMs).toISOString(),
+        claimedEnrollmentOpensAt: new Date(claimedOpeningMs).toISOString(),
+        openingJumpSeconds: Math.round(openingJumpMs / 1000),
+      },
+    );
+  }
 }
 
 export function executionMode(env) {
@@ -201,9 +242,13 @@ export async function executePlan({
   sleep,
   onFailure,
   onResult,
+  recorder,
 }) {
   const mode = executionMode(env);
   const statusUrl = await resolveStatusUrl(env, kv);
+  const runUrl = statusUrl && recorder?.id
+    ? `${String(statusUrl).replace(/\/+$/, "")}/runs/${recorder.id}`
+    : null;
   const reportFailure =
     onFailure ??
     (async (notification) => {
@@ -215,14 +260,15 @@ export async function executePlan({
           dispatch: notification.dispatch,
           error: notification.error,
           payload: notification.payload,
+          runId: recorder?.id,
         });
       } catch (error) {
         console.warn("regybox: incident record write failed:", error);
       }
-      return notifyFailureImpl({ env, kv, ...notification, statusUrl, incidentUrl });
+      return notifyFailureImpl({ env, kv, ...notification, statusUrl, incidentUrl, runUrl });
     });
   const reportResult =
-    onResult ?? ((notification) => notifyResultImpl({ env, kv, ...notification, statusUrl }));
+    onResult ?? ((notification) => notifyResultImpl({ env, kv, ...notification, statusUrl, runUrl }));
   const startedAt = now();
   const operations = [];
   const activity = [];
@@ -235,15 +281,35 @@ export async function executePlan({
 
   try {
     console.log(`regybox: executing ${dispatches.length} operation(s) in ${mode} mode`);
+    await recordTrace(recorder, {
+      scope: "executor",
+      code: "execution_started",
+      message: `Executing ${dispatches.length} operation(s) in ${mode} mode`,
+      data: { mode, plannedOperations: dispatches.length },
+    });
     if (mode === "dispatch") {
-      for (const dispatch of dispatches) {
+      for (const [operationIndex, dispatch] of dispatches.entries()) {
         const details = operationDetails(dispatch);
         console.log(`regybox: ${operationDescription(details)}`);
+        await recordTrace(recorder, {
+          scope: "operation",
+          operationIndex,
+          code: "dispatch_started",
+          message: `Dispatching ${operationDescription(details)} to GitHub`,
+          data: { operation: details.operation, classDate: details.classDate, classTime: details.classTime, classType: details.classType },
+        });
         try {
           await dispatchWorkflowImpl(env, dispatch);
           operations.push(summaryOperation(details, "dispatched"));
           activity.push(activityOperation(details, "dispatched", now()));
           console.log(`regybox: ${operationDescription(details)} -> dispatched to GitHub`);
+          await recordTrace(recorder, {
+            scope: "operation",
+            operationIndex,
+            code: "dispatch_succeeded",
+            message: `${operationDescription(details)} was dispatched to GitHub`,
+            data: { operation: details.operation, outcome: "dispatched" },
+          });
         } catch (error) {
           const payload = errorPayload(error);
           operations.push(summaryOperation(details, "failure", { errorCode: payload.errorCode }));
@@ -251,6 +317,14 @@ export async function executePlan({
           console.error(
             `regybox: ${operationDescription(details)} -> failure (${payload.errorCode}): ${error.message}`,
           );
+          await recordTrace(recorder, {
+            level: "error",
+            scope: "operation",
+            operationIndex,
+            code: "dispatch_failed",
+            message: `${operationDescription(details)} failed (${payload.errorCode})`,
+            data: { operation: details.operation, outcome: "failure", errorCode: payload.errorCode },
+          });
           throw error;
         }
       }
@@ -261,11 +335,30 @@ export async function executePlan({
       phpsessid: env.PHPSESSID,
       regyboxUser: env.REGYBOX_USER,
       timezone: env.TIMEZONE || "Europe/Lisbon",
+      now,
+      onTrace: (event) => recordTrace(recorder, event),
+    });
+    await recordTrace(recorder, {
+      scope: "session",
+      code: "session_bootstrap_started",
+      message: "Starting Regybox session bootstrap",
     });
     try {
       await client.bootstrapSession();
+      await recordTrace(recorder, {
+        scope: "session",
+        code: "session_bootstrap_succeeded",
+        message: "Regybox session bootstrap succeeded",
+      });
     } catch (error) {
-      for (const dispatch of dispatches) {
+      await recordTrace(recorder, {
+        level: "error",
+        scope: "session",
+        code: "session_bootstrap_failed",
+        message: "Regybox session bootstrap failed",
+        data: { errorCode: errorPayload(error).errorCode },
+      });
+      for (const [operationIndex, dispatch] of dispatches.entries()) {
         const details = operationDetails(dispatch);
         const payload = errorPayload(error);
         const fingerprint = buildFailureFingerprint({ operation: dispatch.operation, error });
@@ -274,6 +367,14 @@ export async function executePlan({
         console.error(
           `regybox: ${operationDescription(details)} -> failure (${payload.errorCode}): ${error.message}`,
         );
+        await recordTrace(recorder, {
+          level: "error",
+          scope: "operation",
+          operationIndex,
+          code: "operation_failed",
+          message: `${operationDescription(details)} failed during session bootstrap (${payload.errorCode})`,
+          data: { operation: details.operation, outcome: "failure", errorCode: payload.errorCode },
+        });
         try {
           await reportFailure({ dispatch, error, payload, fingerprint });
         } catch (notificationError) {
@@ -282,16 +383,31 @@ export async function executePlan({
       }
       throw error;
     }
-    for (const dispatch of dispatches) {
+    for (const [operationIndex, dispatch] of dispatches.entries()) {
       const details = operationDetails(dispatch);
       const remainingMs = startedAt + WALL_BUDGET_MS - now();
       if (remainingMs < MINIMUM_OPERATION_BUDGET_MS) {
         operations.push(summaryOperation(details, "skipped"));
         activity.push(activityOperation(details, "skipped", now()));
         console.log(`regybox: ${operationDescription(details)} -> skipped (out of time)`);
+        await recordTrace(recorder, {
+          level: "warn",
+          scope: "operation",
+          operationIndex,
+          code: "operation_skipped",
+          message: `${operationDescription(details)} was skipped because the invocation budget was exhausted`,
+          data: { operation: details.operation, outcome: "skipped", remainingMs },
+        });
         continue;
       }
       console.log(`regybox: ${operationDescription(details)}`);
+      await recordTrace(recorder, {
+        scope: "operation",
+        operationIndex,
+        code: "operation_started",
+        message: `Starting ${operationDescription(details)}`,
+        data: { operation: details.operation, classDate: details.classDate, classTime: details.classTime, classType: details.classType },
+      });
       let result;
       try {
         result = await runOperationImpl({
@@ -303,7 +419,13 @@ export async function executePlan({
           timeoutSeconds: Math.min(timeoutSeconds(env), Math.floor(remainingMs / 1000)),
           notOpenIsNoop: true,
           sleep,
+          onTrace: (event) => recordTrace(recorder, {
+            ...event,
+            scope: event?.scope || "regybox",
+            operationIndex,
+          }),
         });
+        await assertSafeNotOpenTransition({ kv, details, result, now });
       } catch (error) {
         const payload = errorPayload(error);
         const fingerprint = buildFailureFingerprint({ operation: details.operation, error });
@@ -312,10 +434,27 @@ export async function executePlan({
         console.error(
           `regybox: ${operationDescription(details)} -> failure (${payload.errorCode}): ${error.message}`,
         );
+        await recordTrace(recorder, {
+          level: "error",
+          scope: "operation",
+          operationIndex,
+          code: "operation_failed",
+          message: `${operationDescription(details)} failed (${payload.errorCode})`,
+          data: { operation: details.operation, outcome: "failure", errorCode: payload.errorCode },
+        });
         await reportFailure({ dispatch, error, payload, fingerprint });
         continue;
       }
       const cacheState = await writeState({ kv, details, result });
+      if (cacheState) {
+        await recordTrace(recorder, {
+          scope: "cache",
+          operationIndex,
+          code: "cache_state_written",
+          message: `Cached ${cacheState} state for ${operationDescription(details)}`,
+          data: { operation: details.operation, cacheState },
+        });
+      }
       await reportResult({ dispatch, result });
       operations.push(summaryOperation(details, result.status));
       activity.push(
@@ -331,8 +470,22 @@ export async function executePlan({
           .filter(Boolean)
           .join(", ");
         console.log(`regybox: ${operationDescription(details)} -> noop (${outcomeDetails})`);
+        await recordTrace(recorder, {
+          scope: "operation",
+          operationIndex,
+          code: "operation_noop",
+          message: `${operationDescription(details)} made no change (${outcomeDetails})`,
+          data: { operation: details.operation, outcome: "noop", cacheState: cacheState || result.cacheState },
+        });
       } else {
         console.log(`regybox: ${operationDescription(details)} -> ${result.status}`);
+        await recordTrace(recorder, {
+          scope: "operation",
+          operationIndex,
+          code: "operation_completed",
+          message: `${operationDescription(details)} completed with ${result.status}`,
+          data: { operation: details.operation, outcome: result.status, cacheState },
+        });
       }
     }
     return summary;

@@ -8,6 +8,7 @@
     "deploy:manual": "node scripts/render-wrangler-config.mjs && wrangler deploy -c .wrangler.deploy.jsonc"
   },
   "dependencies": {
+    "parse5": "^8.0.1",
     "worker-mailer": "^1.1.5"
   },
   "devDependencies": {

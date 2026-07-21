@@ -1,5 +1,7 @@
 const KV_PREFIX = "regybox:v1:calendar:";
-const NOT_OPEN_REFRESH_MS = 6 * 60 * 60 * 1000;
+// Cron runs at :28 and :58. Refreshing after 5h30 ensures the first eligible
+// cron is never later than six hours after the previous check.
+const NOT_OPEN_REFRESH_MS = 5.5 * 60 * 60 * 1000;
 const NOT_OPEN_DISPATCH_WINDOW_MS = 60 * 60 * 1000;
 
 export function normalizeList(value) {
@@ -609,7 +611,7 @@ function dispatchPayload({ operation, event, cacheKey, cached }) {
   };
 }
 
-export async function buildPlan({ env, kv, icsText, now = new Date() }) {
+export async function buildPlan({ env, kv, icsText, now = new Date(), onTrace = async () => {} }) {
   const lookaheadHours = defaultLookaheadHours(env);
   const classRules = resolveClassRules(env);
   const events = expandCalendarEvents({
@@ -618,6 +620,12 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
     lookaheadHours,
     classRules,
     timeZone: env.TIMEZONE || "Europe/Lisbon",
+  });
+  await onTrace({
+    scope: "calendar",
+    code: "calendar_events_expanded",
+    message: `Found ${events.length} relevant calendar event(s) in the scheduling window`,
+    data: { eventCount: events.length },
   });
   const activeKeys = new Set(events.map((event) => event.cacheKey));
   const activeSlots = new Set(events.map((event) => eventSlotKey(event)).filter(Boolean));
@@ -646,11 +654,55 @@ export async function buildPlan({ env, kv, icsText, now = new Date() }) {
 
   for (const [event, cached] of eventCacheEntries) {
     const slotKey = eventSlotKey(event);
-    if (
+    const cacheAgeMs = cached?.lastCheckedAt
+      ? now.getTime() - (parseOptionalDate(cached.lastCheckedAt)?.getTime() ?? now.getTime())
+      : null;
+    const refreshDueAt = cached?.lastCheckedAt
+      ? new Date(
+          (parseOptionalDate(cached.lastCheckedAt)?.getTime() ?? now.getTime()) +
+            NOT_OPEN_REFRESH_MS,
+        ).toISOString()
+      : null;
+    const openingAt = parseOptionalDate(cached?.enrollmentOpensAt);
+    const refreshDue = cached?.state === "not_open" && cacheAgeMs >= NOT_OPEN_REFRESH_MS;
+    const openingDueSoon = cached?.state === "not_open" && openingAt &&
+      openingAt.getTime() - now.getTime() <= NOT_OPEN_DISPATCH_WINDOW_MS;
+    const shouldDispatch =
       (!cached || (cached.state !== "enrolled" && notOpenShouldDispatch(cached, now))) &&
       !enrolledSlots.has(slotKey) &&
-      !plannedEnrollmentSlots.has(slotKey)
-    ) {
+      !plannedEnrollmentSlots.has(slotKey);
+    let reason;
+    if (!cached) reason = "no_cached_state";
+    else if (cached.state === "enrolled" || enrolledSlots.has(slotKey)) reason = "already_enrolled";
+    else if (plannedEnrollmentSlots.has(slotKey)) reason = "duplicate_slot";
+    else if (refreshDue) reason = "forced_refresh_due";
+    else if (openingDueSoon) reason = "opening_within_dispatch_window";
+    else if (cached.state === "not_open") reason = "cached_not_open_not_due";
+    else reason = "state_requires_check";
+    const ageText = Number.isFinite(cacheAgeMs)
+      ? `${Math.floor(cacheAgeMs / 3_600_000)}h${String(Math.floor((cacheAgeMs % 3_600_000) / 60_000)).padStart(2, "0")}m`
+      : null;
+    await onTrace({
+      scope: "calendar",
+      code: shouldDispatch ? "calendar_event_scheduled" : "calendar_event_skipped",
+      message: refreshDue
+        ? `Cached not_open is ${ageText} old; forced refresh is due`
+        : shouldDispatch
+          ? `Scheduled enrollment check for ${event.classType} on ${event.classDate} at ${event.classTime}`
+          : `Skipped ${event.classType} on ${event.classDate} at ${event.classTime} (${reason})`,
+      data: {
+        classDate: event.classDate,
+        classTime: event.classTime,
+        classType: event.classType,
+        cacheState: cached?.state,
+        cacheAgeMs,
+        enrollmentOpensAt: cached?.enrollmentOpensAt,
+        refreshDueAt,
+        decision: shouldDispatch ? "dispatch" : "skip",
+        reason,
+      },
+    });
+    if (shouldDispatch) {
       dispatches.push(
         dispatchPayload({
           operation: "enroll",

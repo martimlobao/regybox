@@ -163,6 +163,39 @@ test("not_open without an opening timer deliberately does not update cached stat
   assert.equal((await readLastRun(kv)).operations[0].outcome, "noop");
 });
 
+test("a due not-open cache cannot be poisoned by a multi-day opening jump", async () => {
+  const cacheKey = "regybox:v1:calendar:test";
+  const originalState = {
+    state: "not_open",
+    enrollmentOpensAt: "2026-07-19T17:29:59.000Z",
+    lastCheckedAt: "2026-07-19T16:58:00.000Z",
+  };
+  const kv = makeKv(new Map([[cacheKey, JSON.stringify(originalState)]]));
+  const failures = [];
+
+  const summary = await executePlan({
+    env: workerEnv,
+    kv,
+    dispatches: [dispatch({ cacheKey })],
+    now: () => Date.parse("2026-07-19T17:30:01.000Z"),
+    createClient: fakeClient,
+    runOperationImpl: async () => ({
+      status: "noop",
+      classType: "WOD",
+      cacheState: "not_open",
+      enrollmentOpensAt: "2026-07-22T04:59:59.000Z",
+      lastCheckedAt: "2026-07-19T17:30:01.000Z",
+    }),
+    onFailure: async (failure) => failures.push(failure),
+  });
+
+  assert.equal(summary.operations[0].outcome, "failure");
+  assert.equal(summary.operations[0].errorCode, "unparseable_response");
+  assert.equal(failures[0].error.name, "UnparseableError");
+  assert.deepEqual(JSON.parse(await kv.get(cacheKey)), originalState);
+  assert.equal(kv.writes.some(({ key }) => key === cacheKey), false);
+});
+
 test("one operation failure leaves state untouched and does not prevent later operations", async () => {
   const kv = makeKv();
   const failures = [];
