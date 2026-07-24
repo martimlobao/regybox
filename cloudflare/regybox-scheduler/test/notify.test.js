@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { executePlan } from "../src/executor.js";
@@ -12,6 +13,13 @@ import {
 } from "../src/notify.js";
 import { incidentConstants } from "../src/incidents.js";
 import { RegyboxLoginError } from "../src/regybox.js";
+
+const notificationContracts = JSON.parse(
+  readFileSync(
+    new URL("../../../tests/fixtures/notification_contracts.json", import.meta.url),
+    "utf8",
+  ),
+);
 
 const emailEnv = {
   EMAIL_USERNAME: "regybox@example.test",
@@ -88,6 +96,33 @@ test("success unenrollment email includes the optional worker status page", () =
         "Class: Yoga on 2026-07-12 at 18:30\n\nNo errors were detected.\n\n" +
         "Status page: https://status.example.test/regybox",
     },
+  );
+});
+
+test("reconciled unenrollment email clearly says no change was needed", () => {
+  const contract = notificationContracts.reconciled_unenrollment;
+
+  assert.deepEqual(
+    composeEmail({
+      kind: "reconciled",
+      operation: "unenroll",
+      classSummary: contract.class_summary,
+    }),
+    {
+      subject: contract.subject,
+      body: contract.body,
+    },
+  );
+
+  const linkedEmail = composeEmail({
+    kind: "reconciled",
+    operation: "unenroll",
+    classSummary: contract.class_summary,
+    runUrl: "https://worker.example.test/regybox/runs/test",
+  });
+  assert.match(
+    linkedEmail.body,
+    /Run details: https:\/\/worker\.example\.test\/regybox\/runs\/test$/,
   );
 });
 
@@ -269,7 +304,7 @@ test("a failed email delivery never records a failure fingerprint or throws", as
   assert.deepEqual(kv.writes, []);
 });
 
-test("noop results and unconfigured SMTP settings do not send or touch KV", async () => {
+test("enroll noops and unconfigured SMTP settings do not send or touch KV", async () => {
   const item = dispatch();
   const kv = {
     async get() {
@@ -296,6 +331,26 @@ test("noop results and unconfigured SMTP settings do not send or touch KV", asyn
   });
 
   assert.equal(sends, 0);
+});
+
+test("worker reconciliation sends one unenroll noop email and caches unenrolled state", async () => {
+  const sent = [];
+  const kv = makeKv();
+  await executePlan({
+    env: workerEnv,
+    kv,
+    dispatches: [dispatch({ operation: "unenroll" })],
+    createClient: () => ({ bootstrapSession: async () => {} }),
+    runOperationImpl: async () => ({ status: "noop", classType: "WOD" }),
+    notifyResultImpl: (notification) =>
+      notifyResult({ ...notification, send: async (_env, email) => sent.push(email) }),
+  });
+
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].subject, /already removed/);
+  assert.match(sent[0].body, /already unenrolled, so no additional change was needed/);
+  const stateWrite = kv.writes.find(({ key }) => key === "regybox:v1:calendar:test");
+  assert.equal(JSON.parse(stateWrite.value).state, "unenrolled");
 });
 
 test("executor's worker default notification hook sends failures, while dispatch mode does not", async () => {

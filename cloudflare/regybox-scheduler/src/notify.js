@@ -86,6 +86,26 @@ export function composeEmail({
     };
   }
 
+  if (kind === "reconciled") {
+    const bodyLines = [
+      "The scheduler reconciled its previous enrollment record.",
+      "",
+      `Class: ${summary}`,
+      "",
+      "You were already unenrolled, so no additional change was needed.",
+    ];
+    if (statusUrl) {
+      bodyLines.push("", `Status page: ${statusUrl}`);
+    }
+    if (runUrl) {
+      bodyLines.push("", `Run details: ${runUrl}`);
+    }
+    return {
+      subject: `Regybox Auto-${operationName}: already removed for ${summary}`,
+      body: bodyLines.join("\n"),
+    };
+  }
+
   const bodyLines = [
     `We could not complete your Regybox auto-${operationNoun}.`,
     "",
@@ -156,16 +176,17 @@ export async function sendEmail(env, { subject, body }, { mailerFactory } = {}) 
   );
 }
 
-/** Notify successful worker results; noops are intentionally silent. */
+/** Notify successful results and stale-enrollment reconciliations. */
 export async function notifyResult({ env, kv, dispatch, result, statusUrl, runUrl, send = sendEmail }) {
-  if (!emailConfigured(env) || result.status !== "success") {
+  const reconciledUnenroll = dispatch.operation === "unenroll" && result.status === "noop";
+  if (!emailConfigured(env) || (result.status !== "success" && !reconciledUnenroll)) {
     return;
   }
   try {
     await send(
       env,
       composeEmail({
-        kind: "success",
+        kind: reconciledUnenroll ? "reconciled" : "success",
         operation: dispatch.operation,
         classSummary: classSummary({
           classType: dispatch.inputs?.["class-type"],
@@ -176,9 +197,11 @@ export async function notifyResult({ env, kv, dispatch, result, statusUrl, runUr
         runUrl,
       }),
     );
-    console.log(`regybox: email sent (${dispatch.operation} success)`);
+    console.log(
+      `regybox: email sent (${dispatch.operation} ${reconciledUnenroll ? "reconciled" : "success"})`,
+    );
   } catch (error) {
-    console.warn("regybox: success notification email failed:", error);
+    console.warn("regybox: result notification email failed:", error);
   }
 }
 

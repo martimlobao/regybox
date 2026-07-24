@@ -321,6 +321,7 @@ def _should_send_email_with_cache(
     operation: str,
     log_text: str,
     cache_key: str,
+    notify_unenroll_noop: bool = False,
 ) -> bool:
     """Apply repeated-failure suppression when KV cache is configured.
 
@@ -328,7 +329,11 @@ def _should_send_email_with_cache(
         Whether the current result should send an email.
     """
     if enroll_result.strip().lower() != "failure" or not cache_key:
-        return should_send_email(enroll_result)
+        return should_send_email(
+            enroll_result,
+            operation=operation,
+            notify_unenroll_noop=notify_unenroll_noop,
+        )
 
     current_fingerprint = build_failure_notification_fingerprint(
         enroll_result=enroll_result,
@@ -339,7 +344,11 @@ def _should_send_email_with_cache(
         config = CloudflareKVConfig.from_env()
         cached_payload = read_kv_json(config=config, cache_key=cache_key)
     except (ValueError, requests.RequestException):
-        return should_send_email(enroll_result)
+        return should_send_email(
+            enroll_result,
+            operation=operation,
+            notify_unenroll_noop=notify_unenroll_noop,
+        )
 
     cached_fingerprint = cached_payload.get("failureNotificationFingerprint")
     cached_fingerprint_str = cached_fingerprint if isinstance(cached_fingerprint, str) else None
@@ -452,6 +461,19 @@ def build_email_content(
             body_lines.extend(["", f"Workflow run (optional): {resolved_run_url}"])
         return subject, "\n".join(body_lines)
 
+    if normalized_result == "noop" and normalized_operation == "unenroll":
+        subject = f"Regybox Auto-unenroll: already removed for {class_summary}"
+        body_lines = [
+            "The scheduler reconciled its previous enrollment record.",
+            "",
+            f"Class: {class_summary}",
+            "",
+            "You were already unenrolled, so no additional change was needed.",
+        ]
+        if resolved_run_url:
+            body_lines.extend(["", f"Workflow run (optional): {resolved_run_url}"])
+        return subject, "\n".join(body_lines)
+
     payload: UserErrorPayload | None = extract_user_error_payload(log_text)
     if payload is None:
         payload = _fallback_user_payload(extract_error_signal(log_text))
@@ -480,9 +502,18 @@ def build_email_content(
     return subject, "\n".join(body_lines)
 
 
-def should_send_email(enroll_result: str) -> bool:
+def should_send_email(
+    enroll_result: str,
+    *,
+    operation: str = "enroll",
+    notify_unenroll_noop: bool = False,
+) -> bool:
     """Return whether an action result should trigger an email."""
-    return enroll_result.strip().lower() in {"success", "failure"}
+    normalized_result = enroll_result.strip().lower()
+    normalized_operation = operation.strip().lower()
+    return normalized_result in {"success", "failure"} or (
+        notify_unenroll_noop and normalized_operation == "unenroll" and normalized_result == "noop"
+    )
 
 
 def write_multiline_env(*, name: str, value: str, github_env_path: str) -> None:
@@ -516,6 +547,7 @@ def main() -> None:
     log_text: str = read_log_text(os.environ.get("ENROLL_LOG_PATH"))
     enroll_result = os.environ.get("ENROLL_RESULT", "failure")
     operation = os.environ.get("REGYBOX_OPERATION", "enroll")
+    notify_unenroll_noop = os.environ.get("NOTIFY_UNENROLL_NOOP", "").strip().lower() == "true"
     subject, body = build_email_content(
         enroll_result=enroll_result,
         class_summary=class_summary,
@@ -528,6 +560,7 @@ def main() -> None:
         operation=operation,
         log_text=log_text,
         cache_key=os.environ.get("CACHE_KEY", "").strip(),
+        notify_unenroll_noop=notify_unenroll_noop,
     )
     failure_fingerprint = build_failure_notification_fingerprint(
         enroll_result=enroll_result,

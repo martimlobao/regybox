@@ -706,6 +706,27 @@ def test_main_calls_check_cal_when_check_calendar_true() -> None:
     assert call_kw["class_type"] == "WOD Rato"
 
 
+def test_main_skips_calendar_check_for_unenroll() -> None:
+    mock_class: MagicMock = MagicMock()
+    mock_class.name = "WOD Rato"
+    mock_class.user_is_enrolled = False
+    with (
+        patch("regybox.regybox.check_cal") as mock_check_cal,
+        patch("regybox.regybox.get_classes", return_value=[mock_class]),
+        patch("regybox.regybox.pick_class", return_value=mock_class),
+    ):
+        result = main(
+            class_date="2026-03-10",
+            class_time="06:30",
+            class_type="WOD Rato",
+            check_calendar=True,
+            operation_options=OperationOptions(operation="unenroll"),
+        )
+
+    mock_check_cal.assert_not_called()
+    assert result == OperationResult(operation="unenroll", status="noop", class_type="WOD Rato")
+
+
 def test_main_calls_check_cal_with_explicit_event_name() -> None:
     mock_class: MagicMock = MagicMock()
     mock_class.is_open = True

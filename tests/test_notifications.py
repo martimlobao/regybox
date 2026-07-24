@@ -30,6 +30,11 @@ from regybox.notifications import (
 )
 
 FAKE_CREDENTIAL = "not-a-real-value"
+NOTIFICATION_CONTRACTS = json.loads(
+    (Path(__file__).parent / "fixtures" / "notification_contracts.json").read_text(
+        encoding="utf-8"
+    )
+)
 
 
 def test_extract_user_error_payload() -> None:
@@ -156,6 +161,34 @@ def test_build_email_content_unenroll_success() -> None:
     assert "Your Regybox auto-unenrollment completed successfully." in body
 
 
+def test_build_email_content_unenroll_reconciliation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = NOTIFICATION_CONTRACTS["reconciled_unenrollment"]
+    for variable in ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID"):
+        monkeypatch.delenv(variable, raising=False)
+
+    subject, body = build_email_content(
+        operation="unenroll",
+        enroll_result="noop",
+        class_summary=contract["class_summary"],
+        run_url="",
+        log_text="",
+    )
+
+    assert subject == contract["subject"]
+    assert body == contract["body"]
+
+    _, linked_body = build_email_content(
+        operation="unenroll",
+        enroll_result="noop",
+        class_summary=contract["class_summary"],
+        run_url="https://example.com/run",
+        log_text="",
+    )
+    assert linked_body.endswith("Workflow run (optional): https://example.com/run")
+
+
 def test_build_email_content_unenroll_failure() -> None:
     subject, body = build_email_content(
         operation="unenroll",
@@ -172,6 +205,12 @@ def test_build_email_content_unenroll_failure() -> None:
 
 def test_should_send_email_skips_noop_results() -> None:
     assert not should_send_email("noop")
+    assert not should_send_email("noop", operation="unenroll")
+    assert should_send_email(
+        "noop",
+        operation="unenroll",
+        notify_unenroll_noop=True,
+    )
     assert should_send_email("success")
     assert should_send_email("failure")
 
@@ -471,6 +510,25 @@ def test_notifications_main_sets_should_send_email_env(
             f"SHOULD_SEND_EMAIL<<REGYBOX_SHOULD_SEND_EMAIL_EOF\n{expected}"
             in env_file.read_text(encoding="utf-8")
         )
+
+
+def test_notifications_main_sends_marked_unenroll_reconciliation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_file = tmp_path / "env_unenroll_noop"
+    monkeypatch.setenv("GITHUB_ENV", str(env_file))
+    monkeypatch.setenv("ENROLL_RESULT", "noop")
+    monkeypatch.setenv("REGYBOX_OPERATION", "unenroll")
+    monkeypatch.setenv("NOTIFY_UNENROLL_NOOP", "true")
+    monkeypatch.setenv("CLASS_TYPE", "WOD")
+    monkeypatch.setenv("CLASS_DATE", "2026-03-04")
+    monkeypatch.setenv("CLASS_TIME", "06:30")
+
+    notifications_module.main()
+
+    env_text = env_file.read_text(encoding="utf-8")
+    assert "Regybox Auto-unenroll: already removed" in env_text
+    assert "SHOULD_SEND_EMAIL<<REGYBOX_SHOULD_SEND_EMAIL_EOF\ntrue" in env_text
 
 
 def test_read_kv_json_returns_empty_for_missing_value() -> None:

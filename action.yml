@@ -59,6 +59,10 @@ inputs:
     description: Set to true to send a confirmation email when the job finishes.
     required: false
     default: true
+  notify-unenroll-noop:
+    description: Set to true when an automated unenroll no-op should confirm stale-state reconciliation.
+    required: false
+    default: "false"
   email-to:
     description: Recipient email address for the confirmation email. Required when send-email is true.
     required: false
@@ -207,6 +211,7 @@ runs:
         CLASS_DATE: ${{ env.CLASS_DATE }}
         CLASS_TIME: ${{ env.CLASS_TIME }}
         REGYBOX_OPERATION: ${{ env.REGYBOX_OPERATION }}
+        NOTIFY_UNENROLL_NOOP: ${{ inputs.notify-unenroll-noop }}
         ENROLL_LOG_PATH: ${{ env.ENROLL_LOG_PATH }}
         ACTION_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         CACHE_KEY: ${{ env.CACHE_KEY }}

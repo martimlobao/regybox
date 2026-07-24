@@ -356,8 +356,9 @@ def main(
             the current date plus 2 days will be used.
         event_name: Optional calendar event name override. If omitted,
             'CrossFit' is used for calendar matching.
-        check_calendar: Whether to check a personal calendar for a planned
-            class at the given date and time.
+        check_calendar: Whether to check a personal calendar before enrolling
+            in a planned class at the given date and time. Unenrollment never
+            requires the event to remain on the calendar.
             Defaults to True.
         timeout: Maximum number of seconds to wait for enrollment to open.
             Defaults to 900 seconds (15 minutes).
@@ -380,7 +381,7 @@ def main(
     else:
         date = (datetime.datetime.strptime(class_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE)).date()
 
-    if check_calendar:
+    if check_calendar and options.operation == "enroll":
         calendar_event_name: str = (
             event_name.strip()
             if event_name and event_name.strip()
