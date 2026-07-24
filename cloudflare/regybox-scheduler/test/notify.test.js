@@ -91,6 +91,25 @@ test("success unenrollment email includes the optional worker status page", () =
   );
 });
 
+test("reconciled unenrollment email clearly says no change was needed", () => {
+  assert.deepEqual(
+    composeEmail({
+      kind: "reconciled",
+      operation: "unenroll",
+      classSummary: "WOD on 2026-07-12 at 06:30",
+      runUrl: "https://worker.example.test/regybox/runs/test",
+    }),
+    {
+      subject: "Regybox Auto-unenroll: already removed for WOD on 2026-07-12 at 06:30",
+      body:
+        "The scheduler reconciled its previous enrollment record.\n\n" +
+        "Class: WOD on 2026-07-12 at 06:30\n\n" +
+        "You were already unenrolled, so no additional change was needed.\n\n" +
+        "Run details: https://worker.example.test/regybox/runs/test",
+    },
+  );
+});
+
 test("failure email includes recovery steps and structured technical details", () => {
   assert.deepEqual(
     composeEmail({
@@ -269,7 +288,7 @@ test("a failed email delivery never records a failure fingerprint or throws", as
   assert.deepEqual(kv.writes, []);
 });
 
-test("noop results and unconfigured SMTP settings do not send or touch KV", async () => {
+test("enroll noops and unconfigured SMTP settings do not send or touch KV", async () => {
   const item = dispatch();
   const kv = {
     async get() {
@@ -296,6 +315,26 @@ test("noop results and unconfigured SMTP settings do not send or touch KV", asyn
   });
 
   assert.equal(sends, 0);
+});
+
+test("worker reconciliation sends one unenroll noop email and caches unenrolled state", async () => {
+  const sent = [];
+  const kv = makeKv();
+  await executePlan({
+    env: workerEnv,
+    kv,
+    dispatches: [dispatch({ operation: "unenroll" })],
+    createClient: () => ({ bootstrapSession: async () => {} }),
+    runOperationImpl: async () => ({ status: "noop", classType: "WOD" }),
+    notifyResultImpl: (notification) =>
+      notifyResult({ ...notification, send: async (_env, email) => sent.push(email) }),
+  });
+
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].subject, /already removed/);
+  assert.match(sent[0].body, /already unenrolled, so no additional change was needed/);
+  const stateWrite = kv.writes.find(({ key }) => key === "regybox:v1:calendar:test");
+  assert.equal(JSON.parse(stateWrite.value).state, "unenrolled");
 });
 
 test("executor's worker default notification hook sends failures, while dispatch mode does not", async () => {

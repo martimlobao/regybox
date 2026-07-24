@@ -42,8 +42,9 @@ jobs:
         shell: bash
         env:
           CALENDAR_URL: ${{ secrets.CALENDAR_URL }}
+          REGYBOX_OPERATION: ${{ inputs.operation }}
         run: |
-          if [[ -z "${CALENDAR_URL// }" ]]; then
+          if [[ "${REGYBOX_OPERATION}" == "enroll" && -z "${CALENDAR_URL//[[:space:]]/}" ]]; then
             echo "::error::CALENDAR_URL is required for scheduler-dispatched operations."
             exit 1
           fi
@@ -66,6 +67,7 @@ jobs:
           regybox-user: ${{ secrets.REGYBOX_USER }}
           calendar-url: ${{ secrets.CALENDAR_URL }}
           send-email: true
+          notify-unenroll-noop: true
           email-to: ${{ secrets.EMAIL_TO }}
           email-username: ${{ secrets.EMAIL_USERNAME }}
           email-password: ${{ secrets.EMAIL_PASSWORD }}

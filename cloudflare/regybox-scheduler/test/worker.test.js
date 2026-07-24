@@ -772,16 +772,15 @@ test("recurring calendar events respect every repeated EXDATE property", () => {
     "SUMMARY:Crossfit",
     "DTSTART;TZID=Europe/Lisbon:20260619T063000",
     "RRULE:FREQ=WEEKLY;BYDAY=FR,MO,TH,TU,WE",
-    "EXDATE;TZID=Europe/Lisbon:20260724T063000",
     "EXDATE;TZID=Europe/Lisbon:20260720T063000",
-    "EXDATE;TZID=Europe/Lisbon:20260623T063000",
+    "EXDATE;TZID=Europe/Lisbon:20260722T063000",
     "END:VEVENT",
     "END:VCALENDAR",
   ].join("\r\n");
 
   const events = expandCalendarEvents({
     icsText: ics,
-    now: new Date("2026-07-23T00:00:00Z"),
+    now: new Date("2026-07-20T00:00:00Z"),
     lookaheadHours: 72,
     calendarEventNames: ["Crossfit"],
     timeZone: "Europe/Lisbon",
@@ -789,7 +788,7 @@ test("recurring calendar events respect every repeated EXDATE property", () => {
 
   assert.deepEqual(
     events.map((event) => [event.classDate, event.classTime]),
-    [["2026-07-23", "06:30"]],
+    [["2026-07-21", "06:30"]],
   );
 });
 
