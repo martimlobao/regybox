@@ -45,6 +45,8 @@ def test_class_operation_workflow_exposes_dispatch_and_kv_inputs() -> None:
     assert "cache-key:" in workflow_text
     assert "calendar-fingerprint:" in workflow_text
     assert "calendar-event-name: ${{ inputs.calendar-event-name }}" in workflow_text
+    assert "calendar-url: ${{ secrets.CALENDAR_URL }}" in workflow_text
+    assert 'if [[ -z "${CALENDAR_URL// }" ]]; then' in workflow_text
     assert "timeout-seconds: 900" in workflow_text
     assert "not-open-is-noop: true" in workflow_text
     cache_key_start = workflow_text.index("      cache-key:")

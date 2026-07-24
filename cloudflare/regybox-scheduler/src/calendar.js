@@ -98,8 +98,16 @@ function parseProperties(lines) {
     }
     const [rawName, ...params] = line.slice(0, index).split(";");
     const name = rawName.toUpperCase();
-    props[rawName] = line.slice(index + 1);
-    props[name] = line.slice(index + 1);
+    const value = line.slice(index + 1);
+    // iCalendar permits multiple EXDATE properties. Keep every value so one
+    // later exclusion cannot silently restore an earlier cancelled instance.
+    if (name === "EXDATE" && props[name] !== undefined) {
+      props[name] = `${props[name]},${value}`;
+      props[rawName] = props[name];
+    } else {
+      props[rawName] = value;
+      props[name] = value;
+    }
     props[`${name}_PARAMS`] = params;
   }
   return props;

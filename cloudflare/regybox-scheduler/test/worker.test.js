@@ -764,6 +764,35 @@ test("recurring calendar events respect EXDATE exclusions", () => {
   );
 });
 
+test("recurring calendar events respect every repeated EXDATE property", () => {
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:weekday-class-with-separate-exdates",
+    "SUMMARY:Crossfit",
+    "DTSTART;TZID=Europe/Lisbon:20260619T063000",
+    "RRULE:FREQ=WEEKLY;BYDAY=FR,MO,TH,TU,WE",
+    "EXDATE;TZID=Europe/Lisbon:20260724T063000",
+    "EXDATE;TZID=Europe/Lisbon:20260720T063000",
+    "EXDATE;TZID=Europe/Lisbon:20260623T063000",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const events = expandCalendarEvents({
+    icsText: ics,
+    now: new Date("2026-07-23T00:00:00Z"),
+    lookaheadHours: 72,
+    calendarEventNames: ["Crossfit"],
+    timeZone: "Europe/Lisbon",
+  });
+
+  assert.deepEqual(
+    events.map((event) => [event.classDate, event.classTime]),
+    [["2026-07-23", "06:30"]],
+  );
+});
+
 test("moved recurring instance uses override time instead of original slot", () => {
   const ics = [
     "BEGIN:VCALENDAR",
