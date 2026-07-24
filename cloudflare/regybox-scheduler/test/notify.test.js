@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { executePlan } from "../src/executor.js";
@@ -12,6 +13,13 @@ import {
 } from "../src/notify.js";
 import { incidentConstants } from "../src/incidents.js";
 import { RegyboxLoginError } from "../src/regybox.js";
+
+const notificationContracts = JSON.parse(
+  readFileSync(
+    new URL("../../../tests/fixtures/notification_contracts.json", import.meta.url),
+    "utf8",
+  ),
+);
 
 const emailEnv = {
   EMAIL_USERNAME: "regybox@example.test",
@@ -92,21 +100,29 @@ test("success unenrollment email includes the optional worker status page", () =
 });
 
 test("reconciled unenrollment email clearly says no change was needed", () => {
+  const contract = notificationContracts.reconciled_unenrollment;
+
   assert.deepEqual(
     composeEmail({
       kind: "reconciled",
       operation: "unenroll",
-      classSummary: "WOD on 2026-07-12 at 06:30",
-      runUrl: "https://worker.example.test/regybox/runs/test",
+      classSummary: contract.class_summary,
     }),
     {
-      subject: "Regybox Auto-unenroll: already removed for WOD on 2026-07-12 at 06:30",
-      body:
-        "The scheduler reconciled its previous enrollment record.\n\n" +
-        "Class: WOD on 2026-07-12 at 06:30\n\n" +
-        "You were already unenrolled, so no additional change was needed.\n\n" +
-        "Run details: https://worker.example.test/regybox/runs/test",
+      subject: contract.subject,
+      body: contract.body,
     },
+  );
+
+  const linkedEmail = composeEmail({
+    kind: "reconciled",
+    operation: "unenroll",
+    classSummary: contract.class_summary,
+    runUrl: "https://worker.example.test/regybox/runs/test",
+  });
+  assert.match(
+    linkedEmail.body,
+    /Run details: https:\/\/worker\.example\.test\/regybox\/runs\/test$/,
   );
 });
 

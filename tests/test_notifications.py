@@ -30,6 +30,11 @@ from regybox.notifications import (
 )
 
 FAKE_CREDENTIAL = "not-a-real-value"
+NOTIFICATION_CONTRACTS = json.loads(
+    (Path(__file__).parent / "fixtures" / "notification_contracts.json").read_text(
+        encoding="utf-8"
+    )
+)
 
 
 def test_extract_user_error_payload() -> None:
@@ -157,18 +162,27 @@ def test_build_email_content_unenroll_success() -> None:
 
 
 def test_build_email_content_unenroll_reconciliation() -> None:
+    contract = NOTIFICATION_CONTRACTS["reconciled_unenrollment"]
+
     subject, body = build_email_content(
         operation="unenroll",
         enroll_result="noop",
-        class_summary="WOD on 2026-03-04 at 06:30",
-        run_url="https://example.com/run",
+        class_summary=contract["class_summary"],
+        run_url="",
         log_text="",
     )
 
-    assert subject == "Regybox Auto-unenroll: already removed for WOD on 2026-03-04 at 06:30"
-    assert "The scheduler reconciled its previous enrollment record." in body
-    assert "You were already unenrolled, so no additional change was needed." in body
-    assert "Workflow run (optional): https://example.com/run" in body
+    assert subject == contract["subject"]
+    assert body == contract["body"]
+
+    _, linked_body = build_email_content(
+        operation="unenroll",
+        enroll_result="noop",
+        class_summary=contract["class_summary"],
+        run_url="https://example.com/run",
+        log_text="",
+    )
+    assert linked_body.endswith("Workflow run (optional): https://example.com/run")
 
 
 def test_build_email_content_unenroll_failure() -> None:

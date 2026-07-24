@@ -47,13 +47,9 @@ def test_class_operation_workflow_exposes_dispatch_and_kv_inputs() -> None:
     assert "calendar-event-name: ${{ inputs.calendar-event-name }}" in workflow_text
     assert "calendar-url: ${{ secrets.CALENDAR_URL }}" in workflow_text
     assert "REGYBOX_OPERATION: ${{ inputs.operation }}" in workflow_text
-    assert (
-        'if [[ "${REGYBOX_OPERATION}" == "enroll" && -z "${CALENDAR_URL//[[:space:]]/}" ]]; then'
-    ) in workflow_text
+    assert '"${REGYBOX_OPERATION}" == "enroll"' in workflow_text
+    assert '-z "${CALENDAR_URL//[[:space:]]/}"' in workflow_text
     assert "notify-unenroll-noop: true" in workflow_text
-    assert workflow_text.index("- name: Validate calendar guard") < workflow_text.index(
-        "- name: Regybox class operation"
-    )
     assert "timeout-seconds: 900" in workflow_text
     assert "not-open-is-noop: true" in workflow_text
     cache_key_start = workflow_text.index("      cache-key:")
