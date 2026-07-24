@@ -38,6 +38,15 @@ jobs:
     name: Regybox class operation
     runs-on: ubuntu-latest
     steps:
+      - name: Validate calendar guard
+        shell: bash
+        env:
+          CALENDAR_URL: ${{ secrets.CALENDAR_URL }}
+        run: |
+          if [[ -z "${CALENDAR_URL// }" ]]; then
+            echo "::error::CALENDAR_URL is required for scheduler-dispatched operations."
+            exit 1
+          fi
       - name: Regybox class operation
         uses: martimlobao/regybox@main
         with:
@@ -55,6 +64,7 @@ jobs:
           cf-kv-api-token: ${{ secrets.CF_KV_API_TOKEN }}
           phpsessid: ${{ secrets.PHPSESSID }}
           regybox-user: ${{ secrets.REGYBOX_USER }}
+          calendar-url: ${{ secrets.CALENDAR_URL }}
           send-email: true
           email-to: ${{ secrets.EMAIL_TO }}
           email-username: ${{ secrets.EMAIL_USERNAME }}
