@@ -161,8 +161,12 @@ def test_build_email_content_unenroll_success() -> None:
     assert "Your Regybox auto-unenrollment completed successfully." in body
 
 
-def test_build_email_content_unenroll_reconciliation() -> None:
+def test_build_email_content_unenroll_reconciliation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     contract = NOTIFICATION_CONTRACTS["reconciled_unenrollment"]
+    for variable in ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID"):
+        monkeypatch.delenv(variable, raising=False)
 
     subject, body = build_email_content(
         operation="unenroll",
