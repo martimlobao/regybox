@@ -209,6 +209,34 @@ test("Bookr client-construction failures use the bootstrap failure envelope", as
   );
 });
 
+test("a zero-operation Bookr bootstrap failure persists a failed last-run status", async () => {
+  const kv = makeKv();
+  const bootstrapError = new BookrLoginError();
+
+  await assert.rejects(
+    executePlan({
+      env: { BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie" },
+      kv,
+      dispatches: [],
+      createBookrClientImpl: () => ({
+        bootstrapSession: async () => { throw bootstrapError; },
+      }),
+      onFailure: async () => {},
+    }),
+    (error) => error === bootstrapError,
+  );
+
+  const lastRun = await readLastRun(kv);
+  assert.deepEqual(lastRun, {
+    ranAt: lastRun.ranAt,
+    mode: "worker",
+    plannedOperations: 0,
+    operations: [],
+    platform: "bookr",
+    status: "failure",
+  });
+});
+
 test("Bookr restriction failures retain provider-specific error codes", async () => {
   const failures = [];
   const summary = await executePlan({
@@ -476,6 +504,7 @@ test("dispatch mode and zero-operation runs both leave a last-run summary", asyn
   assert.equal(zeroSummary.mode, "worker");
   assert.equal(zeroSummary.plannedOperations, 0);
   assert.deepEqual(zeroSummary.operations, []);
+  assert.equal("status" in zeroSummary, false);
   assert.equal(zeroKv.writes[0].options.expirationTtl, 604800);
   assert.equal(activityWrites(zeroKv).length, 0);
 });

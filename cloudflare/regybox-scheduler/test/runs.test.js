@@ -17,6 +17,7 @@ import {
   renderStatusPage,
 } from "../src/status.js";
 import worker, { handleScheduled } from "../src/index.js";
+import { encodeBookrSession } from "../src/bookr.js";
 
 function makeKv(existing = new Map()) {
   const writes = [];
@@ -345,6 +346,66 @@ test("scheduled execution setup failures never inherit operations from the previ
   const run = await readRun(kv, summaries[0].id);
   assert.deepEqual(run.operations, []);
   assert.ok(!JSON.stringify(run).includes("2026-07-19"));
+});
+
+test("scheduled Bookr bootstrap failures retain operation outcomes in the run timeline", async () => {
+  const kv = makeKv();
+  const originalFetch = globalThis.fetch;
+  const originalLog = console.log;
+  const originalError = console.error;
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "BEGIN:VEVENT",
+    "UID:bookr-bootstrap-failure",
+    "DTSTART:20260722T063000Z",
+    "DTEND:20260722T072000Z",
+    "SUMMARY:CrossFit",
+    "END:VEVENT",
+    "END:VCALENDAR",
+    "",
+  ].join("\r\n");
+  globalThis.fetch = async (url) => String(url).includes("calendar.example.test")
+    ? new Response(ics, { headers: { "content-type": "text/calendar" } })
+    : new Response("expired", { status: 401 });
+  console.log = () => {};
+  console.error = () => {};
+  try {
+    await assert.rejects(
+      handleScheduled({
+        BOOKING_PLATFORM: "bookr",
+        BOOKR_AUTH_COOKIE: encodeBookrSession({
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          expires_at: 2_000_000_000,
+        }),
+        CALENDAR_URL: "https://calendar.example.test/private.ics",
+        CALENDAR_EVENT_NAMES: "CrossFit",
+        CLASS_MAP: "CrossFit = WOD",
+        REGYBOX_STATE: kv,
+      }, {
+        scheduledAt: Date.parse("2026-07-20T10:28:00.000Z"),
+        now: () => Date.parse("2026-07-20T10:28:01.000Z"),
+      }),
+      /Bookr/i,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.log = originalLog;
+    console.error = originalError;
+  }
+  const summaries = await readRuns(kv);
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0].status, "failure");
+  const run = await readRun(kv, summaries[0].id);
+  assert.deepEqual(run.operations, [{
+    operation: "enroll",
+    classDate: "2026-07-22",
+    classTime: "07:30",
+    classType: "WOD",
+    outcome: "failure",
+    errorCode: "login_error",
+  }]);
 });
 
 test("run traces redact Bookr auth cookies and opaque auth fields", async () => {

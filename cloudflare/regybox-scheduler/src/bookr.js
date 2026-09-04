@@ -21,6 +21,8 @@ const MAX_COOKIE_CHUNKS = 16;
 const COOKIE_CHUNK_SIZE = 3180;
 const MAX_RESPONSE_BYTES = 512 * 1024;
 const OPENING_BOUNDARY_GRACE_MS = 30_000;
+const MAX_REFRESH_ATTEMPTS = 3;
+const defaultRefreshBackoffMs = (attempt) => attempt * 250;
 const AUTH_KV_KEY = "regybox:v2:bookr:auth";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CLASS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -423,6 +425,13 @@ async function responseText(response) {
   }
 }
 
+function rejectRedirectResponse(response, error) {
+  const status = Number(response?.status);
+  const hasRedirectStatus = Number.isInteger(status) && status >= 300 && status <= 399;
+  const hasLocation = Boolean(response?.headers?.get?.("location"));
+  if (hasRedirectStatus || hasLocation) throw error;
+}
+
 async function responseJson(response) {
   const contentType = response.headers.get("content-type");
   if (!contentType?.toLowerCase().includes("application/json")) {
@@ -487,6 +496,8 @@ export function createBookrClient({
   onTrace = async () => {},
   supabasePublishableKey = SUPABASE_PUBLISHABLE_KEY,
   persistSession = true,
+  refreshSleep = defaultSleep,
+  refreshBackoffMs = defaultRefreshBackoffMs,
 } = {}) {
   if (!authCookie) throw new BookrLoginError("BOOKR_AUTH_COOKIE is required");
   const bootstrapCookie = parseBookrAuthCookie(authCookie).cookieHeader;
@@ -506,7 +517,9 @@ export function createBookrClient({
       method: resolvedMethod,
       // Do not follow a first-party redirect with a manually supplied Cookie
       // header: the endpoint allowlist must remain true for the complete hop.
-      redirect: "error",
+      // Cloudflare Workers rejects redirect:"error" before issuing the fetch;
+      // manual lets us inspect and reject the response ourselves.
+      redirect: "manual",
       cache: "no-store",
       headers: {
         Accept: resolvedMethod === "GET" ? "application/json, text/html;q=0.9" : "application/json",
@@ -516,6 +529,10 @@ export function createBookrClient({
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
+    // Reject before inspecting Set-Cookie or the body. A redirect is never
+    // allowed to establish state, even when it happens to include a location
+    // on the same origin.
+    rejectRedirectResponse(response, new UnparseableError("Bookr returned an unexpected redirect"));
     // An authentication rejection must not replace the last known-good cookie,
     // even if a stale or malicious Set-Cookie header accompanies the response.
     if (response.status !== 401 && response.status !== 403) {
@@ -540,31 +557,50 @@ export function createBookrClient({
     // would invalidate the Worker's durable session.
     if (!persistSession) throw new BookrSessionRefreshRequiredError();
     if (!supabasePublishableKey) throw new BookrLoginError("Bookr session needs refresh but the public auth configuration is unavailable");
-    let response;
-    try {
-      response = await fetchImpl(`${SUPABASE_ORIGIN}/auth/v1/token?grant_type=refresh_token`, {
-        method: "POST",
-        // The refresh body contains the rotation credential; never follow a
-        // redirect to a different origin and never cache either request or body.
-        redirect: "error",
-        cache: "no-store",
-        headers: {
-          apikey: supabasePublishableKey,
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-        },
-        body: JSON.stringify({ refresh_token: decoded.refreshToken }),
-      });
-    } catch {
-      throw new BookrRefreshError();
-    }
-    if (!response.ok) {
+    let lastStatus = null;
+    for (let attempt = 1; attempt <= MAX_REFRESH_ATTEMPTS; attempt += 1) {
+      let response;
+      try {
+        response = await fetchImpl(`${SUPABASE_ORIGIN}/auth/v1/token?grant_type=refresh_token`, {
+          method: "POST",
+          // The refresh body contains the rotation credential; never follow a
+          // redirect to a different origin and never cache either request or body.
+          // See the first-party request above for why this is manual.
+          redirect: "manual",
+          cache: "no-store",
+          headers: {
+            apikey: supabasePublishableKey,
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+          },
+          body: JSON.stringify({ refresh_token: decoded.refreshToken }),
+        });
+      } catch {
+        if (attempt === MAX_REFRESH_ATTEMPTS) throw new BookrRefreshError();
+        const delayMs = Number(refreshBackoffMs(attempt));
+        if (Number.isFinite(delayMs) && delayMs > 0) await refreshSleep(delayMs);
+        continue;
+      }
+      // Do not treat a redirect as a refresh response: it must not be retried,
+      // parsed, or allowed to replace the durable auth cookie.
+      rejectRedirectResponse(response, new BookrRefreshError(response.status));
+      lastStatus = Number.isInteger(response.status) ? response.status : null;
+      if (response.ok) {
+        const refreshed = await responseJson(response);
+        const refreshedCookie = encodeBookrSession(refreshed);
+        // Only replace and persist the durable cookie after the response has
+        // passed JSON and session-shape validation.
+        cookieHeader = refreshedCookie;
+        await persistCookieHeader();
+        return;
+      }
       if ([400, 401, 403].includes(response.status)) throw new BookrLoginError(undefined, response.status);
-      throw new BookrRefreshError(response.status);
+      const transient = response.status === 429 || (response.status >= 500 && response.status <= 599);
+      if (!transient || attempt === MAX_REFRESH_ATTEMPTS) throw new BookrRefreshError(lastStatus);
+      const delayMs = Number(refreshBackoffMs(attempt));
+      if (Number.isFinite(delayMs) && delayMs > 0) await refreshSleep(delayMs);
     }
-    const refreshed = await responseJson(response);
-    cookieHeader = encodeBookrSession(refreshed);
-    await persistCookieHeader();
+    throw new BookrRefreshError(lastStatus);
   }
 
   async function listClasses(classDate) {

@@ -6,7 +6,14 @@ import {
   parseClassMap,
   resolveClassRules,
 } from "./calendar.js";
-import { appendActivity, dispatchWorkflow, executePlan, executionMode, writeLastRun } from "./executor.js";
+import {
+  appendActivity,
+  dispatchWorkflow,
+  executePlan,
+  executionMode,
+  executionSummarySymbol,
+  writeLastRun,
+} from "./executor.js";
 import { rememberStatusOrigin } from "./incidents.js";
 import { createRunRecorder, outcomeStatus } from "./runs.js";
 import { handleIncidentRequest, handleRunRequest, handleRunsRequest, handleStatusRequest } from "./status.js";
@@ -130,7 +137,8 @@ export async function handleScheduled(env, { scheduledAt, now = () => Date.now()
   try {
     summary = await executePlan({ env, kv: env.REGYBOX_STATE, dispatches: plan.dispatches, now, recorder });
   } catch (error) {
-    const operations = [];
+    const failureSummary = error?.[executionSummarySymbol];
+    const operations = Array.isArray(failureSummary?.operations) ? failureSummary.operations : [];
     await safeRecorderCall(recorder, "trace", {
       level: "error",
       scope: "executor",

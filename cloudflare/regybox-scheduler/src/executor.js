@@ -14,6 +14,10 @@ const MINIMUM_OPERATION_BUDGET_MS = 30 * 1000;
 const NOT_OPEN_DISPATCH_WINDOW_MS = 60 * 60 * 1000;
 const NOT_OPEN_OPENING_JUMP_TOLERANCE_MS = 2 * 60 * 1000;
 
+// Carries the sanitized operation summary through a rethrown execution error
+// so the scheduled handler can finalize the separate run timeline accurately.
+export const executionSummarySymbol = Symbol("executionSummary");
+
 function configured(value) {
   return Boolean(String(value ?? "").trim());
 }
@@ -527,6 +531,20 @@ export async function executePlan({
       }
     }
     return summary;
+  } catch (error) {
+    // Keep the last-run record honest when bootstrap or another execution
+    // failure happens before any operation can be recorded. Successful
+    // summaries intentionally retain their existing shape.
+    summary.status = "failure";
+    if (error && (typeof error === "object" || typeof error === "function")) {
+      try {
+        Object.defineProperty(error, executionSummarySymbol, { value: summary });
+      } catch {
+        // Preserve the original failure when an unusual non-extensible error
+        // cannot carry the internal summary.
+      }
+    }
+    throw error;
   } finally {
     await appendActivity(kv, activity, { platform });
     try {

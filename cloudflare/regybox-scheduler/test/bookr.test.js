@@ -197,7 +197,7 @@ test("Bookr client uses only expected endpoints, bootstraps subscription, and ve
   assert.deepEqual(calls.map(({ url }) => url.pathname), ["/dashboard", "/api/dashboard/athlete-calendar/day", "/api/dashboard/athlete-class-bookings", "/api/dashboard/athlete-calendar/day"]);
   assert.deepEqual(JSON.parse(calls[2].options.body), { sessionId, subscriptionId });
   for (const { options } of calls) {
-    assert.equal(options.redirect, "error");
+    assert.equal(options.redirect, "manual");
     assert.equal(options.cache, "no-store");
     assert.equal(options.headers["Cache-Control"], "no-store");
   }
@@ -250,22 +250,33 @@ test("Bookr authenticated bootstrap with an ambiguous subscription fails enrollm
 
 test("Bookr rejects redirects before an authenticated request can leave its allowlist", async () => {
   const calls = [];
+  const kv = memoryKv();
+  const rotated = encodeBookrSession({
+    access_token: "redirect-access",
+    refresh_token: "redirect-refresh",
+    expires_at: 2_100_000_000,
+  });
   const client = createBookrClient({
     authCookie: authCookie(),
+    kv,
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
       return new Response(null, {
         status: 302,
-        headers: { location: "https://outside.example.test/collect" },
+        headers: {
+          location: "https://outside.example.test/collect",
+          "set-cookie": `${rotated}; Path=/; Secure`,
+        },
       });
     },
   });
 
-  await assert.rejects(() => client.bootstrapSession(), /HTTP 302/);
+  await assert.rejects(() => client.bootstrapSession(), /unexpected redirect/);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].options.redirect, "error");
+  assert.equal(calls[0].options.redirect, "manual");
   assert.equal(calls[0].options.cache, "no-store");
   assert.equal(calls[0].options.headers["Cache-Control"], "no-store");
+  assert.equal(kv.values.size, 0);
 });
 
 test("Bookr run operation preserves success, no-op, and not-open envelopes", async () => {
@@ -600,7 +611,7 @@ test("Bookr client refreshes expiring sessions without exposing tokens to traces
   });
   await client.bootstrapSession();
   assert.equal(refreshOptions.length, 1);
-  assert.equal(refreshOptions[0].redirect, "error");
+  assert.equal(refreshOptions[0].redirect, "manual");
   assert.equal(refreshOptions[0].cache, "no-store");
   assert.equal(refreshOptions[0].headers["Cache-Control"], "no-store");
   assert.doesNotMatch(JSON.stringify(traces), /new-access|new-refresh|access-token|refresh-token/);
@@ -611,11 +622,13 @@ test("Bookr transient refresh failures preserve status without replacing the sav
     const kv = memoryKv();
     const original = authCookie(1);
     let refreshCalls = 0;
+    const waits = [];
     const client = createBookrClient({
       authCookie: original,
       kv,
       now: () => 10_000,
       supabasePublishableKey: "public-key",
+      refreshSleep: async (milliseconds) => waits.push(milliseconds),
       fetchImpl: async () => {
         refreshCalls += 1;
         return new Response('{"error":"private-body","token":"secret-token"}', { status });
@@ -628,7 +641,8 @@ test("Bookr transient refresh failures preserve status without replacing the sav
         && !(error instanceof BookrLoginError)
         && error.status === status,
     );
-    assert.equal(refreshCalls, 1);
+    assert.equal(refreshCalls, 3);
+    assert.deepEqual(waits, [250, 500]);
     assert.equal(kv.values.size, 0);
 
     const payload = errorPayload(new BookrRefreshError(status), { platform: "bookr" });
@@ -642,11 +656,15 @@ test("Bookr transient refresh failures preserve status without replacing the sav
 
 test("Bookr auth refresh rejection remains a login error", async () => {
   for (const status of [400, 401, 403]) {
+    let refreshCalls = 0;
     const client = createBookrClient({
       authCookie: authCookie(1),
       now: () => 10_000,
       supabasePublishableKey: "public-key",
-      fetchImpl: async () => new Response("unauthorized", { status }),
+      fetchImpl: async () => {
+        refreshCalls += 1;
+        return new Response("unauthorized", { status });
+      },
     });
 
     await assert.rejects(
@@ -655,15 +673,51 @@ test("Bookr auth refresh rejection remains a login error", async () => {
         && !(error instanceof BookrRefreshError)
         && error.status === status,
     );
+    assert.equal(refreshCalls, 1);
   }
 });
 
+test("Bookr rejects Supabase redirects without following or persisting them", async () => {
+  const calls = [];
+  const kv = memoryKv();
+  const client = createBookrClient({
+    authCookie: authCookie(1),
+    kv,
+    now: () => 10_000,
+    supabasePublishableKey: "public-key",
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      if (!url.startsWith("https://jphimrpybgssduyuziaw.supabase.co/")) {
+        throw new Error(`unexpected redirected target ${url}`);
+      }
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: "https://evil.example.test/collect",
+          "set-cookie": "sb-jphimrpybgssduyuziaw-auth-token=attacker; Path=/",
+        },
+      });
+    },
+  });
+
+  await assert.rejects(
+    () => client.bootstrapSession(),
+    (error) => error instanceof BookrRefreshError && error.status === 302,
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].options.redirect, "manual");
+  assert.equal(kv.values.size, 0);
+});
+
 test("Bookr network refresh failures are provider-safe and non-login errors", async () => {
+  let refreshCalls = 0;
   const client = createBookrClient({
     authCookie: authCookie(1),
     now: () => 10_000,
     supabasePublishableKey: "public-key",
+    refreshSleep: async () => {},
     fetchImpl: async () => {
+      refreshCalls += 1;
       throw new Error("network failed at https://supabase.invalid/private?token=secret-token");
     },
   });
@@ -676,6 +730,64 @@ test("Bookr network refresh failures are provider-safe and non-login errors", as
       && !error.message.includes("secret-token")
       && !error.message.includes("https://"),
   );
+  assert.equal(refreshCalls, 3);
+});
+
+test("Bookr retries a pre-response refresh failure and persists the successful rotation", async () => {
+  const kv = memoryKv();
+  const original = authCookie(1);
+  const rotated = encodeBookrSession({
+    access_token: "recovered-access",
+    refresh_token: "recovered-refresh",
+    expires_at: 2_100_000_000,
+  });
+  let refreshCalls = 0;
+  const waits = [];
+  const client = createBookrClient({
+    authCookie: original,
+    kv,
+    now: () => 10_000,
+    supabasePublishableKey: "public-key",
+    refreshSleep: async (milliseconds) => waits.push(milliseconds),
+    fetchImpl: async (url) => {
+      if (url.startsWith("https://jphimrpybgssduyuziaw.supabase.co/")) {
+        refreshCalls += 1;
+        if (refreshCalls === 1) throw new TypeError("connection closed before refresh response");
+        return jsonResponse({ access_token: "recovered-access", refresh_token: "recovered-refresh", expires_at: 2_100_000_000 });
+      }
+      assert.equal(url, "https://bookr.fit/dashboard");
+      return dashboardResponse();
+    },
+  });
+
+  await client.bootstrapSession();
+  assert.equal(refreshCalls, 2);
+  assert.deepEqual(waits, [250]);
+  assert.equal(await loadBookrSession(kv, original), rotated);
+});
+
+test("Bookr retries transient refresh statuses but never retries auth rejections", async () => {
+  const waits = [];
+  let refreshCalls = 0;
+  const client = createBookrClient({
+    authCookie: authCookie(1),
+    now: () => 10_000,
+    supabasePublishableKey: "public-key",
+    refreshSleep: async (milliseconds) => waits.push(milliseconds),
+    fetchImpl: async (url) => {
+      if (url.startsWith("https://jphimrpybgssduyuziaw.supabase.co/")) {
+        refreshCalls += 1;
+        if (refreshCalls === 1) return new Response("temporarily unavailable", { status: 503 });
+        return jsonResponse({ access_token: "status-recovered-access", refresh_token: "status-recovered-refresh", expires_at: 2_100_000_000 });
+      }
+      assert.equal(url, "https://bookr.fit/dashboard");
+      return dashboardResponse();
+    },
+  });
+
+  await client.bootstrapSession();
+  assert.equal(refreshCalls, 2);
+  assert.deepEqual(waits, [250]);
 });
 
 test("Bookr persists a complete refreshed auth cookie returned by the dashboard", async () => {

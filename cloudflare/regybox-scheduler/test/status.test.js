@@ -204,6 +204,27 @@ test("a calendar-level failure is described without class placeholders", async (
   assert.match(summary.text, /calendar could not be checked \(calendar_or_plan_failure\)/);
 });
 
+test("an empty failed Bookr run is shown as a provider-aware failure", async () => {
+  const lastRun = {
+    ranAt: new Date(NOW_MS - 2 * 60_000).toISOString(),
+    platform: "bookr",
+    status: "failure",
+    mode: "worker",
+    plannedOperations: 0,
+    operations: [],
+  };
+  const model = await buildStatusModel({
+    env: workerEnv({ BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "" }),
+    kv: makeKv({ "regybox:v1:last_run": JSON.stringify(lastRun) }),
+    now: () => NOW_MS,
+    fetchImpl: async () => new Response(ICS_WITH_EVENT("20260713T063000Z")),
+  });
+  const summary = flatChecks(model).find((item) => item.text.startsWith("Last check:"));
+  assert.equal(summary?.level, "bad");
+  assert.match(summary.text, /Bookr\.fit: scheduler run failed/);
+  assert.doesNotMatch(summary.text, /session_refresh_failed|undefined/);
+});
+
 test("recent activity is newest-first with outcome levels and is omitted when empty", async () => {
   const activity = [
     {

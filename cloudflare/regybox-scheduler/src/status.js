@@ -419,6 +419,13 @@ function lastRunCheck(lastRun, nowMs) {
       "See the checks above for what to fix, or check the Worker logs in Cloudflare for details.",
     );
   }
+  if (lastRun.status === "failure") {
+    return check(
+      "bad",
+      `Last check: ${when} — ${recordPrefix(lastRun)}scheduler run failed`,
+      "See the checks above for what to fix, or check the Worker logs in Cloudflare for details.",
+    );
+  }
   if (operations.length === 0) {
     return check("ok", `Last check: ${when} — ${recordPrefix(lastRun)}nothing to do`);
   }
