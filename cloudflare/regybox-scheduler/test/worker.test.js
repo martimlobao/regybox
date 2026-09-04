@@ -119,6 +119,37 @@ test("Bookr calendar errors are redacted before reaching the console", async () 
   );
 });
 
+test("Bookr calendar fetch diagnostics retain the calendar subsystem and HTTP status", async () => {
+  const kv = makeKv();
+  const errors = [];
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  globalThis.fetch = async () => new Response("unavailable", { status: 503 });
+  console.error = (...args) => errors.push(args);
+  try {
+    await assert.rejects(
+      worker.scheduled(
+        { scheduledTime: "2026-09-04T00:00:00.000Z" },
+        {
+          BOOKING_PLATFORM: "bookr",
+          BOOKR_AUTH_COOKIE: "bootstrap-cookie",
+          CALENDAR_URL: "https://calendar.example.test/private.ics",
+          REGYBOX_STATE: kv,
+        },
+        {},
+      ),
+      /Calendar fetch failed: 503/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
+  }
+
+  const output = errors.flat().map(String).join(" ");
+  assert.match(output, /calendar\/plan failed: Calendar fetch failed: 503/);
+  assert.doesNotMatch(output, /Bookr\.fit error \(unexpected_failure\)/);
+});
+
 test("path-prefixed incident links route to the incident handler", async () => {
   const id = "0123456789abcdef0123456789abcdef0123";
   const kv = makeKv(

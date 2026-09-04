@@ -43,6 +43,13 @@ export class BookrLoginError extends Error {
   }
 }
 
+export class BookrSessionRefreshRequiredError extends Error {
+  constructor() {
+    super("Bookr session is valid but needs refresh");
+    this.name = "BookrSessionRefreshRequiredError";
+  }
+}
+
 export class BookrSubscriptionError extends Error {
   constructor(message = "Unable to determine an active Bookr subscription") {
     super(message);
@@ -476,7 +483,7 @@ export function createBookrClient({
     // A status-page health check is deliberately non-mutating. Supabase refresh
     // tokens rotate when used, so refreshing without persisting the replacement
     // would invalidate the Worker's durable session.
-    if (!persistSession) throw new BookrLoginError("Bookr session has expired");
+    if (!persistSession) throw new BookrSessionRefreshRequiredError();
     if (!supabasePublishableKey) throw new BookrLoginError("Bookr session needs refresh but the public auth configuration is unavailable");
     const response = await fetchImpl(`${SUPABASE_ORIGIN}/auth/v1/token?grant_type=refresh_token`, {
       method: "POST",

@@ -5,7 +5,11 @@ import { RegyboxLoginError, createRegyboxClient } from "./regybox.js";
 import { incidentConstants, readIncident } from "./incidents.js";
 import { readRun, readRuns, runConstants } from "./runs.js";
 import { bookingPlatform, platformLabel } from "./platform.js";
-import { BookrSubscriptionError, createBookrClient as defaultBookrClient } from "./bookr.js";
+import {
+  BookrSessionRefreshRequiredError,
+  BookrSubscriptionError,
+  createBookrClient as defaultBookrClient,
+} from "./bookr.js";
 
 const STYLES = `
   :root { color-scheme: light dark; }
@@ -293,6 +297,11 @@ function isBookrLoginError(error) {
     error?.code === "BOOKR_AUTH_ERROR" || error?.status === 401 || error?.status === 403;
 }
 
+function isBookrRefreshRequiredError(error) {
+  return error instanceof BookrSessionRefreshRequiredError ||
+    error?.name === "BookrSessionRefreshRequiredError";
+}
+
 async function bookrCheck(env, { createClient, nowMs, kv }) {
   if (!configured(env.BOOKR_AUTH_COOKIE)) {
     return [];
@@ -320,6 +329,16 @@ async function bookrCheck(env, { createClient, nowMs, kv }) {
           ),
     ];
   } catch (error) {
+    if (isBookrRefreshRequiredError(error)) {
+      return [
+        check(
+          "warn",
+          "Bookr.fit session needs refresh",
+          "The saved session is still structurally valid, but its access token is expiring. " +
+            "This read-only status check did not rotate it; the scheduler will refresh it on its next run.",
+        ),
+      ];
+    }
     if (error instanceof BookrSubscriptionError || error?.name === "BookrSubscriptionError") {
       return [
         check("ok", "Bookr.fit accepts your login"),

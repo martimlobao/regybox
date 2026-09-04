@@ -87,7 +87,10 @@ export async function handleScheduled(env, { scheduledAt, now = () => Date.now()
     });
     await safeRecorderCall(recorder, "setPlan", plan.dispatches.length);
   } catch (error) {
-    console.error(`regybox: calendar/plan failed: ${safeErrorMessage(error, { platform: resolvedPlatform(env) })}`);
+    // Calendar/plan failures occur before either provider client is called.
+    // Preserve their ordinary subsystem diagnostics (including HTTP status)
+    // while operation/API failures remain provider-redacted in the executor.
+    console.error(`regybox: calendar/plan failed: ${safeErrorMessage(error)}`);
     await safeRecorderCall(recorder, "trace", {
       level: "error",
       scope: "calendar",

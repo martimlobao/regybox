@@ -6,6 +6,7 @@ import {
   BOOKR_AUTH_COOKIE_NAME,
   BookrBookingError,
   BookrLoginError,
+  BookrSessionRefreshRequiredError,
   BookrSubscriptionError,
   createBookrClient,
   decodeBookrSession,
@@ -519,7 +520,7 @@ test("Bookr status-style client never rotates an expiring session or writes KV",
     },
   });
 
-  await assert.rejects(() => client.bootstrapSession(), BookrLoginError);
+  await assert.rejects(() => client.bootstrapSession(), BookrSessionRefreshRequiredError);
   assert.equal(requestCount, 0);
   assert.equal(kv.values.size, 0);
 });

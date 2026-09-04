@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { buildStatusModel, renderStatusPage } from "../src/status.js";
 import { buildFailureFingerprint, errorPayload } from "../src/failures.js";
-import { BookrSubscriptionError } from "../src/bookr.js";
+import { BookrLoginError, BookrSessionRefreshRequiredError, BookrSubscriptionError } from "../src/bookr.js";
 
 const ICS_WITH_EVENT = (start) =>
   [
@@ -346,6 +346,32 @@ test("Bookr subscription failures are an explicit red live check", async () => {
   assert.equal(login?.level, "ok");
   assert.equal(subscription?.level, "bad");
   assert.match(subscription?.hint, /membership is active/);
+});
+
+test("Bookr status reports an expiring valid session without claiming login or subscription success", async () => {
+  const model = await buildStatusModel({
+    env: workerEnv({ BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie", CALENDAR_URL: "" }),
+    kv: makeKv(),
+    createBookrClient: () => ({ bootstrapSession: async () => { throw new BookrSessionRefreshRequiredError(); } }),
+  });
+  const checks = flatChecks(model);
+  const refresh = checks.find((item) => item.text === "Bookr.fit session needs refresh");
+  assert.equal(refresh?.level, "warn");
+  assert.match(refresh?.hint, /read-only|next run/);
+  assert.equal(checks.some((item) => item.text === "Bookr.fit accepts your login"), false);
+  assert.equal(checks.some((item) => item.text === "Bookr.fit has an active subscription"), false);
+  assert.equal(checks.some((item) => item.level === "bad" && /rejected your login/.test(item.text)), false);
+});
+
+test("Bookr status still marks invalid sessions as rejected login", async () => {
+  const model = await buildStatusModel({
+    env: workerEnv({ BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie", CALENDAR_URL: "" }),
+    kv: makeKv(),
+    createBookrClient: () => ({ bootstrapSession: async () => { throw new BookrLoginError(); } }),
+  });
+  const rejected = flatChecks(model).find((item) => item.text.startsWith("Bookr.fit rejected your login"));
+  assert.equal(rejected?.level, "bad");
+  assert.match(rejected?.hint, /sb-.*auth-token/);
 });
 
 test("historical run and activity providers are not relabeled when the platform switches", async () => {
