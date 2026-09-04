@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildStatusModel, renderStatusPage } from "../src/status.js";
+import { buildStatusModel, renderRunsPage, renderStatusPage } from "../src/status.js";
 import { buildFailureFingerprint, errorPayload } from "../src/failures.js";
 import { BookrLoginError, BookrSessionRefreshRequiredError, BookrSubscriptionError } from "../src/bookr.js";
 
@@ -304,6 +304,30 @@ test("invalid platform status performs no provider or calendar requests", async 
   assert.match(html, /<h1>Unknown auto-enroller<\/h1>/);
   assert.match(html, /Mode: not configured yet · Unknown · checked/);
   assert.doesNotMatch(html, /<h1>Regybox auto-enroller<\/h1>/);
+});
+
+test("Bookr run history labels legacy Regybox records after a provider switch", () => {
+  const legacyRun = {
+    id: "0123456789abcdef0123456789abcdef0123",
+    status: "success",
+    startedAt: "2026-07-12T10:00:00.000Z",
+    durationMs: 1000,
+    operations: [],
+  };
+  const legacyHtml = renderRunsPage([legacyRun], {
+    platform: "bookr",
+    nowMs: NOW_MS,
+  });
+  assert.match(legacyHtml, /<h1>Bookr\.fit run history<\/h1>/);
+  assert.match(legacyHtml, /<th>Platform<\/th>/);
+  assert.match(legacyHtml, /<td>Regybox<\/td>/);
+
+  const bookrRun = { ...legacyRun, platform: "bookr" };
+  const homogeneousHtml = renderRunsPage([bookrRun], {
+    platform: "bookr",
+    nowMs: NOW_MS,
+  });
+  assert.doesNotMatch(homogeneousHtml, /<th>Platform<\/th>/);
 });
 
 test("Bookr dispatch configuration is shown as an actionable setup error", async () => {

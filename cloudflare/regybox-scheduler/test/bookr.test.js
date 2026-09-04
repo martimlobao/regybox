@@ -6,6 +6,7 @@ import {
   BOOKR_AUTH_COOKIE_NAME,
   BookrBookingError,
   BookrLoginError,
+  BookrRefreshError,
   BookrSessionRefreshRequiredError,
   BookrSubscriptionError,
   createBookrClient,
@@ -19,6 +20,7 @@ import {
   runBookrOperation,
   saveBookrSession,
 } from "../src/bookr.js";
+import { errorPayload, safeErrorMessage } from "../src/failures.js";
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
@@ -427,6 +429,78 @@ test("Bookr client refreshes expiring sessions without exposing tokens to traces
   assert.equal(refreshOptions[0].cache, "no-store");
   assert.equal(refreshOptions[0].headers["Cache-Control"], "no-store");
   assert.doesNotMatch(JSON.stringify(traces), /new-access|new-refresh|access-token|refresh-token/);
+});
+
+test("Bookr transient refresh failures preserve status without replacing the saved cookie", async () => {
+  for (const status of [429, 500, 503]) {
+    const kv = memoryKv();
+    const original = authCookie(1);
+    let refreshCalls = 0;
+    const client = createBookrClient({
+      authCookie: original,
+      kv,
+      now: () => 10_000,
+      supabasePublishableKey: "public-key",
+      fetchImpl: async () => {
+        refreshCalls += 1;
+        return new Response('{"error":"private-body","token":"secret-token"}', { status });
+      },
+    });
+
+    await assert.rejects(
+      () => client.bootstrapSession(),
+      (error) => error instanceof BookrRefreshError
+        && !(error instanceof BookrLoginError)
+        && error.status === status,
+    );
+    assert.equal(refreshCalls, 1);
+    assert.equal(kv.values.size, 0);
+
+    const payload = errorPayload(new BookrRefreshError(status), { platform: "bookr" });
+    assert.equal(payload.errorCode, "session_refresh_failed");
+    assert.match(payload.userNextSteps.join(" "), /Retry/);
+    assert.doesNotMatch(JSON.stringify(payload), /private-body|secret-token|https?:\/\//);
+    assert.equal(safeErrorMessage(new BookrRefreshError(status), { platform: "bookr" }),
+      `Bookr.fit error (session_refresh_failed HTTP ${status})`);
+  }
+});
+
+test("Bookr auth refresh rejection remains a login error", async () => {
+  for (const status of [400, 401, 403]) {
+    const client = createBookrClient({
+      authCookie: authCookie(1),
+      now: () => 10_000,
+      supabasePublishableKey: "public-key",
+      fetchImpl: async () => new Response("unauthorized", { status }),
+    });
+
+    await assert.rejects(
+      () => client.bootstrapSession(),
+      (error) => error instanceof BookrLoginError
+        && !(error instanceof BookrRefreshError)
+        && error.status === status,
+    );
+  }
+});
+
+test("Bookr network refresh failures are provider-safe and non-login errors", async () => {
+  const client = createBookrClient({
+    authCookie: authCookie(1),
+    now: () => 10_000,
+    supabasePublishableKey: "public-key",
+    fetchImpl: async () => {
+      throw new Error("network failed at https://supabase.invalid/private?token=secret-token");
+    },
+  });
+
+  await assert.rejects(
+    () => client.bootstrapSession(),
+    (error) => error instanceof BookrRefreshError
+      && !(error instanceof BookrLoginError)
+      && error.status === null
+      && !error.message.includes("secret-token")
+      && !error.message.includes("https://"),
+  );
 });
 
 test("Bookr persists a complete refreshed auth cookie returned by the dashboard", async () => {

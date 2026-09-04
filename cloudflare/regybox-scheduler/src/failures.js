@@ -103,6 +103,16 @@ const bookrPayloads = {
       "Refresh the status page and run the scheduler again.",
     ],
   },
+  BookrRefreshError: {
+    errorCode: "session_refresh_failed",
+    userTitle: "Bookr.fit session refresh was unavailable",
+    userMessage:
+      "Bookr.fit could not refresh the saved session right now, so the scheduler did not change your saved cookie.",
+    userNextSteps: [
+      "Retry the scheduler later; this may be a temporary Bookr.fit or authentication-service failure.",
+      "Keep BOOKR_AUTH_COOKIE unchanged unless a later run reports that Bookr.fit rejected the session.",
+    ],
+  },
   BookrSubscriptionError: {
     errorCode: "subscription_error",
     userTitle: "No active Bookr.fit subscription",
@@ -244,7 +254,8 @@ export function safeErrorMessage(error, { platform } = {}) {
     return error?.message ?? String(error ?? "");
   }
   const payload = errorPayload(error, { platform });
-  return `Bookr.fit error (${payload.errorCode})`;
+  const status = Number.isInteger(error?.status) ? ` HTTP ${error.status}` : "";
+  return `Bookr.fit error (${payload.errorCode}${status})`;
 }
 
 /** Preserve legacy Error objects for non-Bookr diagnostics while redacting Bookr values. */

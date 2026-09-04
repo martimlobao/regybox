@@ -37,9 +37,10 @@ const BOOKING_ERROR_CODES = new Set([
 ]);
 
 export class BookrLoginError extends Error {
-  constructor(message = "Unable to log in to Bookr.fit") {
+  constructor(message = "Unable to log in to Bookr.fit", status = null) {
     super(message);
     this.name = "BookrLoginError";
+    this.status = Number.isInteger(status) ? status : null;
   }
 }
 
@@ -47,6 +48,16 @@ export class BookrSessionRefreshRequiredError extends Error {
   constructor() {
     super("Bookr session is valid but needs refresh");
     this.name = "BookrSessionRefreshRequiredError";
+  }
+}
+
+export class BookrRefreshError extends Error {
+  constructor(status = null) {
+    super(Number.isInteger(status)
+      ? `Bookr session refresh failed with HTTP ${status}`
+      : "Bookr session refresh failed before a response was received");
+    this.name = "BookrRefreshError";
+    this.status = Number.isInteger(status) ? status : null;
   }
 }
 
@@ -485,20 +496,28 @@ export function createBookrClient({
     // would invalidate the Worker's durable session.
     if (!persistSession) throw new BookrSessionRefreshRequiredError();
     if (!supabasePublishableKey) throw new BookrLoginError("Bookr session needs refresh but the public auth configuration is unavailable");
-    const response = await fetchImpl(`${SUPABASE_ORIGIN}/auth/v1/token?grant_type=refresh_token`, {
-      method: "POST",
-      // The refresh body contains the rotation credential; never follow a
-      // redirect to a different origin and never cache either request or body.
-      redirect: "error",
-      cache: "no-store",
-      headers: {
-        apikey: supabasePublishableKey,
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-      },
-      body: JSON.stringify({ refresh_token: decoded.refreshToken }),
-    });
-    if (!response.ok) throw new BookrLoginError();
+    let response;
+    try {
+      response = await fetchImpl(`${SUPABASE_ORIGIN}/auth/v1/token?grant_type=refresh_token`, {
+        method: "POST",
+        // The refresh body contains the rotation credential; never follow a
+        // redirect to a different origin and never cache either request or body.
+        redirect: "error",
+        cache: "no-store",
+        headers: {
+          apikey: supabasePublishableKey,
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        },
+        body: JSON.stringify({ refresh_token: decoded.refreshToken }),
+      });
+    } catch {
+      throw new BookrRefreshError();
+    }
+    if (!response.ok) {
+      if ([400, 401, 403].includes(response.status)) throw new BookrLoginError(undefined, response.status);
+      throw new BookrRefreshError(response.status);
+    }
     const refreshed = await responseJson(response);
     cookieHeader = encodeBookrSession(refreshed);
     await persistCookieHeader();

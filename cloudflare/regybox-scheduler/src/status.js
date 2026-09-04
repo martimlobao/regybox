@@ -611,7 +611,8 @@ function htmlResponse(html, status = 200) {
 
 export function renderRunsPage(runs, { basePath = "", nowMs = Date.now(), platform = "regybox" } = {}) {
   const label = platform === "bookr" ? "Bookr.fit" : "Regybox";
-  const showPlatform = runs.some((run) => run?.platform === "bookr");
+  const currentPlatform = platform === "bookr" ? "bookr" : "regybox";
+  const showPlatform = runs.some((run) => recordPlatform(run) !== currentPlatform);
   const rows = runs.map((run) => {
     const operations = Array.isArray(run.operations) ? run.operations : [];
     const summary = operations.length > 0 ? operations.map(describeOperation).join("; ") : "nothing to do";
