@@ -599,6 +599,99 @@ test("Bookr reports an accepted mutation as unverified when read-back fails", as
   assert.equal(mutationCount, 1);
 });
 
+test("Bookr treats a failed KV write after a 2xx mutation as unverified", async () => {
+  let puts = 0;
+  let dayReads = 0;
+  let mutationCount = 0;
+  const rotated = encodeBookrSession({
+    access_token: "persist-failed-access",
+    refresh_token: "persist-failed-refresh",
+    expires_at: 2_100_000_000,
+  });
+  const kv = {
+    get: async () => null,
+    put: async () => {
+      puts += 1;
+      if (puts === 2) throw new Error("KV persistence failed");
+    },
+  };
+  const client = createBookrClient({
+    authCookie: authCookie(),
+    kv,
+    fetchImpl: async (url, options) => {
+      if (url.endsWith("/dashboard")) return dashboardResponse();
+      if (url.includes("athlete-calendar/day")) {
+        dayReads += 1;
+        return jsonResponse({ selectedDaySessions: [apiSession()] });
+      }
+      assert.equal(options.method, "POST");
+      mutationCount += 1;
+      return jsonResponse({ status: "booked" }, {
+        headers: { "set-cookie": `${rotated}; Path=/; Secure` },
+      });
+    },
+  });
+
+  await client.bootstrapSession();
+  const selected = (await client.listClasses("2026-09-05"))[0];
+  await assert.rejects(
+    () => client.enroll(selected),
+    (error) => error instanceof BookrMutationVerificationError,
+  );
+  assert.equal(dayReads, 2);
+  assert.equal(mutationCount, 1);
+  assert.equal(puts, 2);
+});
+
+test("Bookr does not report success when a 2xx mutation KV write fails despite enrolled read-back", async () => {
+  let puts = 0;
+  let dayReads = 0;
+  let mutationCount = 0;
+  const rotated = encodeBookrSession({
+    access_token: "durability-access",
+    refresh_token: "durability-refresh",
+    expires_at: 2_100_000_000,
+  });
+  const kv = {
+    get: async () => null,
+    put: async () => {
+      puts += 1;
+      if (puts === 2) throw new Error("KV persistence failed");
+    },
+  };
+  const client = createBookrClient({
+    authCookie: authCookie(),
+    kv,
+    fetchImpl: async (url, options) => {
+      if (url.endsWith("/dashboard")) return dashboardResponse();
+      if (url.includes("athlete-calendar/day")) {
+        dayReads += 1;
+        return jsonResponse({ selectedDaySessions: [apiSession({
+          currentUserBookingStatus: dayReads === 1 ? null : "booked",
+          canBook: dayReads === 1,
+          canCancel: dayReads > 1,
+        })] });
+      }
+      assert.equal(options.method, "POST");
+      mutationCount += 1;
+      return jsonResponse({ status: "booked" }, {
+        headers: { "set-cookie": `${rotated}; Path=/; Secure` },
+      });
+    },
+  });
+
+  await client.bootstrapSession();
+  const selected = (await client.listClasses("2026-09-05"))[0];
+  await assert.rejects(
+    () => client.enroll(selected),
+    (error) => error instanceof BookrMutationVerificationError
+      && errorPayload(error, { platform: "bookr" }).errorCode === "mutation_not_verified",
+  );
+  assert.equal(dayReads, 2);
+  assert.equal(mutationCount, 1);
+  assert.equal(puts, 2);
+});
+
 test("Bookr treats ambiguous mutation outcomes as unverified when read-back cannot prove success", async () => {
   const cases = [
     {

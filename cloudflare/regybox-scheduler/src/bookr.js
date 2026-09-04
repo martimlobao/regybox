@@ -24,6 +24,7 @@ const OPENING_BOUNDARY_GRACE_MS = 30_000;
 const MAX_REFRESH_ATTEMPTS = 3;
 const defaultRefreshBackoffMs = (attempt) => attempt * 250;
 const AUTH_KV_KEY = "regybox:v2:bookr:auth";
+const BOOKR_POST_RESPONSE_FAILURE = Symbol("bookrPostResponseFailure");
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CLASS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const BOOKING_ERROR_CODES = new Set([
@@ -368,6 +369,16 @@ function isMutationTransportError(error) {
   return error instanceof TypeError;
 }
 
+function postResponseFailure() {
+  const error = new Error("Bookr mutation response could not be durably processed");
+  Object.defineProperty(error, BOOKR_POST_RESPONSE_FAILURE, { value: true });
+  return error;
+}
+
+function isPostResponseFailure(error) {
+  return error?.[BOOKR_POST_RESPONSE_FAILURE] === true;
+}
+
 /** Return whether a request is one of the fixed Bookr API method/path pairs. */
 export function isAllowedBookrRequest(url, method) {
   const resolvedMethod = String(method ?? "").toUpperCase();
@@ -509,7 +520,7 @@ export function createBookrClient({
     if (persistSession) await saveBookrSession(kv, bootstrapCookie, cookieHeader);
   }
 
-  async function request(path, { method = "GET", body } = {}) {
+  async function request(path, { method = "GET", body, mutation = false } = {}) {
     const resolvedMethod = String(method).toUpperCase();
     const url = new URL(path, BOOKR_ORIGIN);
     if (!isAllowedBookrRequest(url, resolvedMethod)) throw new Error("Bookr request used a disallowed endpoint");
@@ -536,12 +547,18 @@ export function createBookrClient({
     // An authentication rejection must not replace the last known-good cookie,
     // even if a stale or malicious Set-Cookie header accompanies the response.
     if (response.status !== 401 && response.status !== 403) {
-      const mergedCookieHeader = mergeAuthCookies(cookieHeader, response);
-      const didRotateCookie = mergedCookieHeader !== cookieHeader;
-      cookieHeader = mergedCookieHeader;
-      // Every accepted first-party rotation is durable before an isolate can
-      // be reclaimed.
-      if (didRotateCookie) await persistCookieHeader();
+      try {
+        const mergedCookieHeader = mergeAuthCookies(cookieHeader, response);
+        const didRotateCookie = mergedCookieHeader !== cookieHeader;
+        cookieHeader = mergedCookieHeader;
+        // Every accepted first-party rotation is durable before an isolate can
+        // be reclaimed. A failed write after a successful mutation response
+        // leaves the mutation outcome ambiguous.
+        if (didRotateCookie) await persistCookieHeader();
+      } catch (error) {
+        if (mutation && response.ok) throw postResponseFailure();
+        throw error;
+      }
     }
     await trace({ level: response.ok ? "info" : "warn", scope: "http", code: "bookr_response_received", message: `Bookr request returned HTTP ${response.status}`, data: { endpointPath: url.pathname, httpStatus: response.status } });
     if (response.status === 401 || response.status === 403) throw new BookrLoginError();
@@ -648,6 +665,7 @@ export function createBookrClient({
     try {
       response = await request("/api/dashboard/athlete-class-bookings", {
         method: operation === "enroll" ? "POST" : "DELETE",
+        mutation: true,
         body: operation === "enroll" ? { sessionId: selected.id, subscriptionId } : { sessionId: selected.id },
       });
       // Validate success JSON, but authoritative success is the read-back below.
@@ -657,11 +675,16 @@ export function createBookrClient({
       // status with an unreadable body may still mean Bookr applied the change.
       // Both outcomes are ambiguous; deterministic 4xx/auth/restriction errors
       // remain authoritative and retain their original diagnosis.
-      const ambiguousMutation = isMutationTransportError(error) ||
+      const postResponseError = isPostResponseFailure(error);
+      const ambiguousMutation = isMutationTransportError(error) || postResponseError ||
         (response?.ok === true && error instanceof UnparseableError);
       // Network ambiguity is safe only when the read-back proves the result.
       try {
-        return await verify(selected.id, { operation, date: selected.date });
+        const verified = await verify(selected.id, { operation, date: selected.date });
+        // A rotated in-memory cookie is not enough when its durable KV write
+        // failed: the next invocation could send the stale refresh token.
+        if (postResponseError) throw new BookrMutationVerificationError();
+        return verified;
       } catch (verificationError) {
         // A completed read-back showing the old state is stronger evidence
         // than the transport error: report the mutation as unverified.
