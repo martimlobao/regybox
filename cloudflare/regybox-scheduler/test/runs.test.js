@@ -318,3 +318,37 @@ test("scheduled execution setup failures never inherit operations from the previ
   assert.deepEqual(run.operations, []);
   assert.ok(!JSON.stringify(run).includes("2026-07-19"));
 });
+
+test("run traces redact Bookr auth cookies and opaque auth fields", async () => {
+  const kv = makeKv();
+  const id = "4123456789abcdef0123456789abcdef0123";
+  const recorder = await createRunRecorder({ kv, mode: "worker", id, now: () => 0 });
+  const originalLog = console.log;
+  console.log = () => {};
+  try {
+    await recorder.trace({
+      message: "BOOKR_AUTH_COOKIE=sb-jphimrpybgssduyuziaw-auth-token.0=secret-cookie",
+      data: { endpointPath: "/dashboard?token=secret", token: "secret-token" },
+    });
+    await recorder.finalize({ operations: [] });
+  } finally {
+    console.log = originalLog;
+  }
+  const run = await readRun(kv, id);
+  const serialized = JSON.stringify(run);
+  assert.doesNotMatch(serialized, /secret-cookie|secret-token|token=secret/);
+});
+
+test("run records retain their provider metadata for mixed-platform history", async () => {
+  const kv = makeKv();
+  const id = "5123456789abcdef0123456789abcdef0123";
+  const recorder = await createRunRecorder({ kv, mode: "worker", platform: "bookr", id, now: () => 0 });
+  await recorder.finalize({ operations: [] });
+  const run = await readRun(kv, id);
+  assert.equal(run.platform, "bookr");
+  assert.equal((await readRuns(kv))[0].platform, "bookr");
+  const html = renderRunPage(run);
+  assert.match(html, /Bookr\.fit run details/);
+  const list = await handleRunsRequest(kv);
+  assert.match(await list.text(), /Bookr\.fit/);
+});

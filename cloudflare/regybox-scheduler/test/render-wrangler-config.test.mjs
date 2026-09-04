@@ -14,6 +14,7 @@ import {
 const template = `{
   "keep_vars": true,
   "vars": {
+    "BOOKING_PLATFORM": "regybox",
     "CLASS_MAP": "CrossFit = WOD",
     "TIMEZONE": "Europe/Lisbon",
     "LOOKAHEAD_HOURS": "73"
@@ -48,11 +49,13 @@ test("renderWranglerConfig injects worker vars from env", () => {
   const rendered = JSON.parse(
     renderWranglerConfig(template, "test-kv-namespace-id", {
       GITHUB_OWNER: "example-owner",
+      BOOKING_PLATFORM: "bookr",
       CLASS_MAP: "CrossFit = WOD",
     }),
   );
   assert.deepEqual(rendered.vars, {
-    GITHUB_OWNER: "example-owner",
+      GITHUB_OWNER: "example-owner",
+      BOOKING_PLATFORM: "bookr",
       CLASS_MAP: "CrossFit = WOD",
   });
 });
@@ -62,12 +65,23 @@ test("collectWorkerVars ignores empty values", () => {
     collectWorkerVars({
       GITHUB_OWNER: " example-owner ",
       GITHUB_REPO: "   ",
+      BOOKING_PLATFORM: "  bookr  ",
       LOOKAHEAD_HOURS: "73",
     }),
     {
       GITHUB_OWNER: "example-owner",
+      BOOKING_PLATFORM: "bookr",
       LOOKAHEAD_HOURS: "73",
     },
+  );
+});
+
+test("Bookr authentication cookies are never deploy-time text variables", () => {
+  assert.deepEqual(
+    collectWorkerVars({
+      BOOKR_AUTH_COOKIE: "sb-jphimrpybgssduyuziaw-auth-token=secret",
+    }),
+    {},
   );
 });
 

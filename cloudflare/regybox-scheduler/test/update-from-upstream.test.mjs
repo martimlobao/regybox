@@ -21,6 +21,7 @@ const upstreamConfig = `{
   "$schema": "https://example.test/wrangler.schema.json",
   "name": "regybox-scheduler",
   "vars": {
+    "BOOKING_PLATFORM": "regybox",
     "CLASS_MAP": "CrossFit = WOD",
     "TIMEZONE": "Europe/Lisbon"
   },
@@ -32,6 +33,7 @@ const deploymentConfig = `{
   "name": "ana-regybox",
   "keep_vars": true,
   "vars": {
+    "BOOKING_PLATFORM": "bookr",
     "CLASS_MAP": "Yoga = Yoga",
     "TIMEZONE": "Europe/Madrid",
     "STATUS_URL": "https://worker.example.test/regybox"
@@ -39,7 +41,7 @@ const deploymentConfig = `{
   "kv_namespaces": [{ "binding": "REGYBOX_STATE", "id": "ana-kv" }]
 }`;
 
-test("automatic updates keep the Worker identity and dashboard-owned variables", () => {
+test("automatic updates keep the Worker identity and dashboard-owned platform variables", () => {
   const merged = JSON.parse(
     mergeDeploymentConfig({ deploymentText: deploymentConfig, upstreamText: upstreamConfig }),
   );

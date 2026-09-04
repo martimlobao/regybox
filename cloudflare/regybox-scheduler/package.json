@@ -19,17 +19,23 @@
       "REGYBOX_STATE": {
         "description": "Created automatically to remember which classes have already been handled."
       },
+      "BOOKING_PLATFORM": {
+        "description": "Booking platform to use: regybox (default) or bookr. Set this text variable to bookr when your box uses Bookr.fit."
+      },
       "PHPSESSID": {
         "description": "Copy this cookie value from regybox.pt developer tools so the Worker can sign in."
       },
       "REGYBOX_USER": {
         "description": "Copy this cookie value from regybox.pt developer tools so the Worker can identify your account."
       },
+      "BOOKR_AUTH_COOKIE": {
+        "description": "Required only when BOOKING_PLATFORM is bookr. Paste only the Bookr Supabase auth cookie pair(s), including every present numbered chunk in order, as a Worker secret; never use a text variable."
+      },
       "CALENDAR_URL": {
         "description": "Paste the secret iCal address from your Google Calendar settings."
       },
       "CLASS_MAP": {
-        "description": "Which calendar events book which Regybox classes, for example: CrossFit books the WOD class. Separate extra rules with semicolons and add backup class names with commas."
+        "description": "Which calendar events book which classes on the selected platform, for example: CrossFit books the WOD class. Separate extra rules with semicolons and add backup class names with commas."
       },
       "TIMEZONE": {
         "description": "Timezone used to interpret class times."

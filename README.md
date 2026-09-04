@@ -5,10 +5,10 @@
 
 ![The Worker's status page: green setup and live checks, the last run, and recent activity including an enrollment.](./static/status-page.png)
 
-Automatically enroll in a CrossFit class on the Regybox platform.
+Automatically enroll in a CrossFit class on Regybox or Bookr.fit.
 
 Add your classes to your calendar (or delete one to skip a day), and this project
-books and cancels the matching Regybox classes for you, optionally emailing you a
+books and cancels matching classes for you, optionally emailing you a
 confirmation. Use the [one-click Cloudflare setup](#one-click-cloudflare-setup):
 a Cloudflare Worker checks your calendar every half hour and books classes
 directly, with no fixed schedule to maintain. ([Legacy setup instructions](docs/legacy-setups.md)
@@ -20,13 +20,20 @@ Everything runs in a free Cloudflare account that you own: your credentials stay
 with you, and there is no server to maintain. You need a Cloudflare account and a
 GitHub account (both free — GitHub is only used to store your copy of the code).
 
-### 1. Copy Your Regybox Cookies
+### 1. Copy Your Booking-Platform Login
 
-1. Open [regybox.pt](https://www.regybox.pt/app/app_nova/index.php) and sign in.
-2. Open your browser's developer tools (`Cmd+Option+I` on macOS or `Ctrl+Shift+I` on
-   Windows/Linux) and select the **Application** tab.
-3. Find the cookies named `PHPSESSID` and `regybox_user` and copy their values
-   somewhere handy — you will paste them during the deploy step.
+Choose one platform:
+
+- **Regybox:** open [regybox.pt](https://www.regybox.pt/app/app_nova/index.php),
+  sign in, then use your browser developer tools (**Application → Cookies**) to
+  copy the values of `PHPSESSID` and `regybox_user`.
+- **Bookr.fit:** open the [Bookr.fit dashboard](https://bookr.fit/dashboard), sign
+  in, then use **Application → Cookies → bookr.fit** to copy only the logical
+  `sb-jphimrpybgssduyuziaw-auth-token` cookie. If it is split, copy every present
+  `name=value` chunk from `.0` through the highest present suffix in ascending
+  order and join them with `; `. Do not copy unrelated cookies or the `Cookie:` header.
+
+Keep the values handy for the deploy step and never commit them.
 
 ![Browser dev tools showing how to copy the PHPSESSID and regybox_user cookies.](./static/cookies.png)
 
@@ -45,10 +52,12 @@ GitHub account (both free — GitHub is only used to store your copy of the code
 
 1. Click the button above and sign in to Cloudflare (and GitHub, when asked).
 2. Fill in the values it asks for (each field explains where its value comes from):
-    - `PHPSESSID` and `REGYBOX_USER` — the cookie values from step 1.
+    - `BOOKING_PLATFORM` — keep `regybox`, or enter `bookr` for Bookr.fit.
+    - For Regybox, fill `PHPSESSID` and `REGYBOX_USER`; for Bookr.fit, fill
+      `BOOKR_AUTH_COOKIE`. Leave the other platform's credential fields empty.
     - `CALENDAR_URL` — the secret calendar link from step 2.
-    - `CLASS_MAP` — which calendar events book which Regybox classes. Each rule is
-      `Calendar event = Regybox class`; separate several rules with `;` and give
+    - `CLASS_MAP` — which calendar events book which platform classes. Each rule is
+      `Calendar event = class name`; separate several rules with `;` and give
       backup class names with commas. Examples:
 
       ```text
@@ -60,7 +69,7 @@ GitHub account (both free — GitHub is only used to store your copy of the code
       "Weightlifting", and for events titled "CrossFit" tries `WOD` first and
       `Weekend WOD` if there is no `WOD` at that time.
 
-   ![The Create a Worker screen prompting for the KV namespace, cookie values, calendar link, and CLASS_MAP.](./static/deploy-screen.png)
+   ![An illustrative Create a Worker screen. The current setup also lets you select a booking platform and its credentials.](./static/deploy-screen.png)
 
 3. Click **Create and deploy**. Cloudflare creates the storage and the half-hourly
    schedule automatically. You can skip everything under **Advanced settings** —
@@ -71,7 +80,58 @@ To change any of these values later, open the Worker in the Cloudflare dashboard
 and edit them under **Settings → Variables and Secrets** — the status page (step 6)
 always shows the booking rules currently in effect. Your dashboard values stay in
 place when the Worker is redeployed; in particular, updates do not replace your
-`CLASS_MAP`, cookies, calendar URL, or email settings.
+`CLASS_MAP`, cookies, calendar URL, or email settings. This uses Wrangler's
+documented [`keep_vars` behavior](https://developers.cloudflare.com/workers/wrangler/configuration/);
+the one-click form uses the binding descriptions in `package.json` as
+[deployment guidance](https://developers.cloudflare.com/workers/platform/deploy-buttons/).
+
+### Switch an Existing Worker to Bookr.fit
+
+This is a Worker-only switch: no GitHub Action, GitHub token, or GitHub repository
+secret is needed for the one-click scheduler. Bookr.fit is not supported by the
+legacy Python CLI, GitHub Action, or GitHub-dispatch execution path.
+
+1. Deploy or update to a Worker version that supports Bookr.fit while leaving
+   `BOOKING_PLATFORM` unset or set to `regybox`. Refresh the status page and
+   confirm the existing Regybox checks still pass before changing providers.
+2. In **Settings → Variables and Secrets**, add `BOOKR_AUTH_COOKIE` as a
+   **Secret**. In the browser's cookie storage,
+   copy only the Bookr logical auth cookie
+   `sb-jphimrpybgssduyuziaw-auth-token`: use its single `name=value` pair when
+   present, or copy every numbered chunk from `.0` through the highest present
+   suffix in ascending order and join the pairs with `; `. For example, the names-only
+   shape is `sb-jphimrpybgssduyuziaw-auth-token.0=<value>;`
+   `sb-jphimrpybgssduyuziaw-auth-token.1=<value>`. Do not include a `Cookie:`
+   header or unrelated cookies, and do not put the value in a text variable,
+   `wrangler.jsonc`, `.env`, or source control.
+3. In the same dashboard section, add or change the plain-text variable
+   `BOOKING_PLATFORM` to `bookr`, then deploy the binding change.
+4. Leave `CALENDAR_URL`, `CLASS_MAP`, `TIMEZONE`, and the `REGYBOX_STATE` KV binding
+   in place. Existing `PHPSESSID` and `REGYBOX_USER` secrets can stay saved; Bookr
+   does not read them. Bookr uses separate scheduler state, so legacy Regybox
+   enrollment records cannot suppress Bookr checks. Bookr returns the class title
+   and box separately, so an existing target such as `WOD Rato` still matches the
+   `WOD` class at the `Rato` box, and `Open Box Rato` still matches `Open Box` at
+   `Rato`. The suffix must be the exact box name; ambiguous matches fail closed.
+5. Open the status page and require green **Booking platform: Bookr.fit**,
+   **Bookr.fit login**, **active subscription**, and **calendar** checks before
+   relying on the next scheduled run.
+
+For a manual Wrangler deployment, enter the secret interactively (so it does not
+enter shell history), then deploy with the non-secret selection. Cloudflare's
+[secrets documentation](https://developers.cloudflare.com/workers/configuration/secrets/)
+also recommends interactive secret updates for sensitive values:
+
+```bash
+cd cloudflare/regybox-scheduler
+bunx wrangler secret put BOOKR_AUTH_COOKIE
+BOOKING_PLATFORM=bookr CF_KV_NAMESPACE_ID=<your-kv-namespace-id> bun run deploy:manual
+```
+
+To roll back, set `BOOKING_PLATFORM` to `regybox`, deploy that binding change,
+and confirm the original Regybox login and calendar checks are green. The
+existing Regybox cookie secrets are used again. Do not delete either platform's
+credentials merely to switch platforms.
 
 #### Keep the Status Page Private (Recommended)
 
@@ -177,7 +237,7 @@ Deployed Worker code can use that Worker's bindings and secrets at runtime, so
 installing the App means trusting the Regybox updater and upstream code as an
 automatic update channel.
 
-Never commit Cloudflare or Regybox credentials, cookies, calendar URLs, or email
+Never commit Cloudflare, Regybox, or Bookr.fit credentials, cookies, calendar URLs, or email
 passwords to the repository. The App's least-privilege GitHub permissions are
 **Metadata: read**, **Contents: read and write**, and **Pull requests: read and
 write**; it does not request Actions or Workflows permissions.
@@ -217,9 +277,9 @@ page tells you how to fix it.
 
 From then on it books any class that appears on your calendar (usually the moment
 enrollment opens) and cancels a booking if you delete the event. When your
-Regybox login eventually expires, the status page and the notification email will
-tell you — copy fresh cookie values from regybox.pt and update `PHPSESSID` under
-**Settings → Variables and Secrets**, then you're back in business.
+booking-platform login eventually expires, the status page and notification email
+tell you which provider credential to refresh under **Settings → Variables and
+Secrets**, then you're back in business.
 
 ### Seeing What It's Doing
 
@@ -242,6 +302,14 @@ tell you — copy fresh cookie values from regybox.pt and update `PHPSESSID` und
   raw HTML, calendar URLs or contents, email-bearing event/cache identifiers, query
   strings, tokens, stack traces, or complete action URLs. Protect the Worker with
   Cloudflare Access anyway because class names and times are visible by design.
+- **Bookr.fit security boundary**: an anonymous calendar request returned `401`
+  during integration testing. An authenticated response included attendee/profile
+  fields and free-form notes that booking does not need, so the Worker immediately
+  projects each class onto an allowlist and never stores or logs participant data.
+  The review did not enumerate users or probe unrelated accounts. Refreshed
+  Supabase session material is stored only as a versioned AES-GCM envelope in KV;
+  refresh-token rotation follows Supabase's
+  [session guidance](https://supabase.com/docs/guides/auth/sessions).
 - **Live tail** (for the technically inclined): `bunx wrangler tail <worker-name>`
   streams runs as they happen.
 

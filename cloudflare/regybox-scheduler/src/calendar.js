@@ -1,4 +1,6 @@
-const KV_PREFIX = "regybox:v1:calendar:";
+import { bookingPlatform, calendarKvPrefix, REGYBOX_CALENDAR_KV_PREFIX } from "./platform.js";
+
+const KV_PREFIX = REGYBOX_CALENDAR_KV_PREFIX;
 // Cron runs at :28 and :58. Refreshing after 5h30 ensures the first eligible
 // cron is never later than six hours after the previous check.
 const NOT_OPEN_REFRESH_MS = 5.5 * 60 * 60 * 1000;
@@ -343,7 +345,14 @@ function createZonedDateParts(timeZone) {
     );
 }
 
-function eventDetails(props, start, zonedDateParts, classType, summary = props.SUMMARY) {
+function eventDetails(
+  props,
+  start,
+  zonedDateParts,
+  classType,
+  summary = props.SUMMARY,
+  cachePrefix = KV_PREFIX,
+) {
   const uid = props.UID || `${summary}:${start.toISOString()}`;
   const fingerprint = `${uid}:${start.toISOString()}`;
   const isUtc = props.DTSTART.trim().endsWith("Z");
@@ -359,7 +368,7 @@ function eventDetails(props, start, zonedDateParts, classType, summary = props.S
       ? `${zoned.hour}:${zoned.minute}`
       : `${pad(start.getUTCHours())}:${pad(start.getUTCMinutes())}`,
     fingerprint,
-    cacheKey: `${KV_PREFIX}${fingerprint}`,
+    cacheKey: `${cachePrefix}${fingerprint}`,
     classType,
   };
 }
@@ -418,6 +427,7 @@ function appendOverrideInstances({
   masterSummary,
   classRule,
   rulesByEventName,
+  cachePrefix,
 }) {
   for (const props of overrides) {
     if (isCancelledEvent(props)) {
@@ -437,6 +447,7 @@ function appendOverrideInstances({
           zonedDateParts,
           classRuleForSummary(summary, rulesByEventName)?.classType ?? classRule.classType,
           summary,
+          cachePrefix,
         ),
       );
     }
@@ -450,6 +461,7 @@ export function expandCalendarEvents({
   calendarEventNames,
   classRules,
   timeZone = "Europe/Lisbon",
+  cachePrefix = KV_PREFIX,
 }) {
   const resolvedRules = classRules ?? (calendarEventNames ?? []).map((eventName) => ({
     eventName,
@@ -510,7 +522,14 @@ export function expandCalendarEvents({
         );
     events.push(
       ...starts.map((instanceStart) =>
-        eventDetails(props, instanceStart, zonedDateParts, classRule.classType),
+        eventDetails(
+          props,
+          instanceStart,
+          zonedDateParts,
+          classRule.classType,
+          props.SUMMARY,
+          cachePrefix,
+        ),
       ),
     );
     appendOverrideInstances({
@@ -522,20 +541,21 @@ export function expandCalendarEvents({
       masterSummary: props.SUMMARY,
       classRule,
       rulesByEventName,
+      cachePrefix,
     });
   }
 
   return events.sort((left, right) => left.start - right.start);
 }
 
-async function listKvEntries(kv) {
+async function listKvEntries(kv, prefix = KV_PREFIX) {
   if (typeof kv.list !== "function") {
     return [];
   }
   const keys = [];
   let cursor;
   do {
-    const response = await kv.list({ prefix: KV_PREFIX, cursor });
+    const response = await kv.list({ prefix, cursor });
     keys.push(...(response.keys ?? []));
     cursor = response.list_complete === false ? response.cursor : undefined;
   } while (cursor);
@@ -599,7 +619,7 @@ function notOpenShouldDispatch(cached, now) {
   return now.getTime() - lastCheckedAt.getTime() >= NOT_OPEN_REFRESH_MS;
 }
 
-function dispatchPayload({ operation, event, cacheKey, cached }) {
+function dispatchPayload({ operation, event, cacheKey, cached, platform = "regybox" }) {
   const classDate = event?.classDate ?? cached.classDate;
   const classTime = event?.classTime ?? cached.classTime;
   const classType = event ? event.classType : cached.classType;
@@ -607,6 +627,7 @@ function dispatchPayload({ operation, event, cacheKey, cached }) {
   const calendarEventName = event?.summary ?? cached.calendarEventName ?? "";
   return {
     operation,
+    platform,
     inputs: {
       operation,
       "class-date": classDate,
@@ -620,6 +641,8 @@ function dispatchPayload({ operation, event, cacheKey, cached }) {
 }
 
 export async function buildPlan({ env, kv, icsText, now = new Date(), onTrace = async () => {} }) {
+  const platform = bookingPlatform(env);
+  const cachePrefix = calendarKvPrefix(platform);
   const lookaheadHours = defaultLookaheadHours(env);
   const classRules = resolveClassRules(env);
   const events = expandCalendarEvents({
@@ -628,6 +651,7 @@ export async function buildPlan({ env, kv, icsText, now = new Date(), onTrace = 
     lookaheadHours,
     classRules,
     timeZone: env.TIMEZONE || "Europe/Lisbon",
+    cachePrefix,
   });
   await onTrace({
     scope: "calendar",
@@ -638,7 +662,7 @@ export async function buildPlan({ env, kv, icsText, now = new Date(), onTrace = 
   const activeKeys = new Set(events.map((event) => event.cacheKey));
   const activeSlots = new Set(events.map((event) => eventSlotKey(event)).filter(Boolean));
   const dispatches = [];
-  const kvEntries = await listKvEntries(kv);
+  const kvEntries = await listKvEntries(kv, cachePrefix);
   const cachedKvEntries = await Promise.all(
     kvEntries.map(async ({ name }) => [name, await readJson(kv, name)]),
   );
@@ -717,6 +741,7 @@ export async function buildPlan({ env, kv, icsText, now = new Date(), onTrace = 
           event,
           cacheKey: event.cacheKey,
           cached: {},
+          platform,
         }),
       );
       plannedEnrollmentSlots.add(slotKey);
@@ -736,6 +761,7 @@ export async function buildPlan({ env, kv, icsText, now = new Date(), onTrace = 
           event: null,
           cacheKey: name,
           cached,
+          platform,
         }),
       );
     }
