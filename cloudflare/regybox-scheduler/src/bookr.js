@@ -653,15 +653,19 @@ export function createBookrClient({
       // Validate success JSON, but authoritative success is the read-back below.
       await responseJson(response);
     } catch (error) {
+      // A lost transport has no authoritative response, and a successful HTTP
+      // status with an unreadable body may still mean Bookr applied the change.
+      // Both outcomes are ambiguous; deterministic 4xx/auth/restriction errors
+      // remain authoritative and retain their original diagnosis.
+      const ambiguousMutation = isMutationTransportError(error) ||
+        (response?.ok === true && error instanceof UnparseableError);
       // Network ambiguity is safe only when the read-back proves the result.
       try {
         return await verify(selected.id, { operation, date: selected.date });
       } catch (verificationError) {
         // A completed read-back showing the old state is stronger evidence
         // than the transport error: report the mutation as unverified.
-        if (isMutationTransportError(error) && verificationError instanceof BookrMutationVerificationError) {
-          throw verificationError;
-        }
+        if (ambiguousMutation) throw new BookrMutationVerificationError();
         throw error;
       }
     }

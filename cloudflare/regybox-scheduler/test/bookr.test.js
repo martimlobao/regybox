@@ -599,6 +599,61 @@ test("Bookr reports an accepted mutation as unverified when read-back fails", as
   assert.equal(mutationCount, 1);
 });
 
+test("Bookr treats ambiguous mutation outcomes as unverified when read-back cannot prove success", async () => {
+  const cases = [
+    {
+      name: "network mutation and network read-back failure",
+      mutation: () => { throw new TypeError("mutation transport failed"); },
+      verification: () => { throw new TypeError("read-back transport failed"); },
+    },
+    {
+      name: "network mutation and auth read-back failure",
+      mutation: () => { throw new TypeError("mutation transport failed"); },
+      verification: () => new Response("unauthorized", { status: 401 }),
+    },
+    {
+      name: "network mutation and schema read-back failure",
+      mutation: () => { throw new TypeError("mutation transport failed"); },
+      verification: () => jsonResponse({ selectedDaySessions: null }),
+    },
+    {
+      name: "malformed successful mutation and network read-back failure",
+      mutation: () => new Response("not-json", { status: 200, headers: { "content-type": "application/json" } }),
+      verification: () => { throw new TypeError("read-back transport failed"); },
+    },
+  ];
+
+  for (const scenario of cases) {
+    let dayReads = 0;
+    let mutationCount = 0;
+    const client = createBookrClient({
+      authCookie: authCookie(),
+      fetchImpl: async (url, options) => {
+        if (url.endsWith("/dashboard")) return dashboardResponse();
+        if (url.includes("athlete-calendar/day")) {
+          dayReads += 1;
+          if (dayReads === 1) return jsonResponse({ selectedDaySessions: [apiSession()] });
+          return scenario.verification();
+        }
+        assert.equal(options.method, "POST", scenario.name);
+        mutationCount += 1;
+        return scenario.mutation();
+      },
+    });
+
+    await client.bootstrapSession();
+    const selected = (await client.listClasses("2026-09-05"))[0];
+    await assert.rejects(
+      () => client.enroll(selected),
+      (error) => error instanceof BookrMutationVerificationError
+        && errorPayload(error, { platform: "bookr" }).errorCode === "mutation_not_verified",
+      scenario.name,
+    );
+    assert.equal(dayReads, 2, scenario.name);
+    assert.equal(mutationCount, 1, scenario.name);
+  }
+});
+
 test("Bookr reports an ambiguous mutation as unverified when read-back shows the old state", async () => {
   let dayReads = 0;
   const client = createBookrClient({
