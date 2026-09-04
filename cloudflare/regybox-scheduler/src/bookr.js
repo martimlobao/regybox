@@ -238,16 +238,18 @@ function partsInZone(timestamp, timezone) {
 function count(value) { return Array.isArray(value) ? value.length : Number.isInteger(value) && value >= 0 ? value : null; }
 
 /** Project Bookr's PII-rich object to the small internal class representation. */
-export function normalizeBookrSession(value, { now = () => Date.now() } = {}) {
+export function normalizeBookrSession(value, { now = () => Date.now(), timezone = "Europe/Lisbon" } = {}) {
   if (!value || typeof value !== "object" || !UUID_RE.test(String(value.id ?? "")) || typeof value.title !== "string" || typeof value.startsAt !== "string") {
     throw new UnparseableError("Bookr returned an invalid class session");
   }
   const startsAt = Date.parse(value.startsAt);
   const endsAt = Date.parse(value.endsAt);
-  const timezone = typeof value.timeZone === "string" ? value.timeZone : "Europe/Lisbon";
+  const sessionTimezone = typeof value.timeZone === "string" && value.timeZone.trim()
+    ? value.timeZone.trim()
+    : timezone;
   if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt) || endsAt <= startsAt) throw new UnparseableError("Bookr returned invalid class times");
   let start; let end;
-  try { start = partsInZone(startsAt, timezone); end = partsInZone(endsAt, timezone); } catch { throw new UnparseableError("Bookr returned an invalid class timezone"); }
+  try { start = partsInZone(startsAt, sessionTimezone); end = partsInZone(endsAt, sessionTimezone); } catch { throw new UnparseableError("Bookr returned an invalid class timezone"); }
   const registered = count(value.registeredParticipants);
   const waitlisted = count(value.waitlistedParticipants);
   const capacity = value.capacity === null
@@ -500,7 +502,7 @@ export function createBookrClient({
     const response = await request(`/api/dashboard/athlete-calendar/day?date=${encodeURIComponent(classDate)}`);
     const payload = await responseJson(response);
     if (!payload || !Array.isArray(payload.selectedDaySessions)) throw new UnparseableError("Bookr returned an invalid class calendar");
-    return payload.selectedDaySessions.map((session) => normalizeBookrSession(session, { now }));
+    return payload.selectedDaySessions.map((session) => normalizeBookrSession(session, { now, timezone }));
   }
 
   async function bootstrapSession() {
@@ -558,13 +560,26 @@ function matchesBookrClassType(session, requestedType) {
   return requested.slice(0, -(box.length + 1)).trim() === name;
 }
 
-function selectSession(sessions, { classDate, classTime, classTypes }) {
-  for (const classType of classTypes) {
-    const matches = sessions.filter((session) =>
+function selectSession(sessions, { classDate, classTime, classTypes, operation = "enroll" }) {
+  const matchesByType = classTypes.map((classType) => sessions.filter((session) =>
       session.date === classDate &&
       session.start === classTime &&
       matchesBookrClassType(session, classType),
-    );
+    ));
+  if (matchesByType.some((matches) => matches.length > 1)) {
+    throw new UnparseableError("Bookr returned ambiguous matching classes");
+  }
+  if (operation === "unenroll") {
+    const enrolled = new Map();
+    for (const matches of matchesByType) {
+      for (const session of matches) {
+        if (session.userIsEnrolled) enrolled.set(session.id, session);
+      }
+    }
+    if (enrolled.size > 1) throw new UnparseableError("Bookr returned ambiguous matching classes");
+    if (enrolled.size === 1) return enrolled.values().next().value;
+  }
+  for (const matches of matchesByType) {
     if (matches.length > 1) throw new UnparseableError("Bookr returned ambiguous matching classes");
     if (matches.length === 1) return matches[0];
   }
@@ -581,7 +596,7 @@ export async function runBookrOperation({ client, operation = "enroll", classDat
   const trace = async (event) => { try { await onTrace(safeTrace(event)); } catch { /* best effort */ } };
   const startedAt = now();
   for (let poll = 0; poll < maxPolls && now() - startedAt < timeoutSeconds * 1000; poll += 1) {
-    const selected = selectSession(await client.listClasses(classDate), { classDate, classTime: normalizedTime, classTypes });
+    const selected = selectSession(await client.listClasses(classDate), { classDate, classTime: normalizedTime, classTypes, operation });
     await trace({ level: "info", scope: "bookr", code: "class_state_observed", message: "Parsed Bookr class state", data: { fetchCount: poll + 1, isOpen: selected.isOpen, userIsEnrolled: selected.userIsEnrolled, isFull: selected.isFull } });
     if (operation === "unenroll") {
       if (!selected.userIsEnrolled) return bookrResult("unenroll", "noop", selected.name);

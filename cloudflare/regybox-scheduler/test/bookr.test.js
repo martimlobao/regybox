@@ -299,6 +299,67 @@ test("Bookr matching fails closed when an exact box suffix matches multiple sess
   );
 });
 
+test("Bookr unenrollment searches fallback class names for an enrolled candidate", async () => {
+  const primary = normalizeBookrSession(apiSession({ title: "WOD", boxName: "Rato" }));
+  const fallback = normalizeBookrSession(apiSession({
+    id: "33333333-3333-4333-8333-333333333333",
+    title: "Weekend WOD",
+    boxName: "Rato",
+    currentUserBookingStatus: "booked",
+    canCancel: true,
+  }));
+  const unenrolled = [];
+  const client = {
+    listClasses: async () => [primary, fallback],
+    unenroll: async (session) => unenrolled.push(session.id),
+    enroll: async (session) => unenrolled.push(`enroll:${session.id}`),
+  };
+
+  const result = await runBookrOperation({
+    client,
+    operation: "unenroll",
+    classDate: "2026-09-05",
+    classTime: "07:30",
+    classType: "WOD Rato, Weekend WOD Rato",
+  });
+  assert.deepEqual(result, { operation: "unenroll", status: "success", classType: "Weekend WOD" });
+  assert.deepEqual(unenrolled, [fallback.id]);
+
+  const enrollCalls = [];
+  const enrollResult = await runBookrOperation({
+    client: {
+      ...client,
+      enroll: async (session) => enrollCalls.push(session.id),
+    },
+    operation: "enroll",
+    classDate: "2026-09-05",
+    classTime: "07:30",
+    classType: "WOD Rato, Weekend WOD Rato",
+  });
+  assert.deepEqual(enrollResult, { operation: "enroll", status: "success", classType: "WOD" });
+  assert.deepEqual(enrollCalls, [primary.id]);
+});
+
+test("Bookr listClasses uses the configured timezone when a session omits timeZone", async () => {
+  const session = apiSession({ timeZone: undefined });
+  const client = createBookrClient({
+    authCookie: authCookie(),
+    timezone: "America/New_York",
+    fetchImpl: async (url) => url.endsWith("/dashboard")
+      ? dashboardResponse()
+      : jsonResponse({ selectedDaySessions: [session] }),
+  });
+  await client.bootstrapSession();
+  const [parsed] = await client.listClasses("2026-09-05");
+  assert.equal(parsed.date, "2026-09-05");
+  assert.equal(parsed.start, "02:30");
+});
+
+test("Bookr session timeZone overrides the configured fallback timezone", () => {
+  const parsed = normalizeBookrSession(apiSession({ timeZone: "Europe/Lisbon" }), { timezone: "America/New_York" });
+  assert.equal(parsed.start, "07:30");
+});
+
 test("Bookr verifies an ambiguous booking result without replaying the mutation", async () => {
   let state = apiSession();
   let mutationCount = 0;
