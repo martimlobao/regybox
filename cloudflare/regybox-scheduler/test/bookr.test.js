@@ -6,6 +6,7 @@ import {
   BOOKR_AUTH_COOKIE_NAME,
   BookrBookingError,
   BookrLoginError,
+  BookrMutationVerificationError,
   BookrRefreshError,
   BookrSessionRefreshRequiredError,
   BookrSubscriptionError,
@@ -308,6 +309,41 @@ test("Bookr run operation preserves success, no-op, and not-open envelopes", asy
   );
 });
 
+test("Bookr polls through a just-elapsed opening boundary before returning a no-op", async () => {
+  let clock = Date.parse("2026-09-05T06:30:00.000Z");
+  const boundary = normalizeBookrSession(
+    apiSession({ title: "WOD", canBook: false, bookingWindowOpensAt: "2026-09-05T06:29:59.000Z" }),
+    { now: () => clock },
+  );
+  const open = normalizeBookrSession(apiSession({ title: "WOD", canBook: true }), { now: () => clock });
+  const stale = normalizeBookrSession(
+    apiSession({ canBook: false, bookingWindowOpensAt: "2026-09-05T06:29:29.000Z" }),
+    { now: () => clock },
+  );
+  let reads = 0;
+  let enrollCalls = 0;
+  const waits = [];
+  const result = await runBookrOperation({
+    client: {
+      listClasses: async () => [reads++ === 0 ? boundary : open],
+      enroll: async () => { enrollCalls += 1; },
+    },
+    classDate: "2026-09-05",
+    classTime: "07:30",
+    classType: "WOD Rato",
+    notOpenIsNoop: true,
+    maxPolls: 2,
+    now: () => clock,
+    sleep: async (milliseconds) => { waits.push(milliseconds); clock += milliseconds; },
+  });
+
+  assert.equal(boundary.timeToEnroll, 0);
+  assert.equal(stale.timeToEnroll, null);
+  assert.deepEqual(result, { operation: "enroll", status: "success", classType: "WOD" });
+  assert.equal(enrollCalls, 1);
+  assert.deepEqual(waits, [1_000]);
+});
+
 test("Bookr fails closed on ambiguous class matches across boxes", async () => {
   const sessions = [
     normalizeBookrSession(apiSession()),
@@ -450,6 +486,53 @@ test("Bookr verifies an ambiguous booking result without replaying the mutation"
   const verified = await client.enroll(selected);
   assert.equal(verified.userIsEnrolled, true);
   assert.equal(mutationCount, 1);
+});
+
+test("Bookr reports a successful mutation whose read-back still has the old state", async () => {
+  let dayReads = 0;
+  const client = createBookrClient({
+    authCookie: authCookie(),
+    fetchImpl: async (url, options) => {
+      if (url.endsWith("/dashboard")) return dashboardResponse();
+      if (url.includes("athlete-calendar/day")) {
+        dayReads += 1;
+        return jsonResponse({ selectedDaySessions: [apiSession()] });
+      }
+      assert.equal(options.method, "POST");
+      return jsonResponse({ status: "booked" });
+    },
+  });
+
+  await client.bootstrapSession();
+  const selected = (await client.listClasses("2026-09-05"))[0];
+  await assert.rejects(
+    () => client.enroll(selected),
+    (error) => error instanceof BookrMutationVerificationError,
+  );
+  assert.equal(dayReads, 2);
+});
+
+test("Bookr reports an ambiguous mutation as unverified when read-back shows the old state", async () => {
+  let dayReads = 0;
+  const client = createBookrClient({
+    authCookie: authCookie(),
+    fetchImpl: async (url) => {
+      if (url.endsWith("/dashboard")) return dashboardResponse();
+      if (url.includes("athlete-calendar/day")) {
+        dayReads += 1;
+        return jsonResponse({ selectedDaySessions: [apiSession()] });
+      }
+      throw new TypeError("connection closed after the server accepted the booking");
+    },
+  });
+
+  await client.bootstrapSession();
+  const selected = (await client.listClasses("2026-09-05"))[0];
+  await assert.rejects(
+    () => client.enroll(selected),
+    (error) => error instanceof BookrMutationVerificationError,
+  );
+  assert.equal(dayReads, 2);
 });
 
 test("Bookr client refreshes expiring sessions without exposing tokens to traces", async () => {
@@ -791,6 +874,30 @@ test("Bookr maps booking restrictions and prevents cancellation after the window
   await assert.rejects(
     () => client.unenroll(selected),
     (error) => error instanceof BookrBookingError && error.reason === "cancellation_window_closed",
+  );
+  assert.equal(dayReads, 2);
+});
+
+test("Bookr recognizes the generic booking_restricted API error", async () => {
+  let dayReads = 0;
+  const client = createBookrClient({
+    authCookie: authCookie(),
+    fetchImpl: async (url, options) => {
+      if (url.endsWith("/dashboard")) return dashboardResponse();
+      if (url.includes("athlete-calendar/day")) {
+        dayReads += 1;
+        return jsonResponse({ selectedDaySessions: [apiSession()] });
+      }
+      assert.equal(options.method, "POST");
+      return jsonResponse({ error: "booking_restricted" }, { status: 400 });
+    },
+  });
+
+  await client.bootstrapSession();
+  const selected = (await client.listClasses("2026-09-05"))[0];
+  await assert.rejects(
+    () => client.enroll(selected),
+    (error) => error instanceof BookrBookingError && error.reason === "booking_restricted",
   );
   assert.equal(dayReads, 2);
 });

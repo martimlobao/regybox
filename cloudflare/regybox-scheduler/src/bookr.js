@@ -20,6 +20,7 @@ const AUTH_COOKIE = "sb-jphimrpybgssduyuziaw-auth-token";
 const MAX_COOKIE_CHUNKS = 16;
 const COOKIE_CHUNK_SIZE = 3180;
 const MAX_RESPONSE_BYTES = 512 * 1024;
+const OPENING_BOUNDARY_GRACE_MS = 30_000;
 const AUTH_KV_KEY = "regybox:v2:bookr:auth";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CLASS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -27,6 +28,7 @@ const BOOKING_ERROR_CODES = new Set([
   "booking_daily_category_limit_exceeded",
   "booking_overlapping_session",
   "booking_pack_limit_exceeded",
+  "booking_restricted",
   "booking_weekly_limit_exceeded",
   "booking_window_not_open",
   "cancellation_window_closed",
@@ -73,6 +75,13 @@ export class BookrBookingError extends Error {
     super(`Bookr.fit rejected the booking change (${reason})`);
     this.name = "BookrBookingError";
     this.reason = reason;
+  }
+}
+
+export class BookrMutationVerificationError extends Error {
+  constructor() {
+    super("Bookr did not confirm the requested booking change");
+    this.name = "BookrMutationVerificationError";
   }
 }
 
@@ -306,7 +315,11 @@ export function normalizeBookrSession(value, { now = () => Date.now(), timezone 
     userIsEnrolled: bookingStatus === "booked" || bookingStatus === "waitlisted",
     userIsWaitlisted: bookingStatus === "waitlisted",
     timeToStart: null,
-    timeToEnroll: Number.isFinite(openingAt) && openingAt > observedAt ? Math.ceil((openingAt - observedAt) / 1000) : null,
+    // Keep a just-elapsed opening boundary as an immediate poll when the
+    // server has not flipped canBook yet; null means no usable opening signal.
+    timeToEnroll: Number.isFinite(openingAt) && openingAt >= observedAt - OPENING_BOUNDARY_GRACE_MS
+      ? Math.max(0, Math.ceil((openingAt - observedAt) / 1000))
+      : null,
   };
 }
 
@@ -344,6 +357,13 @@ function validClassDate(value) {
   if (!CLASS_DATE_RE.test(date)) return false;
   const timestamp = Date.parse(`${date}T00:00:00.000Z`);
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === date;
+}
+
+function isMutationTransportError(error) {
+  // Fetch rejects with TypeError when no authoritative HTTP response exists.
+  // HTTP and response-validation failures are deterministic and must retain
+  // their original, more specific diagnosis.
+  return error instanceof TypeError;
 }
 
 /** Return whether a request is one of the fixed Bookr API method/path pairs. */
@@ -581,7 +601,7 @@ export function createBookrClient({
     const session = (await listClasses(expected.date)).find((candidate) => candidate.id === sessionId);
     if (!session) throw new UnparseableError("Bookr did not return the changed class");
     const actual = expected.operation === "enroll" ? session.userIsEnrolled : !session.userIsEnrolled;
-    if (!actual) throw new Error("Bookr did not confirm the requested booking change");
+    if (!actual) throw new BookrMutationVerificationError();
     return session;
   }
 
@@ -598,7 +618,16 @@ export function createBookrClient({
       await responseJson(response);
     } catch (error) {
       // Network ambiguity is safe only when the read-back proves the result.
-      try { return await verify(selected.id, { operation, date: selected.date }); } catch { throw error; }
+      try {
+        return await verify(selected.id, { operation, date: selected.date });
+      } catch (verificationError) {
+        // A completed read-back showing the old state is stronger evidence
+        // than the transport error: report the mutation as unverified.
+        if (isMutationTransportError(error) && verificationError instanceof BookrMutationVerificationError) {
+          throw verificationError;
+        }
+        throw error;
+      }
     }
     return verify(selected.id, { operation, date: selected.date });
   }
