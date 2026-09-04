@@ -571,6 +571,34 @@ test("Bookr reports a successful mutation whose read-back still has the old stat
   assert.equal(dayReads, 2);
 });
 
+test("Bookr reports an accepted mutation as unverified when read-back fails", async () => {
+  let dayReads = 0;
+  let mutationCount = 0;
+  const client = createBookrClient({
+    authCookie: authCookie(),
+    fetchImpl: async (url, options) => {
+      if (url.endsWith("/dashboard")) return dashboardResponse();
+      if (url.includes("athlete-calendar/day")) {
+        dayReads += 1;
+        if (dayReads === 1) return jsonResponse({ selectedDaySessions: [apiSession()] });
+        throw new TypeError("read-back connection failed");
+      }
+      assert.equal(options.method, "POST");
+      mutationCount += 1;
+      return jsonResponse({ status: "booked" });
+    },
+  });
+
+  await client.bootstrapSession();
+  const selected = (await client.listClasses("2026-09-05"))[0];
+  await assert.rejects(
+    () => client.enroll(selected),
+    (error) => error instanceof BookrMutationVerificationError,
+  );
+  assert.equal(dayReads, 2);
+  assert.equal(mutationCount, 1);
+});
+
 test("Bookr reports an ambiguous mutation as unverified when read-back shows the old state", async () => {
   let dayReads = 0;
   const client = createBookrClient({

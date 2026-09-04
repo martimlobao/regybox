@@ -665,7 +665,15 @@ export function createBookrClient({
         throw error;
       }
     }
-    return verify(selected.id, { operation, date: selected.date });
+    try {
+      return await verify(selected.id, { operation, date: selected.date });
+    } catch (verificationError) {
+      // Once Bookr has accepted the mutation, a failed read-back cannot prove
+      // whether it completed. Keep the result stable and prevent callers from
+      // replaying a potentially completed booking change.
+      if (verificationError instanceof BookrMutationVerificationError) throw verificationError;
+      throw new BookrMutationVerificationError();
+    }
   }
 
   return { timezone, bootstrapSession, listClasses, enroll: (session) => mutate("enroll", session), unenroll: (session) => mutate("unenroll", session) };
