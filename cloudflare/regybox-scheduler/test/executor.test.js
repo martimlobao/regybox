@@ -9,6 +9,7 @@ import {
   RegyboxLoginError,
   RegyboxTimeoutError,
 } from "../src/regybox.js";
+import { BookrBookingError, BookrLoginError } from "../src/bookr.js";
 
 const workerEnv = {
   PHPSESSID: "session",
@@ -75,6 +76,32 @@ test("execution mode keeps GitHub dispatch as the backward-compatible preference
   );
 });
 
+test("Bookr uses self-contained Worker execution and never GitHub dispatch", () => {
+  assert.equal(
+    executionMode({ BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie" }),
+    "worker",
+  );
+  assert.throws(
+    () => executionMode({ BOOKING_PLATFORM: "bookr" }),
+    /BOOKR_AUTH_COOKIE/,
+  );
+  assert.throws(
+    () =>
+      executionMode({
+        BOOKING_PLATFORM: "bookr",
+        BOOKR_AUTH_COOKIE: "auth-cookie",
+        GITHUB_TOKEN: "token",
+        GITHUB_OWNER: "martim",
+        GITHUB_REPO: "regybox",
+      }),
+    /self-contained Worker execution/,
+  );
+  assert.throws(
+    () => executionMode({ BOOKING_PLATFORM: "unknown", BOOKR_AUTH_COOKIE: "auth-cookie" }),
+    /Unsupported BOOKING_PLATFORM/,
+  );
+});
+
 test("worker execution writes the Action-compatible success and noop cache states", async () => {
   const kv = makeKv(
     new Map([["preserved", JSON.stringify({ failureNotificationFingerprint: "old-failure" })]]),
@@ -124,6 +151,139 @@ test("worker execution writes the Action-compatible success and noop cache state
     lastCheckedAt: "2026-07-12T04:00:00+01:00",
   });
   assert.ok(stateWrites(kv).every(({ options }) => options.expirationTtl === 2592000));
+});
+
+test("Bookr execution selects the Bookr client and provider-aware operation", async () => {
+  const kv = makeKv();
+  let clientOptions;
+  let bootstrapCount = 0;
+  let operationClient;
+  const bookrClient = { bootstrapSession: async () => { bootstrapCount += 1; } };
+
+  const summary = await executePlan({
+    env: { BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie" },
+    kv,
+    dispatches: [dispatch({ cacheKey: "regybox:v2:calendar:bookr:test" })],
+    createClient: () => {
+      throw new Error("Regybox client must not be created");
+    },
+    createBookrClientImpl: (options) => {
+      clientOptions = options;
+      return bookrClient;
+    },
+    runBookrOperationImpl: async ({ client }) => {
+      operationClient = client;
+      return { status: "success", classType: "WOD" };
+    },
+  });
+
+  assert.equal(clientOptions.authCookie, "auth-cookie");
+  assert.equal(clientOptions.kv, kv);
+  assert.equal(bootstrapCount, 1);
+  assert.equal(operationClient, bookrClient);
+  assert.equal(summary.operations[0].outcome, "success");
+});
+
+test("Bookr client-construction failures use the bootstrap failure envelope", async () => {
+  const kv = makeKv();
+  const failures = [];
+  const constructionError = new BookrLoginError("client construction failed");
+  const dispatches = [dispatch({ cacheKey: "first" }), dispatch({ cacheKey: "second" })];
+
+  await assert.rejects(
+    executePlan({
+      env: { BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie" },
+      kv,
+      dispatches,
+      createBookrClientImpl: () => { throw constructionError; },
+      onFailure: async (failure) => failures.push(failure),
+    }),
+    (error) => error === constructionError,
+  );
+
+  assert.equal(failures.length, dispatches.length);
+  assert.deepEqual(failures.map(({ payload }) => payload.errorCode), ["login_error", "login_error"]);
+  assert.deepEqual(
+    (await readLastRun(kv)).operations.map(({ operation, outcome, errorCode }) => [operation, outcome, errorCode]),
+    [["enroll", "failure", "login_error"], ["enroll", "failure", "login_error"]],
+  );
+});
+
+test("a zero-operation Bookr bootstrap failure persists a failed last-run status", async () => {
+  const kv = makeKv();
+  const bootstrapError = new BookrLoginError();
+
+  await assert.rejects(
+    executePlan({
+      env: { BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie" },
+      kv,
+      dispatches: [],
+      createBookrClientImpl: () => ({
+        bootstrapSession: async () => { throw bootstrapError; },
+      }),
+      onFailure: async () => {},
+    }),
+    (error) => error === bootstrapError,
+  );
+
+  const lastRun = await readLastRun(kv);
+  assert.deepEqual(lastRun, {
+    ranAt: lastRun.ranAt,
+    mode: "worker",
+    plannedOperations: 0,
+    operations: [],
+    platform: "bookr",
+    status: "failure",
+  });
+});
+
+test("Bookr restriction failures retain provider-specific error codes", async () => {
+  const failures = [];
+  const summary = await executePlan({
+    env: { BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie" },
+    kv: makeKv(),
+    dispatches: [dispatch({ cacheKey: "regybox:v2:calendar:bookr:test" })],
+    createBookrClientImpl: () => fakeClient(),
+    runBookrOperationImpl: async () => {
+      throw new BookrBookingError("cancellation_window_closed");
+    },
+    onFailure: async (notification) => failures.push(notification),
+  });
+
+  assert.equal(summary.operations[0].errorCode, "cancellation_window_closed");
+  assert.equal(failures[0].payload.userTitle, "Bookr.fit rejected the booking change");
+  assert.doesNotMatch(JSON.stringify(failures), /auth-cookie/);
+});
+
+test("Bookr operation console errors redact credentials, URLs, IDs, and raw bodies", async () => {
+  const errors = [];
+  const originalError = console.error;
+  console.error = (...args) => errors.push(args);
+  const unsafe = new Error(
+    'Cookie: sb-jphimrpybgssduyuziaw-auth-token.0=secret-cookie; ' +
+      'Authorization: Bearer access-secret https://bookr.fit/api/dashboard?date=2026-09-05 ' +
+      '11111111-1111-4111-8111-111111111111 {"raw":"private-body"}',
+  );
+  unsafe.name = "BookrLoginError";
+  try {
+    await executePlan({
+      env: { BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "bootstrap-cookie" },
+      kv: makeKv(),
+      dispatches: [dispatch()],
+      createBookrClientImpl: () => fakeClient(),
+      runBookrOperationImpl: async () => { throw unsafe; },
+      onFailure: async () => {},
+    });
+  } finally {
+    console.error = originalError;
+  }
+
+  const output = errors.flat().map(String).join(" ");
+  assert.match(output, /Bookr\.fit error \(login_error\)/);
+  assert.doesNotMatch(
+    output,
+    /secret-cookie|access-secret|bookr\.fit\/api|date=2026-09-05|11111111-1111-4111-8111-111111111111|private-body|sb-jphimrpybgssduyuziaw-auth-token/,
+  );
 });
 
 test("worker cache state retains the dispatched fallback class type for slot matching", async () => {
@@ -344,6 +504,7 @@ test("dispatch mode and zero-operation runs both leave a last-run summary", asyn
   assert.equal(zeroSummary.mode, "worker");
   assert.equal(zeroSummary.plannedOperations, 0);
   assert.deepEqual(zeroSummary.operations, []);
+  assert.equal("status" in zeroSummary, false);
   assert.equal(zeroKv.writes[0].options.expirationTtl, 604800);
   assert.equal(activityWrites(zeroKv).length, 0);
 });

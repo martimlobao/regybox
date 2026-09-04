@@ -10,6 +10,7 @@
   // keep the dashboard as the source of truth for every user-owned variable.
   "keep_vars": true,
   "vars": {
+    "BOOKING_PLATFORM": "regybox",
     "CLASS_MAP": "CrossFit = WOD",
     "TIMEZONE": "Europe/Lisbon",
     "LOOKAHEAD_HOURS": "73"

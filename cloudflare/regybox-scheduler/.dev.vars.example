@@ -1,6 +1,13 @@
-# Required for direct Worker enrollment. Copy these cookie values from regybox.pt developer tools.
+# Required only for direct Regybox Worker enrollment. Copy these cookie values from regybox.pt developer tools.
 PHPSESSID=
 REGYBOX_USER=
+
+# Required only for direct Bookr.fit Worker enrollment. Copy only the present
+# sb-jphimrpybgssduyuziaw-auth-token name=value pair, or every numbered chunk
+# from .0 through the highest present suffix in ascending order joined by "; ".
+# Do not include a Cookie: header or other cookies.
+# Keep this file local and never commit it.
+BOOKR_AUTH_COOKIE=
 
 # Required. Copy the "Secret address in iCal format" from Google Calendar settings.
 CALENDAR_URL=

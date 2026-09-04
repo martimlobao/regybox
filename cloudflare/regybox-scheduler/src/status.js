@@ -4,6 +4,12 @@ import { emailConfigured } from "./notify.js";
 import { RegyboxLoginError, createRegyboxClient } from "./regybox.js";
 import { incidentConstants, readIncident } from "./incidents.js";
 import { readRun, readRuns, runConstants } from "./runs.js";
+import { bookingPlatform, platformLabel } from "./platform.js";
+import {
+  BookrSessionRefreshRequiredError,
+  BookrSubscriptionError,
+  createBookrClient as defaultBookrClient,
+} from "./bookr.js";
 
 const STYLES = `
   :root { color-scheme: light dark; }
@@ -47,6 +53,10 @@ function configured(value) {
   return Boolean(String(value ?? "").trim());
 }
 
+function dispatchConfigured(env) {
+  return ["GITHUB_TOKEN", "GITHUB_OWNER", "GITHUB_REPO"].every((name) => configured(env?.[name]));
+}
+
 function check(level, text, hint) {
   return hint ? { level, text, hint } : { level, text };
 }
@@ -70,19 +80,52 @@ function relativeTime(isoString, nowMs) {
   return `${Math.round(hours / 24)} days ago`;
 }
 
-function setupChecks(env) {
+function setupChecks(env, platform = "regybox") {
   const checks = [];
-  if (configured(env.PHPSESSID) && configured(env.REGYBOX_USER)) {
-    checks.push(check("ok", "Regybox cookies are set"));
-  } else {
+  if (platform === "invalid") {
     checks.push(
       check(
         "bad",
-        "Regybox cookies are missing",
-        "Add PHPSESSID and REGYBOX_USER under Settings → Variables and Secrets. " +
-          "Copy both values from regybox.pt using your browser's developer tools.",
+        "Booking platform is invalid",
+        "Set BOOKING_PLATFORM to regybox or bookr, then refresh this page.",
       ),
     );
+  } else if (platform === "bookr") {
+    checks.push(check("ok", "Booking platform: Bookr.fit"));
+    if (configured(env.BOOKR_AUTH_COOKIE)) {
+      checks.push(check("ok", "Bookr.fit authentication cookie is set"));
+    } else {
+      checks.push(
+        check(
+          "bad",
+          "Bookr.fit authentication cookie is missing",
+          "Sign in at bookr.fit, copy every sb-…-auth-token cookie chunk, and add the " +
+            "complete semicolon-separated value as BOOKR_AUTH_COOKIE under Settings → Variables and Secrets.",
+        ),
+      );
+    }
+    if (dispatchConfigured(env)) {
+      checks.push(
+        check(
+          "bad",
+          "Bookr.fit requires self-contained Worker execution",
+          "Remove the GitHub dispatch variables (GITHUB_TOKEN, GITHUB_OWNER and GITHUB_REPO), then refresh this page.",
+        ),
+      );
+    }
+  } else {
+    if (configured(env.PHPSESSID) && configured(env.REGYBOX_USER)) {
+      checks.push(check("ok", "Regybox cookies are set"));
+    } else {
+      checks.push(
+        check(
+          "bad",
+          "Regybox cookies are missing",
+          "Add PHPSESSID and REGYBOX_USER under Settings → Variables and Secrets. " +
+            "Copy both values from regybox.pt using your browser's developer tools.",
+        ),
+      );
+    }
   }
   if (configured(env.CALENDAR_URL)) {
     checks.push(check("ok", "Calendar link is set"));
@@ -182,19 +225,28 @@ async function calendarCheck(env, { fetchImpl, nowMs }) {
         })
         .join(" · ")
     : null;
+  const bookrCompatibility = bookingPlatform(env) === "bookr"
+    ? "Bookr.fit also matches a configured class ending in the exact box name to its separated class title and box (for example, WOD Rato → WOD at Rato)."
+    : null;
   if (events.length === 0) {
     return check(
       "warn",
       `Calendar is reachable, but no “${names}” events in the next ${lookaheadHours} hours`,
-      `${bookingRules ? `Booking rules: ${bookingRules}. ` : ""}` +
+      [
+        bookingRules ? `Booking rules: ${bookingRules}.` : null,
+        bookrCompatibility,
         "The scheduler only books classes that are on your calendar. Check that your event titles match the booking rules exactly.",
+      ].filter(Boolean).join(" "),
     );
   }
   return check(
     "ok",
     `Calendar is reachable — ${events.length} upcoming “${names}” ` +
       `event${events.length === 1 ? "" : "s"} in the next ${lookaheadHours} hours`,
-    bookingRules ? `Booking rules: ${bookingRules}` : undefined,
+    [
+      bookingRules ? `Booking rules: ${bookingRules}` : null,
+      bookrCompatibility,
+    ].filter(Boolean).join(" ") || undefined,
   );
 }
 
@@ -228,6 +280,94 @@ async function regyboxCheck(env, { createClient, nowMs }) {
   }
 }
 
+function activeSubscriptionId(value) {
+  const candidates = [
+    value?.subscriptionId,
+    value?.activeSubscriptionId,
+    value?.activeSubscription?.id,
+    value?.subscription?.id,
+  ];
+  return candidates.find((candidate) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(candidate ?? "")),
+  ) ?? null;
+}
+
+function isBookrLoginError(error) {
+  return /bookr.*(?:login|auth|session)|auth.*bookr/i.test(String(error?.name ?? "")) ||
+    error?.code === "BOOKR_AUTH_ERROR" || error?.status === 401 || error?.status === 403;
+}
+
+function isBookrRefreshRequiredError(error) {
+  return error instanceof BookrSessionRefreshRequiredError ||
+    error?.name === "BookrSessionRefreshRequiredError";
+}
+
+async function bookrCheck(env, { createClient, nowMs, kv }) {
+  if (!configured(env.BOOKR_AUTH_COOKIE)) {
+    return [];
+  }
+  try {
+    const client = createClient({
+      authCookie: env.BOOKR_AUTH_COOKIE,
+      kv,
+      timezone: env.TIMEZONE || "Europe/Lisbon",
+      now: () => nowMs,
+      // A status refresh may validate the live session, but it must not update
+      // the stored browser session or otherwise change booking state.
+      persistSession: false,
+    });
+    const session = await client.bootstrapSession();
+    const subscriptionId = activeSubscriptionId(session) || activeSubscriptionId(client);
+    return [
+      check("ok", "Bookr.fit accepts your login"),
+      subscriptionId
+        ? check("ok", "Bookr.fit has an active subscription")
+        : check(
+            "bad",
+            "Bookr.fit has no active subscription",
+            "Check that your Bookr.fit membership is active and refresh this page.",
+          ),
+    ];
+  } catch (error) {
+    if (isBookrRefreshRequiredError(error)) {
+      return [
+        check(
+          "warn",
+          "Bookr.fit session needs refresh",
+          "The saved session is still structurally valid, but its access token is expiring. " +
+            "This read-only status check did not rotate it; the scheduler will refresh it on its next run.",
+        ),
+      ];
+    }
+    if (error instanceof BookrSubscriptionError || error?.name === "BookrSubscriptionError") {
+      return [
+        check("ok", "Bookr.fit accepts your login"),
+        check(
+          "bad",
+          "Bookr.fit has no active subscription",
+          "Check that your Bookr.fit membership is active and refresh this page.",
+        ),
+      ];
+    }
+    if (isBookrLoginError(error)) {
+      return [
+        check(
+          "bad",
+          "Bookr.fit rejected your login — the saved session has expired",
+          "Sign in at bookr.fit again, copy every numbered sb-…-auth-token cookie chunk, and update BOOKR_AUTH_COOKIE under Settings → Variables and Secrets.",
+        ),
+      ];
+    }
+    return [
+      check(
+        "warn",
+        "Bookr.fit could not be reached right now",
+        "This is usually temporary. Refresh this page in a minute.",
+      ),
+    ];
+  }
+}
+
 function describeOperation(operation) {
   if (!operation.classDate || !operation.classTime) {
     return operation.outcome === "failure"
@@ -249,6 +389,18 @@ function describeOperation(operation) {
   }
 }
 
+function recordPlatform(record) {
+  return record?.platform === "bookr" ? "bookr" : "regybox";
+}
+
+function recordLabel(record) {
+  return recordPlatform(record) === "bookr" ? "Bookr.fit" : "Regybox";
+}
+
+function recordPrefix(record) {
+  return recordPlatform(record) === "bookr" ? "Bookr.fit: " : "";
+}
+
 function lastRunCheck(lastRun, nowMs) {
   if (!lastRun || !lastRun.ranAt) {
     return check(
@@ -263,20 +415,27 @@ function lastRunCheck(lastRun, nowMs) {
   if (failures.length > 0) {
     return check(
       "bad",
-      `Last check: ${when} — ${failures.map(describeOperation).join("; ")}`,
+      `Last check: ${when} — ${recordPrefix(lastRun)}${failures.map(describeOperation).join("; ")}`,
+      "See the checks above for what to fix, or check the Worker logs in Cloudflare for details.",
+    );
+  }
+  if (lastRun.status === "failure") {
+    return check(
+      "bad",
+      `Last check: ${when} — ${recordPrefix(lastRun)}scheduler run failed`,
       "See the checks above for what to fix, or check the Worker logs in Cloudflare for details.",
     );
   }
   if (operations.length === 0) {
-    return check("ok", `Last check: ${when} — nothing to do`);
+    return check("ok", `Last check: ${when} — ${recordPrefix(lastRun)}nothing to do`);
   }
-  return check("ok", `Last check: ${when} — ${operations.map(describeOperation).join("; ")}`);
+  return check("ok", `Last check: ${when} — ${recordPrefix(lastRun)}${operations.map(describeOperation).join("; ")}`);
 }
 
 function activityCheck(activity, nowMs) {
   const when = relativeTime(activity.at, nowMs) ?? activity.at;
   const description = describeOperation(activity);
-  const text = `${description.charAt(0).toUpperCase()}${description.slice(1)} — ${when}`;
+  const text = `${recordPrefix(activity)}${description.charAt(0).toUpperCase()}${description.slice(1)} — ${when}`;
   const level = activity.outcome === "success" ? "ok" : activity.outcome === "failure" ? "bad" : "off";
   return check(level, text);
 }
@@ -310,7 +469,7 @@ function runCheck(run, nowMs, basePath) {
   return {
     ...check(
       runLevel(run.status),
-      `${when} — ${run.status} in ${durationText(run.durationMs)} — ${operationText}`,
+      `${when} — ${recordPrefix(run)}${run.status} in ${durationText(run.durationMs)} — ${operationText}`,
       run.traceTruncated ? "The retained trace reached its 500-event limit." : undefined,
     ),
     href: baseHref(basePath, `/runs/${run.id}`),
@@ -322,10 +481,17 @@ export async function buildStatusModel({
   kv,
   fetchImpl = fetch,
   createClient = createRegyboxClient,
+  createBookrClient = defaultBookrClient,
   now = () => Date.now(),
   basePath = "",
 }) {
   const nowMs = now();
+  let platform = "regybox";
+  try {
+    platform = bookingPlatform(env);
+  } catch {
+    platform = configured(env?.BOOKING_PLATFORM) ? "invalid" : "regybox";
+  }
   let mode;
   try {
     mode = executionMode(env) === "dispatch" ? "GitHub dispatch" : "self-contained";
@@ -333,11 +499,18 @@ export async function buildStatusModel({
     mode = "not configured yet";
   }
   const liveChecks = (
-    await Promise.all([
-      regyboxCheck(env, { createClient, nowMs }),
-      calendarCheck(env, { fetchImpl, nowMs }),
-    ])
-  ).filter(Boolean);
+    platform === "bookr"
+      ? await Promise.all([
+          bookrCheck(env, { createClient: createBookrClient, nowMs, kv }),
+          calendarCheck(env, { fetchImpl, nowMs }),
+        ])
+      : platform === "regybox"
+        ? await Promise.all([
+            regyboxCheck(env, { createClient, nowMs }),
+            calendarCheck(env, { fetchImpl, nowMs }),
+          ])
+        : []
+  ).flat().filter(Boolean);
   let lastRun = null;
   try {
     lastRun = kv ? await readLastRun(kv) : null;
@@ -357,7 +530,7 @@ export async function buildStatusModel({
     runs = [];
   }
   const sections = [
-    { title: "Setup", checks: setupChecks(env) },
+    { title: "Setup", checks: setupChecks(env, platform) },
     { title: "Live checks", checks: liveChecks },
     {
       title: "Last run",
@@ -378,6 +551,8 @@ export async function buildStatusModel({
     });
   }
   return {
+    platform,
+    platformLabel: platform === "invalid" ? "Unknown" : platformLabel(platform),
     mode,
     generatedAt: new Date(nowMs).toISOString(),
     sections,
@@ -385,6 +560,8 @@ export async function buildStatusModel({
 }
 
 export function renderStatusPage(model) {
+  const label = model.platform === "invalid" ? "Unknown" : platformLabel(model.platform);
+  const title = `${label} auto-enroller`;
   const sections = model.sections
     .filter((section) => section.checks.length > 0)
     .map((section) => {
@@ -405,14 +582,14 @@ export function renderStatusPage(model) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Regybox auto-enroller — status</title>
+<title>${escapeHtml(title)} — status</title>
 <style>${STYLES}</style>
 </head>
 <body>
-  <h1>Regybox auto-enroller</h1>
+  <h1>${escapeHtml(title)}</h1>
   <p class="sub">Setup checklist — refresh this page after changing settings.</p>
 ${sections}
-  <footer>Mode: ${escapeHtml(model.mode)} · checked ${escapeHtml(model.generatedAt)} ·
+  <footer>Mode: ${escapeHtml(model.mode)}${model.platform === "bookr" || model.platform === "invalid" ? ` · ${escapeHtml(label)}` : ""} · checked ${escapeHtml(model.generatedAt)} ·
   this page is read-only and never shows your credentials.</footer>
 </body>
 </html>`;
@@ -439,12 +616,17 @@ function htmlResponse(html, status = 200) {
   });
 }
 
-export function renderRunsPage(runs, { basePath = "", nowMs = Date.now() } = {}) {
+export function renderRunsPage(runs, { basePath = "", nowMs = Date.now(), platform = "regybox" } = {}) {
+  const label = platform === "bookr" ? "Bookr.fit" : "Regybox";
+  const currentPlatform = platform === "bookr" ? "bookr" : "regybox";
+  const showPlatform = runs.some((run) => recordPlatform(run) !== currentPlatform);
   const rows = runs.map((run) => {
     const operations = Array.isArray(run.operations) ? run.operations : [];
     const summary = operations.length > 0 ? operations.map(describeOperation).join("; ") : "nothing to do";
+    const runLabel = run?.platform === "bookr" ? "Bookr.fit" : "Regybox";
     return `    <tr>
       <td><a href="${escapeHtml(baseHref(basePath, `/runs/${run.id}`))}">${escapeHtml(relativeTime(run.startedAt, nowMs) ?? run.startedAt)}</a></td>
+      ${showPlatform ? `<td>${escapeHtml(runLabel)}</td>` : ""}
       <td>${escapeHtml(run.status)}</td>
       <td>${escapeHtml(durationText(run.durationMs))}</td>
       <td>${escapeHtml(summary)}</td>
@@ -456,20 +638,21 @@ export function renderRunsPage(runs, { basePath = "", nowMs = Date.now() } = {})
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Regybox run history</title>
+<title>${escapeHtml(label)} run history</title>
 <style>${STYLES}</style>
 </head>
 <body>
-  <h1>Regybox run history</h1>
+  <h1>${escapeHtml(label)} run history</h1>
   <p class="sub">Sanitized timelines are retained for ${runConstants.RUN_RETENTION_DAYS} days.</p>
   <p><a href="${escapeHtml(baseHref(basePath))}">Back to status</a></p>
-  ${rows ? `<table><thead><tr><th>Started</th><th>Status</th><th>Duration</th><th>Operations</th></tr></thead><tbody>\n${rows}\n  </tbody></table>` : "<p>No retained runs yet.</p>"}
+  ${rows ? `<table><thead><tr><th>Started</th>${showPlatform ? "<th>Platform</th>" : ""}<th>Status</th><th>Duration</th><th>Operations</th></tr></thead><tbody>\n${rows}\n  </tbody></table>` : "<p>No retained runs yet.</p>"}
   <footer>This read-only history never includes credentials, calendar contents, raw HTML, or complete action URLs.</footer>
 </body>
 </html>`;
 }
 
-export function renderRunPage(run, { basePath = "" } = {}) {
+export function renderRunPage(run, { basePath = "", platform = "regybox" } = {}) {
+  const label = recordLabel(run);
   const operations = Array.isArray(run.operations) ? run.operations : [];
   const operationRows = operations.map((operation, index) =>
     `    <tr><td>${index + 1}</td><td>${escapeHtml(describeOperation(operation))}</td><td>${escapeHtml(operation.outcome)}</td></tr>`,
@@ -491,11 +674,11 @@ export function renderRunPage(run, { basePath = "" } = {}) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Regybox run details</title>
+<title>${escapeHtml(label)} run details</title>
 <style>${STYLES}</style>
 </head>
 <body>
-  <h1>Regybox run details</h1>
+  <h1>${escapeHtml(label)} run details</h1>
   <p class="sub">Run ${escapeHtml(run.id)} · ${escapeHtml(run.status)} · ${escapeHtml(durationText(run.durationMs))}</p>
   <p><a href="${escapeHtml(baseHref(basePath, "/runs"))}">Back to run history</a></p>
   <dl>
@@ -533,7 +716,8 @@ export async function handleRunRequest(kv, id, options = {}) {
   return htmlResponse(renderRunPage(run, options));
 }
 
-export function renderIncidentPage(incident, { basePath = "" } = {}) {
+export function renderIncidentPage(incident, { basePath = "", platform = incident?.platform || "regybox" } = {}) {
+  const label = platform === "bookr" ? "Bookr.fit" : "Regybox";
   const rows = [
     ["Time", incident.timestamp],
     ["Operation", incident.operation],
@@ -546,6 +730,9 @@ export function renderIncidentPage(incident, { basePath = "" } = {}) {
   ];
   if (incident.parserDiagnostics) {
     rows.push(["Safe parser diagnostics", JSON.stringify(incident.parserDiagnostics, null, 2)]);
+  }
+  if (incident.platform) {
+    rows.splice(1, 0, ["Platform", incident.platform === "bookr" ? "Bookr.fit" : "Regybox"]);
   }
   const details = rows
     .filter(([, value]) => String(value ?? "").trim())
@@ -560,7 +747,7 @@ export function renderIncidentPage(incident, { basePath = "" } = {}) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Regybox incident details</title>
+<title>${escapeHtml(label)} incident details</title>
 <style>${STYLES}
   dt { font-weight: 650; margin-top: 1rem; }
   dd { margin: 0.2rem 0 0; }
@@ -568,7 +755,7 @@ export function renderIncidentPage(incident, { basePath = "" } = {}) {
 </style>
 </head>
 <body>
-  <h1>Regybox incident details</h1>
+  <h1>${escapeHtml(label)} incident details</h1>
   <p class="sub">This sanitized diagnostic record expires automatically after ${incidentConstants.INCIDENT_RETENTION_DAYS} days.</p>
   <dl>
 ${details}

@@ -1,4 +1,5 @@
 import { incidentConstants } from "./incidents.js";
+import { safeErrorValue } from "./failures.js";
 
 const STATE_TTL_SECONDS = 2592000;
 const MAX_APPENDIX_LINES = 12;
@@ -9,6 +10,15 @@ function configured(value) {
 
 function operationLabel(operation) {
   return String(operation ?? "").trim().toLowerCase() === "unenroll" ? "unenroll" : "enroll";
+}
+
+function providerLabel(platform) {
+  return String(platform ?? "").trim().toLowerCase() === "bookr" ? "Bookr.fit" : "Regybox";
+}
+
+function dispatchPlatform(dispatch, env) {
+  const platform = dispatch?.platform ?? dispatch?.inputs?.["booking-platform"] ?? env?.BOOKING_PLATFORM;
+  return String(platform ?? "").trim().toLowerCase() === "bookr" ? "bookr" : "regybox";
 }
 
 function parseCachedValue(value) {
@@ -62,13 +72,15 @@ export function composeEmail({
   statusUrl,
   incidentUrl,
   runUrl,
+  platform = "regybox",
 }) {
   const operationName = operationLabel(operation);
   const operationNoun = operationName === "unenroll" ? "unenrollment" : "enrollment";
+  const label = providerLabel(platform);
 
   if (kind === "success") {
     const bodyLines = [
-      `Your Regybox auto-${operationNoun} completed successfully.`,
+      `Your ${label} auto-${operationNoun} completed successfully.`,
       "",
       `Class: ${summary}`,
       "",
@@ -81,13 +93,13 @@ export function composeEmail({
       bodyLines.push("", `Run details: ${runUrl}`);
     }
     return {
-      subject: `Regybox Auto-${operationName}: success for ${summary}`,
+      subject: `${label} Auto-${operationName}: success for ${summary}`,
       body: bodyLines.join("\n"),
     };
   }
 
   const bodyLines = [
-    `We could not complete your Regybox auto-${operationNoun}.`,
+    `We could not complete your ${label} auto-${operationNoun}.`,
     "",
     `Class: ${summary}`,
     "",
@@ -116,13 +128,13 @@ export function composeEmail({
     bodyLines.push("", `Status page: ${statusUrl}`);
   }
   return {
-    subject: `Regybox Auto-${operationName}: failure - ${payload.userTitle}`,
+    subject: `${label} Auto-${operationName}: failure - ${payload.userTitle}`,
     body: bodyLines.join("\n"),
   };
 }
 
 /** Send a message through worker-mailer without loading Worker-only sockets under Node. */
-export async function sendEmail(env, { subject, body }, { mailerFactory } = {}) {
+export async function sendEmail(env, { subject, body }, { mailerFactory, platform = "regybox" } = {}) {
   const createMailer =
     mailerFactory ??
     (async () => {
@@ -146,7 +158,7 @@ export async function sendEmail(env, { subject, body }, { mailerFactory } = {}) 
     },
     {
       from: {
-        name: env.EMAIL_FROM_NAME || "Regybox Auto-enroll",
+        name: env.EMAIL_FROM_NAME || `${providerLabel(platform)} Auto-enroll`,
         email: env.EMAIL_USERNAME,
       },
       to: env.EMAIL_TO,
@@ -161,6 +173,7 @@ export async function notifyResult({ env, kv, dispatch, result, statusUrl, runUr
   if (!emailConfigured(env) || result.status !== "success") {
     return;
   }
+  const platform = dispatchPlatform(dispatch, env);
   try {
     await send(
       env,
@@ -174,11 +187,16 @@ export async function notifyResult({ env, kv, dispatch, result, statusUrl, runUr
         }),
         statusUrl,
         runUrl,
+        platform,
       }),
+      { platform },
     );
     console.log(`regybox: email sent (${dispatch.operation} success)`);
   } catch (error) {
-    console.warn("regybox: success notification email failed:", error);
+    console.warn(
+      "regybox: success notification email failed:",
+      safeErrorValue(error, { platform }),
+    );
   }
 }
 
@@ -199,6 +217,7 @@ export async function notifyFailure({
     return;
   }
 
+  const platform = dispatchPlatform(dispatch, env);
   const cacheKey = dispatch.inputs?.["cache-key"];
   if (cacheKey && fingerprint) {
     try {
@@ -208,7 +227,10 @@ export async function notifyFailure({
         return;
       }
     } catch (notificationError) {
-      console.warn("regybox: failure notification cache read failed:", notificationError);
+      console.warn(
+        "regybox: failure notification cache read failed:",
+        safeErrorValue(notificationError, { platform }),
+      );
     }
   }
 
@@ -227,10 +249,15 @@ export async function notifyFailure({
         statusUrl,
         incidentUrl,
         runUrl,
+        platform,
       }),
+      { platform },
     );
   } catch (notificationError) {
-    console.warn("regybox: failure notification email failed:", notificationError ?? error);
+    console.warn(
+      "regybox: failure notification email failed:",
+      safeErrorValue(notificationError ?? error, { platform }),
+    );
     return;
   }
 
@@ -240,7 +267,10 @@ export async function notifyFailure({
       state.failureNotificationFingerprint = fingerprint;
       await kv.put(cacheKey, JSON.stringify(state), { expirationTtl: STATE_TTL_SECONDS });
     } catch (notificationError) {
-      console.warn("regybox: failure notification cache write failed:", notificationError);
+      console.warn(
+        "regybox: failure notification cache write failed:",
+        safeErrorValue(notificationError, { platform }),
+      );
     }
   }
 }

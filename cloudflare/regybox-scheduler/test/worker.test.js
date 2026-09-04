@@ -79,6 +79,77 @@ test("normalizeList accepts comma-separated values", () => {
   assert.deepEqual(normalizeList(" Crossfit, Strength ,, "), ["Crossfit", "Strength"]);
 });
 
+test("Bookr calendar errors are redacted before reaching the console", async () => {
+  const kv = makeKv();
+  const unsafe = new Error(
+    'Cookie: sb-jphimrpybgssduyuziaw-auth-token.0=secret-cookie; ' +
+      'Authorization: Bearer access-secret https://bookr.fit/api/dashboard?date=2026-09-05 ' +
+      '11111111-1111-4111-8111-111111111111 {"raw":"private-body"}',
+  );
+  unsafe.name = "BookrLoginError";
+  const errors = [];
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  globalThis.fetch = async () => { throw unsafe; };
+  console.error = (...args) => errors.push(args);
+  try {
+    await assert.rejects(
+      worker.scheduled(
+        { scheduledTime: "2026-09-04T00:00:00.000Z" },
+        {
+          BOOKING_PLATFORM: "bookr",
+          BOOKR_AUTH_COOKIE: "bootstrap-cookie",
+          CALENDAR_URL: "https://calendar.example.test/private.ics?secret=query",
+          REGYBOX_STATE: kv,
+        },
+        {},
+      ),
+      (error) => error === unsafe,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
+  }
+
+  const output = errors.flat().map(String).join(" ");
+  assert.match(output, /Bookr\.fit error \(login_error\)/);
+  assert.doesNotMatch(
+    output,
+    /secret-cookie|access-secret|bookr\.fit\/api|date=2026-09-05|11111111-1111-4111-8111-111111111111|private-body|sb-jphimrpybgssduyuziaw-auth-token/,
+  );
+});
+
+test("Bookr calendar fetch diagnostics retain the calendar subsystem and HTTP status", async () => {
+  const kv = makeKv();
+  const errors = [];
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  globalThis.fetch = async () => new Response("unavailable", { status: 503 });
+  console.error = (...args) => errors.push(args);
+  try {
+    await assert.rejects(
+      worker.scheduled(
+        { scheduledTime: "2026-09-04T00:00:00.000Z" },
+        {
+          BOOKING_PLATFORM: "bookr",
+          BOOKR_AUTH_COOKIE: "bootstrap-cookie",
+          CALENDAR_URL: "https://calendar.example.test/private.ics",
+          REGYBOX_STATE: kv,
+        },
+        {},
+      ),
+      /Calendar fetch failed: 503/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
+  }
+
+  const output = errors.flat().map(String).join(" ");
+  assert.match(output, /calendar\/plan failed: Calendar fetch failed: 503/);
+  assert.doesNotMatch(output, /Bookr\.fit error \(unexpected_failure\)/);
+});
+
 test("path-prefixed incident links route to the incident handler", async () => {
   const id = "0123456789abcdef0123456789abcdef0123";
   const kv = makeKv(
@@ -98,6 +169,49 @@ test("path-prefixed incident links route to the incident handler", async () => {
 
   assert.equal(response.status, 200);
   assert.match(await response.text(), /Regybox incident details/);
+});
+
+test("root favicon requests do not overwrite the remembered status origin", async () => {
+  const kv = makeKv(new Map([["regybox:v1:status_origin", "https://worker.example.test/regybox"]]));
+  const response = await worker.fetch(
+    new Request("https://worker.example.test/favicon.ico"),
+    { REGYBOX_STATE: kv },
+    {},
+  );
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(kv.writes.length, 0);
+  assert.equal(await kv.get("regybox:v1:status_origin"), "https://worker.example.test/regybox");
+});
+
+test("path-prefixed favicon requests do not poison prefixed status routing", async () => {
+  const kv = makeKv();
+  const status = await worker.fetch(
+    new Request("https://worker.example.test/regybox"),
+    { REGYBOX_STATE: kv },
+    {},
+  );
+  assert.equal(status.status, 200);
+  assert.equal(await kv.get("regybox:v1:status_origin"), "https://worker.example.test/regybox");
+  kv.writes.length = 0;
+
+  const favicon = await worker.fetch(
+    new Request("https://worker.example.test/regybox/favicon.ico"),
+    { REGYBOX_STATE: kv },
+    {},
+  );
+  assert.equal(favicon.status, 204);
+  assert.equal(favicon.headers.get("x-robots-tag"), "noindex, nofollow");
+  assert.equal(kv.writes.length, 0);
+  assert.equal(await kv.get("regybox:v1:status_origin"), "https://worker.example.test/regybox");
+
+  const prefixedStatus = await worker.fetch(
+    new Request("https://worker.example.test/regybox"),
+    { REGYBOX_STATE: kv },
+    {},
+  );
+  assert.equal(prefixedStatus.status, 200);
+  assert.match(await prefixedStatus.text(), /Regybox auto-enroller/);
 });
 
 test("recurring calendar events expand inside the lookahead window", () => {
@@ -199,6 +313,31 @@ test("missing KV entry dispatches enroll", async () => {
   assert.equal(plan.dispatches[0].inputs["calendar-event-name"], "Crossfit");
   assert.equal(plan.dispatches[0].inputs["class-date"], "2026-06-18");
   assert.equal(plan.dispatches[0].inputs["class-time"], "06:30");
+});
+
+test("Bookr calendar state is isolated from legacy Regybox enrollment state", async () => {
+  const legacyKey = "regybox:v1:calendar:one-class:2026-06-18T05:30:00.000Z";
+  const kv = makeKv(new Map([[legacyKey, JSON.stringify({ state: "enrolled" })]]));
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:one-class",
+    "SUMMARY:Crossfit",
+    "DTSTART:20260618T053000Z",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const plan = await buildPlan({
+    env: { ...baseEnv, BOOKING_PLATFORM: "bookr" },
+    kv,
+    icsText: ics,
+    now: new Date("2026-06-18T00:00:00Z"),
+  });
+
+  assert.equal(plan.dispatches.length, 1);
+  assert.match(plan.dispatches[0].inputs["cache-key"], /^regybox:v2:calendar:bookr:/);
+  assert.ok(!kv.gets.includes(legacyKey));
 });
 
 test("existing KV entry with matching calendar event skips dispatch", async () => {

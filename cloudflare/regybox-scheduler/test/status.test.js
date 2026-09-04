@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildStatusModel, renderStatusPage } from "../src/status.js";
+import { buildStatusModel, renderRunsPage, renderStatusPage } from "../src/status.js";
+import { buildFailureFingerprint, errorPayload } from "../src/failures.js";
+import { BookrLoginError, BookrSessionRefreshRequiredError, BookrSubscriptionError } from "../src/bookr.js";
 
 const ICS_WITH_EVENT = (start) =>
   [
@@ -141,6 +143,26 @@ test("CLASS_MAP booking rules are shown in the calendar live check", async () =>
   const calendar = flatChecks(model).find((item) => item.text.startsWith("Calendar is reachable"));
   assert.match(calendar?.hint, /Weightlifting → Weightlifting Rato/);
   assert.match(calendar?.hint, /CrossFit → WOD \(backup: Weekend WOD\)/);
+  assert.doesNotMatch(calendar?.hint ?? "", /separated class title and box/);
+});
+
+test("Bookr calendar checks explain legacy exact-box class matching", async () => {
+  const model = await buildStatusModel({
+    env: workerEnv({
+      BOOKING_PLATFORM: "bookr",
+      BOOKR_AUTH_COOKIE: "sb-jphimrpybgssduyuziaw-auth-token.0=base64-secret",
+      CLASS_MAP: "CrossFit = WOD Rato, Weekend WOD Rato; Open Box = Open Box Rato",
+    }),
+    kv: makeKv(),
+    now: () => NOW_MS,
+    createBookrClient: () => ({
+      bootstrapSession: async () => ({ subscriptionId: "11111111-1111-4111-8111-111111111111" }),
+    }),
+    createClient: () => { throw new Error("Regybox client must not be called"); },
+    fetchImpl: async () => new Response(ICS_WITH_EVENT("20260713T063000Z")),
+  });
+  const calendar = flatChecks(model).find((item) => item.text.startsWith("Calendar is reachable"));
+  assert.match(calendar?.hint, /WOD Rato → WOD at Rato/);
 });
 
 test("the last run section summarizes results and failures", async () => {
@@ -180,6 +202,27 @@ test("a calendar-level failure is described without class placeholders", async (
   assert.equal(summary?.level, "bad");
   assert.ok(!summary.text.includes("undefined"));
   assert.match(summary.text, /calendar could not be checked \(calendar_or_plan_failure\)/);
+});
+
+test("an empty failed Bookr run is shown as a provider-aware failure", async () => {
+  const lastRun = {
+    ranAt: new Date(NOW_MS - 2 * 60_000).toISOString(),
+    platform: "bookr",
+    status: "failure",
+    mode: "worker",
+    plannedOperations: 0,
+    operations: [],
+  };
+  const model = await buildStatusModel({
+    env: workerEnv({ BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "" }),
+    kv: makeKv({ "regybox:v1:last_run": JSON.stringify(lastRun) }),
+    now: () => NOW_MS,
+    fetchImpl: async () => new Response(ICS_WITH_EVENT("20260713T063000Z")),
+  });
+  const summary = flatChecks(model).find((item) => item.text.startsWith("Last check:"));
+  assert.equal(summary?.level, "bad");
+  assert.match(summary.text, /Bookr\.fit: scheduler run failed/);
+  assert.doesNotMatch(summary.text, /session_refresh_failed|undefined/);
 });
 
 test("recent activity is newest-first with outcome levels and is omitted when empty", async () => {
@@ -234,4 +277,171 @@ test("the rendered page is safe, read-only HTML without secrets", async () => {
   assert.ok(html.includes('name="robots" content="noindex"'));
   assert.ok(html.includes("never shows your credentials"));
   assert.ok(!html.includes("<script>"));
+});
+
+test("Bookr status checks use the Bookr credential and active subscription without exposing it", async () => {
+  const authCookie = "sb-jphimrpybgssduyuziaw-auth-token.0=base64-secret";
+  const model = await buildStatusModel({
+    env: workerEnv({
+      BOOKING_PLATFORM: "bookr",
+      BOOKR_AUTH_COOKIE: authCookie,
+      CALENDAR_URL: "",
+      PHPSESSID: "legacy-cookie-must-not-be-used",
+      REGYBOX_USER: "legacy-user-must-not-be-used",
+    }),
+    kv: makeKv(),
+    now: () => NOW_MS,
+    createBookrClient: (options) => {
+      assert.equal(options.authCookie, authCookie);
+      assert.equal(options.persistSession, false);
+      return { bootstrapSession: async () => ({ subscriptionId: "11111111-1111-4111-8111-111111111111" }) };
+    },
+    createClient: () => { throw new Error("Regybox client must not be called"); },
+  });
+  assert.equal(model.platform, "bookr");
+  const texts = flatChecks(model).map((item) => `${item.level}:${item.text}`);
+  assert.ok(texts.includes("ok:Booking platform: Bookr.fit"));
+  assert.ok(texts.includes("ok:Bookr.fit authentication cookie is set"));
+  assert.ok(texts.includes("ok:Bookr.fit accepts your login"));
+  assert.ok(texts.includes("ok:Bookr.fit has an active subscription"));
+  assert.doesNotMatch(JSON.stringify(model), /base64-secret|legacy-cookie|legacy-user/);
+  const html = renderStatusPage(model);
+  assert.match(html, /Bookr\.fit auto-enroller/);
+  assert.doesNotMatch(html, /base64-secret|11111111-1111-4111-8111-111111111111/);
+});
+
+test("invalid platform status performs no provider or calendar requests", async () => {
+  let calls = 0;
+  const model = await buildStatusModel({
+    env: workerEnv({ BOOKING_PLATFORM: "unknown", CALENDAR_URL: "https://calendar.example.test/feed.ics" }),
+    kv: makeKv(),
+    createClient: () => { calls += 1; throw new Error("must not be called"); },
+    createBookrClient: () => { calls += 1; throw new Error("must not be called"); },
+    fetchImpl: async () => { calls += 1; throw new Error("must not be called"); },
+  });
+  assert.equal(calls, 0);
+  assert.ok(flatChecks(model).some((item) => item.level === "bad" && item.text === "Booking platform is invalid"));
+  const html = renderStatusPage(model);
+  assert.match(html, /<h1>Unknown auto-enroller<\/h1>/);
+  assert.match(html, /Mode: not configured yet · Unknown · checked/);
+  assert.doesNotMatch(html, /<h1>Regybox auto-enroller<\/h1>/);
+});
+
+test("Bookr run history labels legacy Regybox records after a provider switch", () => {
+  const legacyRun = {
+    id: "0123456789abcdef0123456789abcdef0123",
+    status: "success",
+    startedAt: "2026-07-12T10:00:00.000Z",
+    durationMs: 1000,
+    operations: [],
+  };
+  const legacyHtml = renderRunsPage([legacyRun], {
+    platform: "bookr",
+    nowMs: NOW_MS,
+  });
+  assert.match(legacyHtml, /<h1>Bookr\.fit run history<\/h1>/);
+  assert.match(legacyHtml, /<th>Platform<\/th>/);
+  assert.match(legacyHtml, /<td>Regybox<\/td>/);
+
+  const bookrRun = { ...legacyRun, platform: "bookr" };
+  const homogeneousHtml = renderRunsPage([bookrRun], {
+    platform: "bookr",
+    nowMs: NOW_MS,
+  });
+  assert.doesNotMatch(homogeneousHtml, /<th>Platform<\/th>/);
+});
+
+test("Bookr dispatch configuration is shown as an actionable setup error", async () => {
+  const model = await buildStatusModel({
+    env: workerEnv({
+      BOOKING_PLATFORM: "bookr",
+      BOOKR_AUTH_COOKIE: "cookie",
+      CALENDAR_URL: "",
+      GITHUB_TOKEN: "token",
+      GITHUB_OWNER: "owner",
+      GITHUB_REPO: "repo",
+    }),
+    kv: makeKv(),
+    createBookrClient: () => ({ bootstrapSession: async () => ({ subscriptionId: "11111111-1111-4111-8111-111111111111" }) }),
+  });
+  const unsupported = flatChecks(model).find((item) => item.text.includes("requires self-contained Worker"));
+  assert.equal(unsupported?.level, "bad");
+  assert.match(unsupported?.hint, /GITHUB_TOKEN/);
+});
+
+test("Bookr failures have provider-specific recovery text and redact session details", () => {
+  const error = new Error("BOOKR_AUTH_COOKIE=sb-jphimrpybgssduyuziaw-auth-token.0=secret-cookie");
+  error.name = "BookrLoginError";
+  const payload = errorPayload(error, { platform: "bookr" });
+  assert.equal(payload.errorCode, "login_error");
+  assert.match(payload.userTitle, /Bookr\.fit/);
+  assert.match(payload.userNextSteps.join(" "), /BOOKR_AUTH_COOKIE/);
+  assert.doesNotMatch(payload.technicalMessage, /secret-cookie/);
+  assert.match(buildFailureFingerprint({ operation: "enroll", error, platform: "bookr" }), /Unable to log in to Bookr\.fit/);
+});
+
+test("Bookr subscription failures are an explicit red live check", async () => {
+  const model = await buildStatusModel({
+    env: workerEnv({ BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie", CALENDAR_URL: "" }),
+    kv: makeKv(),
+    createBookrClient: () => ({ bootstrapSession: async () => { throw new BookrSubscriptionError(); } }),
+  });
+  const subscription = flatChecks(model).find((item) => item.text === "Bookr.fit has no active subscription");
+  const login = flatChecks(model).find((item) => item.text === "Bookr.fit accepts your login");
+  assert.equal(login?.level, "ok");
+  assert.equal(subscription?.level, "bad");
+  assert.match(subscription?.hint, /membership is active/);
+});
+
+test("Bookr status reports an expiring valid session without claiming login or subscription success", async () => {
+  const model = await buildStatusModel({
+    env: workerEnv({ BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie", CALENDAR_URL: "" }),
+    kv: makeKv(),
+    createBookrClient: () => ({ bootstrapSession: async () => { throw new BookrSessionRefreshRequiredError(); } }),
+  });
+  const checks = flatChecks(model);
+  const refresh = checks.find((item) => item.text === "Bookr.fit session needs refresh");
+  assert.equal(refresh?.level, "warn");
+  assert.match(refresh?.hint, /read-only|next run/);
+  assert.equal(checks.some((item) => item.text === "Bookr.fit accepts your login"), false);
+  assert.equal(checks.some((item) => item.text === "Bookr.fit has an active subscription"), false);
+  assert.equal(checks.some((item) => item.level === "bad" && /rejected your login/.test(item.text)), false);
+});
+
+test("Bookr status still marks invalid sessions as rejected login", async () => {
+  const model = await buildStatusModel({
+    env: workerEnv({ BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie", CALENDAR_URL: "" }),
+    kv: makeKv(),
+    createBookrClient: () => ({ bootstrapSession: async () => { throw new BookrLoginError(); } }),
+  });
+  const rejected = flatChecks(model).find((item) => item.text.startsWith("Bookr.fit rejected your login"));
+  assert.equal(rejected?.level, "bad");
+  assert.match(rejected?.hint, /sb-.*auth-token/);
+});
+
+test("historical run and activity providers are not relabeled when the platform switches", async () => {
+  const lastRun = {
+    platform: "regybox",
+    ranAt: new Date(NOW_MS - 2 * 60_000).toISOString(),
+    operations: [{ operation: "enroll", classDate: "2026-07-14", classTime: "06:30", classType: "WOD", outcome: "success" }],
+  };
+  const activity = [{
+    platform: "bookr",
+    at: new Date(NOW_MS - 60_000).toISOString(),
+    operation: "enroll", classDate: "2026-07-15", classTime: "06:30", classType: "WOD", outcome: "success",
+  }];
+  const model = await buildStatusModel({
+    env: workerEnv({ BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie", CALENDAR_URL: "" }),
+    kv: makeKv({
+      "regybox:v1:last_run": JSON.stringify(lastRun),
+      "regybox:v1:activity": JSON.stringify(activity),
+    }),
+    createBookrClient: () => ({ bootstrapSession: async () => ({ subscriptionId: "11111111-1111-4111-8111-111111111111" }) }),
+    now: () => NOW_MS,
+  });
+  const last = flatChecks(model).find((item) => item.text.startsWith("Last check:"));
+  assert.match(last.text, /Last check: 2 minutes ago — enrolled in WOD/);
+  assert.doesNotMatch(last.text, /Bookr\.fit/);
+  const recent = model.sections.find((section) => section.title === "Recent activity").checks[0];
+  assert.match(recent.text, /^Bookr\.fit: Enrolled in WOD/);
 });

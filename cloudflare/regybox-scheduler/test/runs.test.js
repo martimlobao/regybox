@@ -17,6 +17,7 @@ import {
   renderStatusPage,
 } from "../src/status.js";
 import worker, { handleScheduled } from "../src/index.js";
+import { encodeBookrSession } from "../src/bookr.js";
 
 function makeKv(existing = new Map()) {
   const writes = [];
@@ -92,6 +93,34 @@ test("run records start durably, sanitize traces, and finalize with retained sum
   assert.ok(!serialized.includes("regybox.pt"));
   assert.equal(record.trace[0].data.timerSeconds, 213598);
   assert.equal(kv.writes.at(-1).options.expirationTtl, runConstants.RUN_TTL_SECONDS);
+});
+
+test("run trace redaction covers UUID versions 6 through 8", async () => {
+  const kv = makeKv();
+  const recorder = await createRunRecorder({
+    kv,
+    mode: "worker",
+    id: "abcdef0123456789abcdef0123456789abcd",
+    now: () => 0,
+  });
+  const identifiers = [
+    "01234567-89ab-6cde-8f01-23456789abcd",
+    "01234567-89ab-7cde-8f01-23456789abcd",
+    "01234567-89ab-8cde-8f01-23456789abcd",
+  ];
+  const originalLog = console.log;
+  console.log = () => {};
+  try {
+    await recorder.trace({ message: identifiers.join(" ") });
+    await recorder.finalize({ operations: [] });
+  } finally {
+    console.log = originalLog;
+  }
+  const serialized = JSON.stringify(await readRun(kv, recorder.id));
+  for (const identifier of identifiers) {
+    assert.doesNotMatch(serialized, new RegExp(identifier));
+  }
+  assert.match(serialized, /\[redacted id\]/);
 });
 
 test("trace retention is capped and marked without hiding terminal status", async () => {
@@ -317,4 +346,98 @@ test("scheduled execution setup failures never inherit operations from the previ
   const run = await readRun(kv, summaries[0].id);
   assert.deepEqual(run.operations, []);
   assert.ok(!JSON.stringify(run).includes("2026-07-19"));
+});
+
+test("scheduled Bookr bootstrap failures retain operation outcomes in the run timeline", async () => {
+  const kv = makeKv();
+  const originalFetch = globalThis.fetch;
+  const originalLog = console.log;
+  const originalError = console.error;
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "BEGIN:VEVENT",
+    "UID:bookr-bootstrap-failure",
+    "DTSTART:20260722T063000Z",
+    "DTEND:20260722T072000Z",
+    "SUMMARY:CrossFit",
+    "END:VEVENT",
+    "END:VCALENDAR",
+    "",
+  ].join("\r\n");
+  globalThis.fetch = async (url) => String(url).includes("calendar.example.test")
+    ? new Response(ics, { headers: { "content-type": "text/calendar" } })
+    : new Response("expired", { status: 401 });
+  console.log = () => {};
+  console.error = () => {};
+  try {
+    await assert.rejects(
+      handleScheduled({
+        BOOKING_PLATFORM: "bookr",
+        BOOKR_AUTH_COOKIE: encodeBookrSession({
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          expires_at: 2_000_000_000,
+        }),
+        CALENDAR_URL: "https://calendar.example.test/private.ics",
+        CALENDAR_EVENT_NAMES: "CrossFit",
+        CLASS_MAP: "CrossFit = WOD",
+        REGYBOX_STATE: kv,
+      }, {
+        scheduledAt: Date.parse("2026-07-20T10:28:00.000Z"),
+        now: () => Date.parse("2026-07-20T10:28:01.000Z"),
+      }),
+      /Bookr/i,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.log = originalLog;
+    console.error = originalError;
+  }
+  const summaries = await readRuns(kv);
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0].status, "failure");
+  const run = await readRun(kv, summaries[0].id);
+  assert.deepEqual(run.operations, [{
+    operation: "enroll",
+    classDate: "2026-07-22",
+    classTime: "07:30",
+    classType: "WOD",
+    outcome: "failure",
+    errorCode: "login_error",
+  }]);
+});
+
+test("run traces redact Bookr auth cookies and opaque auth fields", async () => {
+  const kv = makeKv();
+  const id = "4123456789abcdef0123456789abcdef0123";
+  const recorder = await createRunRecorder({ kv, mode: "worker", id, now: () => 0 });
+  const originalLog = console.log;
+  console.log = () => {};
+  try {
+    await recorder.trace({
+      message: "BOOKR_AUTH_COOKIE=sb-jphimrpybgssduyuziaw-auth-token.0=secret-cookie",
+      data: { endpointPath: "/dashboard?token=secret", token: "secret-token" },
+    });
+    await recorder.finalize({ operations: [] });
+  } finally {
+    console.log = originalLog;
+  }
+  const run = await readRun(kv, id);
+  const serialized = JSON.stringify(run);
+  assert.doesNotMatch(serialized, /secret-cookie|secret-token|token=secret/);
+});
+
+test("run records retain their provider metadata for mixed-platform history", async () => {
+  const kv = makeKv();
+  const id = "5123456789abcdef0123456789abcdef0123";
+  const recorder = await createRunRecorder({ kv, mode: "worker", platform: "bookr", id, now: () => 0 });
+  await recorder.finalize({ operations: [] });
+  const run = await readRun(kv, id);
+  assert.equal(run.platform, "bookr");
+  assert.equal((await readRuns(kv))[0].platform, "bookr");
+  const html = renderRunPage(run);
+  assert.match(html, /Bookr\.fit run details/);
+  const list = await handleRunsRequest(kv);
+  assert.match(await list.text(), /Bookr\.fit/);
 });

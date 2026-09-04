@@ -69,6 +69,8 @@ function safeText(value, limit = MAX_MESSAGE_LENGTH) {
     .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, " ")
     .replace(/<[^>]*>/g, " ")
     .replace(/\b(?:authorization|cookie|set-cookie)\s*[:=]\s*[^\r\n]+/gi, "[redacted credential]")
+    .replace(/\bBOOKR_AUTH_COOKIE\s*[:=]\s*[^\r\n]+/gi, "BOOKR_AUTH_COOKIE=[redacted]")
+    .replace(/\b(?:sb-[a-z0-9-]+-auth-token)(?:\.\d+)?\s*=\s*[^;\s]+/gi, "[redacted auth cookie]")
     .replace(/\b(?:bearer|basic)\s+[a-z0-9._~+/=-]+/gi, "[redacted credential]")
     .replace(
       /(["']?(?:PHPSESSID|regybox_user|password|token|secret|cookie)["']?\s*[:=]\s*)["']?[^"',}\s;]+["']?/gi,
@@ -77,6 +79,7 @@ function safeText(value, limit = MAX_MESSAGE_LENGTH) {
     .replace(/\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/gi, "[redacted email]")
     .replace(/https?:\/\/[^\s<>"']+/gi, "[redacted URL]")
     .replace(/([?&][\w.-]+=)[^&\s]+/g, "$1[redacted]")
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "[redacted id]")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, limit);
@@ -155,9 +158,14 @@ function runKey(id) {
   return `${RUN_PREFIX}${id}`;
 }
 
+function safePlatform(platform) {
+  return String(platform ?? "").trim().toLowerCase() === "bookr" ? "bookr" : "regybox";
+}
+
 function summaryFor(record) {
   return {
     id: record.id,
+    platform: safePlatform(record.platform),
     status: record.status,
     scheduledAt: record.scheduledAt,
     startedAt: record.startedAt,
@@ -213,6 +221,7 @@ export function outcomeStatus(operations, failed = false) {
 export async function createRunRecorder({
   kv,
   mode,
+  platform = "regybox",
   scheduledAt,
   now = () => Date.now(),
   id = randomRunId(),
@@ -224,6 +233,7 @@ export async function createRunRecorder({
   const record = {
     version: 1,
     id,
+    platform: safePlatform(platform),
     status: "running",
     scheduledAt: new Date(Number.isFinite(scheduledAt) ? scheduledAt : startedMs).toISOString(),
     startedAt: new Date(startedMs).toISOString(),

@@ -32,6 +32,8 @@ function sanitizeText(value, limit = MAX_TECHNICAL_MESSAGE_LENGTH) {
     .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, " ")
     .replace(/<[^>]*>/g, " ")
     .replace(/\b(?:authorization|cookie|set-cookie)\s*[:=]\s*[^\r\n]+/gi, "[redacted credential]")
+    .replace(/\bBOOKR_AUTH_COOKIE\s*[:=]\s*[^\r\n]+/gi, "BOOKR_AUTH_COOKIE=[redacted]")
+    .replace(/\b(?:sb-[a-z0-9-]+-auth-token)(?:\.\d+)?\s*=\s*[^;\s]+/gi, "[redacted auth cookie]")
     .replace(/\b(?:bearer|basic)\s+[a-z0-9._~+/=-]+/gi, "[redacted credential]")
     .replace(
       /(["']?(?:PHPSESSID|regybox_user|password|token|secret|cookie)["']?\s*[:=]\s*)["']?[^"',}\s;]+["']?/gi,
@@ -45,6 +47,7 @@ function sanitizeText(value, limit = MAX_TECHNICAL_MESSAGE_LENGTH) {
     .replace(/(?:\.\.?\/|\/)?[^\s<>"']+\.php(?:\?[^\s<>"']*)?/gi, "[redacted action URL]")
     .replace(/(?:\.\.?\/|\/)?[^\s<>"']+\.ics(?:\?[^\s<>"']*)?/gi, "[redacted calendar URL]")
     .replace(/([?&][\w.-]+=)[^&\s]+/g, "$1[redacted]")
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "[redacted id]")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, limit);
@@ -157,6 +160,10 @@ export async function recordIncident({ kv, dispatch, error, payload, statusUrl, 
     errorName: sanitizeText(error?.name ?? "Error", 100),
     technicalMessage: sanitizeText(payload?.technicalMessage ?? error?.message),
   };
+  const platform = String(dispatch?.platform ?? inputs["booking-platform"] ?? "").trim().toLowerCase();
+  if (platform === "bookr" || platform === "regybox") {
+    record.platform = platform;
+  }
   if (/^[a-f0-9]{36}$/.test(String(runId ?? ""))) {
     record.runId = runId;
   }

@@ -115,3 +115,20 @@ test("corrupt incident records return 404 and leave a diagnostic warning", async
   }
   assert.match(String(warnings[0]?.[0]), /incident read failed/);
 });
+
+test("Bookr auth cookies and provider metadata are redacted in incidents", async () => {
+  const kv = makeKv();
+  const auth = "sb-jphimrpybgssduyuziaw-auth-token.0=super-secret-cookie";
+  const error = new Error(`BOOKR_AUTH_COOKIE=${auth}; Authorization: Bearer access-secret`);
+  error.name = "BookrLoginError";
+  const incidentUrl = await recordIncident({
+    kv,
+    dispatch: { operation: "enroll", platform: "bookr", inputs: { "class-type": "WOD", "class-date": "2026-07-16", "class-time": "06:30" } },
+    error,
+    payload: { errorCode: "login_error", technicalMessage: error.message },
+    statusUrl: "https://worker.example.test",
+  });
+  const record = await readIncident(kv, incidentUrl.split("/").at(-1));
+  assert.equal(record.platform, "bookr");
+  assert.doesNotMatch(JSON.stringify(record), /super-secret-cookie|access-secret/);
+});

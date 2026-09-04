@@ -6,10 +6,19 @@ import {
   parseClassMap,
   resolveClassRules,
 } from "./calendar.js";
-import { appendActivity, dispatchWorkflow, executePlan, executionMode, writeLastRun } from "./executor.js";
+import {
+  appendActivity,
+  dispatchWorkflow,
+  executePlan,
+  executionMode,
+  executionSummarySymbol,
+  writeLastRun,
+} from "./executor.js";
 import { rememberStatusOrigin } from "./incidents.js";
 import { createRunRecorder, outcomeStatus } from "./runs.js";
 import { handleIncidentRequest, handleRunRequest, handleRunsRequest, handleStatusRequest } from "./status.js";
+import { bookingPlatform } from "./platform.js";
+import { safeErrorMessage, safeErrorValue } from "./failures.js";
 
 export {
   buildPlan,
@@ -26,7 +35,7 @@ async function safeRecorderCall(recorder, method, ...args) {
   try {
     return await recorder[method](...args);
   } catch (error) {
-    console.warn(`regybox: run ${method} write failed:`, error);
+    console.warn(`regybox: run ${method} write failed:`, safeErrorValue(error));
     return null;
   }
 }
@@ -39,13 +48,22 @@ function resolvedMode(env) {
   }
 }
 
+function resolvedPlatform(env) {
+  try {
+    return bookingPlatform(env);
+  } catch {
+    return "regybox";
+  }
+}
+
 export async function handleScheduled(env, { scheduledAt, now = () => Date.now() } = {}) {
   const mode = resolvedMode(env);
+  const platform = resolvedPlatform(env);
   let recorder = null;
   try {
-    recorder = await createRunRecorder({ kv: env.REGYBOX_STATE, mode, scheduledAt, now });
+    recorder = await createRunRecorder({ kv: env.REGYBOX_STATE, mode, platform, scheduledAt, now });
   } catch (error) {
-    console.warn("regybox: run recorder start failed:", error);
+    console.warn("regybox: run recorder start failed:", safeErrorValue(error));
   }
   let plan;
   try {
@@ -76,7 +94,10 @@ export async function handleScheduled(env, { scheduledAt, now = () => Date.now()
     });
     await safeRecorderCall(recorder, "setPlan", plan.dispatches.length);
   } catch (error) {
-    console.error(`regybox: calendar/plan failed: ${error.message}`);
+    // Calendar/plan failures occur before either provider client is called.
+    // Preserve their ordinary subsystem diagnostics (including HTTP status)
+    // while operation/API failures remain provider-redacted in the executor.
+    console.error(`regybox: calendar/plan failed: ${safeErrorMessage(error)}`);
     await safeRecorderCall(recorder, "trace", {
       level: "error",
       scope: "calendar",
@@ -91,6 +112,7 @@ export async function handleScheduled(env, { scheduledAt, now = () => Date.now()
         mode,
         plannedOperations: 0,
         operations,
+        ...(platform === "bookr" ? { platform } : {}),
       });
     } catch {
       // Preserve the calendar/build failure as the scheduled-handler error.
@@ -101,6 +123,7 @@ export async function handleScheduled(env, { scheduledAt, now = () => Date.now()
         operation: "calendar",
         outcome: "failure",
         errorCode: "calendar_or_plan_failure",
+        ...(platform === "bookr" ? { platform } : {}),
       },
     ]);
     await safeRecorderCall(recorder, "finalize", {
@@ -114,7 +137,8 @@ export async function handleScheduled(env, { scheduledAt, now = () => Date.now()
   try {
     summary = await executePlan({ env, kv: env.REGYBOX_STATE, dispatches: plan.dispatches, now, recorder });
   } catch (error) {
-    const operations = [];
+    const failureSummary = error?.[executionSummarySymbol];
+    const operations = Array.isArray(failureSummary?.operations) ? failureSummary.operations : [];
     await safeRecorderCall(recorder, "trace", {
       level: "error",
       scope: "executor",
@@ -148,6 +172,18 @@ export default {
   },
   async fetch(request, env, _ctx) {
     const url = new URL(request.url);
+    // Browsers request this asset automatically when opening the status page.
+    // It is not a status endpoint: in particular, do not let it replace the
+    // remembered path prefix with "/favicon.ico".
+    if (/\/favicon\.ico$/i.test(url.pathname)) {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "cache-control": "no-store",
+          "x-robots-tag": "noindex, nofollow",
+        },
+      });
+    }
     const incidentMatch = url.pathname.match(/\/incidents\/([a-f0-9]{36})\/?$/);
     if (incidentMatch) {
       const basePath = url.pathname.slice(0, incidentMatch.index).replace(/\/+$/, "");
@@ -156,17 +192,23 @@ export default {
     const runMatch = url.pathname.match(/\/runs\/([a-f0-9]{36})\/?$/);
     if (runMatch) {
       const basePath = url.pathname.slice(0, runMatch.index).replace(/\/+$/, "");
-      return handleRunRequest(env.REGYBOX_STATE, runMatch[1], { basePath });
+      return handleRunRequest(env.REGYBOX_STATE, runMatch[1], {
+        basePath,
+        platform: resolvedPlatform(env),
+      });
     }
     const runsMatch = url.pathname.match(/\/runs\/?$/);
     if (runsMatch) {
       const basePath = url.pathname.slice(0, runsMatch.index).replace(/\/+$/, "");
-      return handleRunsRequest(env.REGYBOX_STATE, { basePath });
+      return handleRunsRequest(env.REGYBOX_STATE, {
+        basePath,
+        platform: resolvedPlatform(env),
+      });
     }
     try {
       await rememberStatusOrigin(env.REGYBOX_STATE, url.href);
     } catch (error) {
-      console.warn("regybox: status origin write failed:", error);
+      console.warn("regybox: status origin write failed:", safeErrorValue(error));
     }
     const basePath = url.pathname.replace(/\/+$/, "");
     return handleStatusRequest(env, env.REGYBOX_STATE, { basePath });

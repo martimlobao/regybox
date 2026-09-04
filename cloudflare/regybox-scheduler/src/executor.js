@@ -1,7 +1,9 @@
-import { buildFailureFingerprint, errorPayload } from "./failures.js";
+import { buildFailureFingerprint, errorPayload, safeErrorMessage, safeErrorValue } from "./failures.js";
 import { notifyFailure, notifyResult } from "./notify.js";
+import { createBookrClient, runBookrOperation } from "./bookr.js";
 import { UnparseableError, createRegyboxClient, runOperation } from "./regybox.js";
 import { recordIncident, resolveStatusUrl } from "./incidents.js";
+import { bookingPlatform, platformLabel } from "./platform.js";
 
 const LAST_RUN_KEY = "regybox:v1:last_run";
 const ACTIVITY_KEY = "regybox:v1:activity";
@@ -11,6 +13,10 @@ const WALL_BUDGET_MS = 13 * 60 * 1000;
 const MINIMUM_OPERATION_BUDGET_MS = 30 * 1000;
 const NOT_OPEN_DISPATCH_WINDOW_MS = 60 * 60 * 1000;
 const NOT_OPEN_OPENING_JUMP_TOLERANCE_MS = 2 * 60 * 1000;
+
+// Carries the sanitized operation summary through a rethrown execution error
+// so the scheduled handler can finalize the separate run timeline accurately.
+export const executionSummarySymbol = Symbol("executionSummary");
 
 function configured(value) {
   return Boolean(String(value ?? "").trim());
@@ -27,7 +33,7 @@ function timeoutSeconds(env) {
   return Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : 900;
 }
 
-function operationDetails(dispatch) {
+function operationDetails(dispatch, platform = "regybox") {
   const inputs = dispatch.inputs ?? {};
   return {
     operation: dispatch.operation,
@@ -37,6 +43,7 @@ function operationDetails(dispatch) {
     calendarEventName: inputs["calendar-event-name"],
     cacheKey: inputs["cache-key"],
     calendarFingerprint: inputs["calendar-fingerprint"],
+    ...(platform === "bookr" ? { platform } : {}),
   };
 }
 
@@ -47,6 +54,7 @@ function summaryOperation(details, outcome, extra = {}) {
     classTime: details.classTime,
     classType: details.classType,
     outcome,
+    ...(details.platform ? { platform: details.platform } : {}),
     ...extra,
   };
 }
@@ -60,6 +68,7 @@ function activityOperation(details, outcome, at, extra = {}) {
     classType: details.classType,
     calendarEventName: details.calendarEventName,
     outcome,
+    ...(details.platform ? { platform: details.platform } : {}),
     ...extra,
   };
 }
@@ -78,7 +87,7 @@ async function recordTrace(recorder, event) {
   try {
     await recorder.trace(event);
   } catch (error) {
-    console.warn("regybox: run trace write failed:", error);
+    console.warn("regybox: run trace write failed:", safeErrorValue(error));
   }
 }
 
@@ -130,7 +139,7 @@ async function writeState({ kv, details, result }) {
   return state;
 }
 
-async function assertSafeNotOpenTransition({ kv, details, result, now }) {
+async function assertSafeNotOpenTransition({ kv, details, result, now, platform = "regybox" }) {
   if (result.status !== "noop" || result.cacheState !== "not_open" || !result.enrollmentOpensAt) {
     return;
   }
@@ -150,7 +159,7 @@ async function assertSafeNotOpenTransition({ kv, details, result, now }) {
     openingJumpMs > NOT_OPEN_OPENING_JUMP_TOLERANCE_MS
   ) {
     throw new UnparseableError(
-      "Regybox moved an already-due enrollment opening unexpectedly far into the future",
+      `${platformLabel(platform)} moved an already-due enrollment opening unexpectedly far into the future`,
       {
         previousEnrollmentOpensAt: new Date(previousOpeningMs).toISOString(),
         claimedEnrollmentOpensAt: new Date(claimedOpeningMs).toISOString(),
@@ -161,6 +170,21 @@ async function assertSafeNotOpenTransition({ kv, details, result, now }) {
 }
 
 export function executionMode(env) {
+  const platform = bookingPlatform(env);
+  if (platform === "bookr") {
+    if (["GITHUB_TOKEN", "GITHUB_OWNER", "GITHUB_REPO"].every((name) => configured(env[name]))) {
+      throw new Error(
+        "Bookr.fit requires self-contained Worker execution; GitHub dispatch supports Regybox only.",
+      );
+    }
+    if (configured(env.BOOKR_AUTH_COOKIE)) {
+      return "worker";
+    }
+    throw new Error(
+      "Missing scheduler configuration variable: BOOKR_AUTH_COOKIE. " +
+        "Configure it as a Cloudflare secret for Bookr.fit Worker execution.",
+    );
+  }
   if (["GITHUB_TOKEN", "GITHUB_OWNER", "GITHUB_REPO"].every((name) => configured(env[name]))) {
     return "dispatch";
   }
@@ -216,7 +240,7 @@ export async function readActivity(kv) {
   }
 }
 
-export async function appendActivity(kv, entries) {
+export async function appendActivity(kv, entries, { platform } = {}) {
   if (!entries.length) {
     return;
   }
@@ -225,7 +249,7 @@ export async function appendActivity(kv, entries) {
     const activity = [...entries].reverse().concat(existing).slice(0, 50);
     await kv.put(ACTIVITY_KEY, JSON.stringify(activity), { expirationTtl: STATE_TTL_SECONDS });
   } catch (error) {
-    console.warn("regybox: activity state write failed:", error);
+    console.warn("regybox: activity state write failed:", safeErrorValue(error, { platform }));
   }
 }
 
@@ -236,6 +260,8 @@ export async function executePlan({
   now = () => Date.now(),
   createClient = createRegyboxClient,
   runOperationImpl = runOperation,
+  createBookrClientImpl = createBookrClient,
+  runBookrOperationImpl = runBookrOperation,
   dispatchWorkflowImpl = dispatchWorkflow,
   notifyFailureImpl = notifyFailure,
   notifyResultImpl = notifyResult,
@@ -245,6 +271,8 @@ export async function executePlan({
   recorder,
 }) {
   const mode = executionMode(env);
+  const platform = bookingPlatform(env);
+  const providerName = platformLabel(platform);
   const statusUrl = await resolveStatusUrl(env, kv);
   const runUrl = statusUrl && recorder?.id
     ? `${String(statusUrl).replace(/\/+$/, "")}/runs/${recorder.id}`
@@ -257,13 +285,13 @@ export async function executePlan({
         incidentUrl = await recordIncident({
           kv,
           statusUrl,
-          dispatch: notification.dispatch,
+          dispatch: { ...notification.dispatch, platform },
           error: notification.error,
           payload: notification.payload,
           runId: recorder?.id,
         });
       } catch (error) {
-        console.warn("regybox: incident record write failed:", error);
+        console.warn("regybox: incident record write failed:", safeErrorValue(error, { platform }));
       }
       return notifyFailureImpl({ env, kv, ...notification, statusUrl, incidentUrl, runUrl });
     });
@@ -277,6 +305,7 @@ export async function executePlan({
     mode,
     plannedOperations: dispatches.length,
     operations,
+    ...(platform === "bookr" ? { platform } : {}),
   };
 
   try {
@@ -289,7 +318,7 @@ export async function executePlan({
     });
     if (mode === "dispatch") {
       for (const [operationIndex, dispatch] of dispatches.entries()) {
-        const details = operationDetails(dispatch);
+        const details = operationDetails(dispatch, platform);
         console.log(`regybox: ${operationDescription(details)}`);
         await recordTrace(recorder, {
           scope: "operation",
@@ -311,11 +340,11 @@ export async function executePlan({
             data: { operation: details.operation, outcome: "dispatched" },
           });
         } catch (error) {
-          const payload = errorPayload(error);
+          const payload = errorPayload(error, { platform });
           operations.push(summaryOperation(details, "failure", { errorCode: payload.errorCode }));
           activity.push(activityOperation(details, "failure", now(), { errorCode: payload.errorCode }));
           console.error(
-            `regybox: ${operationDescription(details)} -> failure (${payload.errorCode}): ${error.message}`,
+            `regybox: ${operationDescription(details)} -> failure (${payload.errorCode}): ${safeErrorMessage(error, { platform })}`,
           );
           await recordTrace(recorder, {
             level: "error",
@@ -331,41 +360,50 @@ export async function executePlan({
       return summary;
     }
 
-    const client = createClient({
-      phpsessid: env.PHPSESSID,
-      regyboxUser: env.REGYBOX_USER,
-      timezone: env.TIMEZONE || "Europe/Lisbon",
-      now,
-      onTrace: (event) => recordTrace(recorder, event),
-    });
+    let client;
     await recordTrace(recorder, {
       scope: "session",
       code: "session_bootstrap_started",
-      message: "Starting Regybox session bootstrap",
+      message: `Starting ${providerName} session bootstrap`,
     });
     try {
+      client = platform === "bookr"
+        ? createBookrClientImpl({
+            authCookie: env.BOOKR_AUTH_COOKIE,
+            kv,
+            timezone: env.TIMEZONE || "Europe/Lisbon",
+            now,
+            onTrace: (event) => recordTrace(recorder, event),
+          })
+        : createClient({
+            phpsessid: env.PHPSESSID,
+            regyboxUser: env.REGYBOX_USER,
+            timezone: env.TIMEZONE || "Europe/Lisbon",
+            now,
+            onTrace: (event) => recordTrace(recorder, event),
+          });
       await client.bootstrapSession();
       await recordTrace(recorder, {
         scope: "session",
         code: "session_bootstrap_succeeded",
-        message: "Regybox session bootstrap succeeded",
+        message: `${providerName} session bootstrap succeeded`,
       });
     } catch (error) {
       await recordTrace(recorder, {
         level: "error",
         scope: "session",
         code: "session_bootstrap_failed",
-        message: "Regybox session bootstrap failed",
-        data: { errorCode: errorPayload(error).errorCode },
+        message: `${providerName} session bootstrap failed`,
+        data: { errorCode: errorPayload(error, { platform }).errorCode },
       });
       for (const [operationIndex, dispatch] of dispatches.entries()) {
-        const details = operationDetails(dispatch);
-        const payload = errorPayload(error);
-        const fingerprint = buildFailureFingerprint({ operation: dispatch.operation, error });
+        const details = operationDetails(dispatch, platform);
+        const payload = errorPayload(error, { platform });
+        const fingerprint = buildFailureFingerprint({ operation: dispatch.operation, error, platform });
         operations.push(summaryOperation(details, "failure", { errorCode: payload.errorCode }));
         activity.push(activityOperation(details, "failure", now(), { errorCode: payload.errorCode }));
         console.error(
-          `regybox: ${operationDescription(details)} -> failure (${payload.errorCode}): ${error.message}`,
+          `regybox: ${operationDescription(details)} -> failure (${payload.errorCode}): ${safeErrorMessage(error, { platform })}`,
         );
         await recordTrace(recorder, {
           level: "error",
@@ -378,13 +416,16 @@ export async function executePlan({
         try {
           await reportFailure({ dispatch, error, payload, fingerprint });
         } catch (notificationError) {
-          console.warn("regybox: bootstrap failure notification failed:", notificationError);
+          console.warn(
+            "regybox: bootstrap failure notification failed:",
+            safeErrorValue(notificationError, { platform }),
+          );
         }
       }
       throw error;
     }
     for (const [operationIndex, dispatch] of dispatches.entries()) {
-      const details = operationDetails(dispatch);
+      const details = operationDetails(dispatch, platform);
       const remainingMs = startedAt + WALL_BUDGET_MS - now();
       if (remainingMs < MINIMUM_OPERATION_BUDGET_MS) {
         operations.push(summaryOperation(details, "skipped"));
@@ -410,7 +451,8 @@ export async function executePlan({
       });
       let result;
       try {
-        result = await runOperationImpl({
+        const selectedRunOperation = platform === "bookr" ? runBookrOperationImpl : runOperationImpl;
+        result = await selectedRunOperation({
           client,
           operation: details.operation,
           classDate: details.classDate,
@@ -421,18 +463,18 @@ export async function executePlan({
           sleep,
           onTrace: (event) => recordTrace(recorder, {
             ...event,
-            scope: event?.scope || "regybox",
+            scope: event?.scope || platform,
             operationIndex,
           }),
         });
-        await assertSafeNotOpenTransition({ kv, details, result, now });
+        await assertSafeNotOpenTransition({ kv, details, result, now, platform });
       } catch (error) {
-        const payload = errorPayload(error);
-        const fingerprint = buildFailureFingerprint({ operation: details.operation, error });
+        const payload = errorPayload(error, { platform });
+        const fingerprint = buildFailureFingerprint({ operation: details.operation, error, platform });
         operations.push(summaryOperation(details, "failure", { errorCode: payload.errorCode }));
         activity.push(activityOperation(details, "failure", now(), { errorCode: payload.errorCode }));
         console.error(
-          `regybox: ${operationDescription(details)} -> failure (${payload.errorCode}): ${error.message}`,
+          `regybox: ${operationDescription(details)} -> failure (${payload.errorCode}): ${safeErrorMessage(error, { platform })}`,
         );
         await recordTrace(recorder, {
           level: "error",
@@ -489,12 +531,26 @@ export async function executePlan({
       }
     }
     return summary;
+  } catch (error) {
+    // Keep the last-run record honest when bootstrap or another execution
+    // failure happens before any operation can be recorded. Successful
+    // summaries intentionally retain their existing shape.
+    summary.status = "failure";
+    if (error && (typeof error === "object" || typeof error === "function")) {
+      try {
+        Object.defineProperty(error, executionSummarySymbol, { value: summary });
+      } catch {
+        // Preserve the original failure when an unusual non-extensible error
+        // cannot carry the internal summary.
+      }
+    }
+    throw error;
   } finally {
-    await appendActivity(kv, activity);
+    await appendActivity(kv, activity, { platform });
     try {
       await writeLastRun(kv, summary);
     } catch (error) {
-      console.warn("regybox: last-run state write failed:", error);
+      console.warn("regybox: last-run state write failed:", safeErrorValue(error, { platform }));
     }
   }
 }

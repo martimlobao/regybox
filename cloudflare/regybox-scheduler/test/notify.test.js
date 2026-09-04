@@ -111,6 +111,27 @@ test("failure email includes recovery steps and structured technical details", (
   );
 });
 
+test("Bookr notifications use Bookr.fit wording while legacy defaults stay Regybox", () => {
+  const success = composeEmail({
+    kind: "success",
+    operation: "enroll",
+    classSummary: "WOD on 2026-07-12 at 06:30",
+    platform: "bookr",
+  });
+  assert.equal(success.subject, "Bookr.fit Auto-enroll: success for WOD on 2026-07-12 at 06:30");
+  assert.match(success.body, /^Your Bookr\.fit auto-enrollment completed successfully\./);
+
+  const failure = composeEmail({
+    kind: "failure",
+    operation: "unenroll",
+    classSummary: "WOD on 2026-07-12 at 06:30",
+    platform: "bookr",
+    payload: { userMessage: "Booking change failed", userNextSteps: ["Try again."], userTitle: "Bookr failure" },
+  });
+  assert.equal(failure.subject, "Bookr.fit Auto-unenroll: failure - Bookr failure");
+  assert.match(failure.body, /We could not complete your Bookr\.fit auto-unenrollment\./);
+});
+
 test("failure email includes the short-lived incident link when available", () => {
   const email = composeEmail({
     kind: "failure",
@@ -194,6 +215,24 @@ test("sendEmail uses the worker-mailer SMTP API through an injectable transport"
     subject: "Subject",
     text: "Body",
   });
+});
+
+test("sendEmail uses provider-aware default sender branding", async () => {
+  let message;
+  await sendEmail(
+    emailEnv,
+    { subject: "Bookr subject", body: "Bookr body" },
+    {
+      platform: "bookr",
+      mailerFactory: async () => ({
+        send: async (_options, email) => {
+          message = email;
+        },
+      }),
+    },
+  );
+
+  assert.equal(message.from.name, "Bookr.fit Auto-enroll");
 });
 
 test("a repeated failure fingerprint is suppressed", async () => {

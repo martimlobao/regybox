@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const OUTPUT_FILE = ".wrangler.deploy.jsonc";
 
 export const WORKER_VAR_KEYS = [
+  "BOOKING_PLATFORM",
   "CLASS_MAP",
   "CALENDAR_EVENT_NAMES",
   "CLASS_TYPE",
