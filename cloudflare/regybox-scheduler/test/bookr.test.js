@@ -643,6 +643,53 @@ test("Bookr status-style client never rotates an expiring session or writes KV",
   assert.equal(kv.values.size, 0);
 });
 
+test("Bookr bounds chunked response reads and cancels an oversized body", async () => {
+  let pulls = 0;
+  let canceled = false;
+  const body = new ReadableStream({
+    pull(controller) {
+      pulls += 1;
+      controller.enqueue(new TextEncoder().encode(pulls === 1 ? "a".repeat(400_000) : "b".repeat(200_000)));
+    },
+    cancel() { canceled = true; },
+  });
+  const client = createBookrClient({
+    authCookie: authCookie(),
+    fetchImpl: async (url) => url.endsWith("/dashboard")
+      ? dashboardResponse()
+      : new Response(body, { headers: { "content-type": "application/json" } }),
+  });
+
+  await client.bootstrapSession();
+  await assert.rejects(() => client.listClasses("2026-09-05"), (error) => error?.name === "UnparseableError");
+  assert.equal(canceled, true);
+  assert.ok(pulls >= 2);
+});
+
+test("Bookr parses a normal chunked response without Content-Length", async () => {
+  const json = '{"selectedDaySessions":[]}';
+  const chunks = [
+    new TextEncoder().encode(json.slice(0, 9)),
+    new TextEncoder().encode(json.slice(9)),
+  ];
+  const body = new ReadableStream({
+    pull(controller) {
+      const chunk = chunks.shift();
+      if (chunk) controller.enqueue(chunk);
+      else controller.close();
+    },
+  });
+  const client = createBookrClient({
+    authCookie: authCookie(),
+    fetchImpl: async (url) => url.endsWith("/dashboard")
+      ? dashboardResponse()
+      : new Response(body, { headers: { "content-type": "application/json" } }),
+  });
+
+  await client.bootstrapSession();
+  assert.deepEqual(await client.listClasses("2026-09-05"), []);
+});
+
 test("Bookr rejects oversized or unauthenticated API responses without retaining bodies", async () => {
   const dashboard = `initialSubscription:{"id":"${subscriptionId}"}`;
   const oversized = createBookrClient({

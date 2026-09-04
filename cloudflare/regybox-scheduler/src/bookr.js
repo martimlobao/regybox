@@ -374,9 +374,33 @@ export function isAllowedBookrRequest(url, method) {
 async function responseText(response) {
   const length = Number(response.headers.get("content-length"));
   if (Number.isFinite(length) && length > MAX_RESPONSE_BYTES) throw new UnparseableError("Bookr response exceeded size limit");
-  const text = await response.text();
-  if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) throw new UnparseableError("Bookr response exceeded size limit");
-  return text;
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    // Keep compatibility with minimal response doubles and empty responses.
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) throw new UnparseableError("Bookr response exceeded size limit");
+    return text;
+  }
+  const decoder = new TextDecoder();
+  const parts = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = value instanceof Uint8Array ? value : new Uint8Array(value);
+      totalBytes += chunk.byteLength;
+      if (totalBytes > MAX_RESPONSE_BYTES) {
+        try { await reader.cancel(); } catch { /* cancellation is best effort */ }
+        throw new UnparseableError("Bookr response exceeded size limit");
+      }
+      parts.push(decoder.decode(chunk, { stream: true }));
+    }
+    parts.push(decoder.decode());
+    return parts.join("");
+  } finally {
+    reader.releaseLock?.();
+  }
 }
 
 async function responseJson(response) {
