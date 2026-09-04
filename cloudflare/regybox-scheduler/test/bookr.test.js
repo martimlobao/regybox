@@ -377,6 +377,54 @@ test("Bookr matching accepts legacy class rules with an exact box suffix", async
   }
 });
 
+test("Bookr ordered fallbacks do not let an ambiguous later backup mask a unique primary", async () => {
+  const primary = normalizeBookrSession(apiSession({ title: "WOD", boxName: "Rato" }));
+  const backupA = normalizeBookrSession(apiSession({
+    id: "33333333-3333-4333-8333-333333333333",
+    title: "Weekend WOD",
+    boxName: "Rato",
+  }));
+  const backupB = normalizeBookrSession(apiSession({
+    id: "44444444-4444-4444-8444-444444444444",
+    title: "Weekend WOD",
+    boxName: "Rato",
+  }));
+  const enrolled = [];
+  const result = await runBookrOperation({
+    client: {
+      listClasses: async () => [primary, backupA, backupB],
+      enroll: async (session) => enrolled.push(session.id),
+    },
+    classDate: "2026-09-05",
+    classTime: "07:30",
+    classType: "WOD Rato, Weekend WOD Rato",
+  });
+
+  assert.deepEqual(result, { operation: "enroll", status: "success", classType: "WOD" });
+  assert.deepEqual(enrolled, [primary.id]);
+
+  const bookedPrimary = normalizeBookrSession(apiSession({
+    title: "WOD",
+    boxName: "Rato",
+    currentUserBookingStatus: "booked",
+    canBook: false,
+    canCancel: true,
+  }));
+  const cancelled = [];
+  const cancellation = await runBookrOperation({
+    client: {
+      listClasses: async () => [bookedPrimary, backupA, backupB],
+      unenroll: async (session) => cancelled.push(session.id),
+    },
+    operation: "unenroll",
+    classDate: "2026-09-05",
+    classTime: "07:30",
+    classType: "WOD Rato, Weekend WOD Rato",
+  });
+  assert.deepEqual(cancellation, { operation: "unenroll", status: "success", classType: "WOD" });
+  assert.deepEqual(cancelled, [bookedPrimary.id]);
+});
+
 test("Bookr matching does not strip a partial or unrelated box suffix", async () => {
   const session = normalizeBookrSession(apiSession({ title: "WOD", boxName: "Rato" }));
   const client = { listClasses: async () => [session] };

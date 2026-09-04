@@ -655,9 +655,6 @@ function selectSession(sessions, { classDate, classTime, classTypes, operation =
       session.start === classTime &&
       matchesBookrClassType(session, classType),
     ));
-  if (matchesByType.some((matches) => matches.length > 1)) {
-    throw new UnparseableError("Bookr returned ambiguous matching classes");
-  }
   if (operation === "unenroll") {
     const enrolled = new Map();
     for (const matches of matchesByType) {
@@ -669,6 +666,8 @@ function selectSession(sessions, { classDate, classTime, classTypes, operation =
     if (enrolled.size === 1) return enrolled.values().next().value;
   }
   for (const matches of matchesByType) {
+    // Fallbacks are ordered: a later ambiguous fallback must not mask an
+    // earlier unique candidate that already satisfies the request.
     if (matches.length > 1) throw new UnparseableError("Bookr returned ambiguous matching classes");
     if (matches.length === 1) return matches[0];
   }
