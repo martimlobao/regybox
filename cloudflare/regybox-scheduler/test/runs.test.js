@@ -94,6 +94,34 @@ test("run records start durably, sanitize traces, and finalize with retained sum
   assert.equal(kv.writes.at(-1).options.expirationTtl, runConstants.RUN_TTL_SECONDS);
 });
 
+test("run trace redaction covers UUID versions 6 through 8", async () => {
+  const kv = makeKv();
+  const recorder = await createRunRecorder({
+    kv,
+    mode: "worker",
+    id: "abcdef0123456789abcdef0123456789abcd",
+    now: () => 0,
+  });
+  const identifiers = [
+    "01234567-89ab-6cde-8f01-23456789abcd",
+    "01234567-89ab-7cde-8f01-23456789abcd",
+    "01234567-89ab-8cde-8f01-23456789abcd",
+  ];
+  const originalLog = console.log;
+  console.log = () => {};
+  try {
+    await recorder.trace({ message: identifiers.join(" ") });
+    await recorder.finalize({ operations: [] });
+  } finally {
+    console.log = originalLog;
+  }
+  const serialized = JSON.stringify(await readRun(kv, recorder.id));
+  for (const identifier of identifiers) {
+    assert.doesNotMatch(serialized, new RegExp(identifier));
+  }
+  assert.match(serialized, /\[redacted id\]/);
+});
+
 test("trace retention is capped and marked without hiding terminal status", async () => {
   const kv = makeKv();
   const id = "1123456789abcdef0123456789abcdef0123";

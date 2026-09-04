@@ -230,6 +230,24 @@ test("Bookr run operation preserves success, no-op, and not-open envelopes", asy
   assert.equal(result.cacheState, "not_open");
   assert.equal(result.status, "noop");
 
+  const missingOpening = normalizeBookrSession(apiSession({ canBook: false }));
+  const noOpenResult = await runBookrOperation({
+    client: { ...client, listClasses: async () => [missingOpening] },
+    classDate: "2026-09-05",
+    classTime: "07:30",
+    classType: "WOD Rato",
+    notOpenIsNoop: true,
+    now: () => Date.parse("2026-09-01T00:00:00.000Z"),
+  });
+  assert.deepEqual(noOpenResult, {
+    operation: "enroll",
+    status: "noop",
+    classType: "WOD Rato",
+    cacheState: "not_open",
+    enrollmentOpensAt: null,
+    lastCheckedAt: "2026-09-01T00:00:00.000Z",
+  });
+
   const absent = normalizeBookrSession(apiSession());
   assert.deepEqual(
     await runBookrOperation({
@@ -454,6 +472,37 @@ test("Bookr persists an accepted auth-cookie rotation from a calendar response",
   await client.bootstrapSession();
   await client.listClasses("2026-09-05");
   assert.equal(await loadBookrSession(kv, bootstrap), rotated);
+});
+
+test("Bookr keeps the last known-good cookie after a rejected response", async () => {
+  const bootstrap = authCookie();
+  const rotated = encodeBookrSession({
+    access_token: "rejected-access",
+    refresh_token: "rejected-refresh",
+    expires_at: 2_100_000_000,
+  });
+  const seenCookies = [];
+  let calendarRequests = 0;
+  const client = createBookrClient({
+    authCookie: bootstrap,
+    fetchImpl: async (url, options) => {
+      seenCookies.push(options.headers.Cookie);
+      if (url.endsWith("/dashboard")) return dashboardResponse();
+      calendarRequests += 1;
+      if (calendarRequests === 1) {
+        return new Response("unauthorized", {
+          status: 401,
+          headers: { "set-cookie": `${rotated}; Path=/; Secure; SameSite=Lax` },
+        });
+      }
+      return jsonResponse({ selectedDaySessions: [apiSession()] });
+    },
+  });
+
+  await client.bootstrapSession();
+  await assert.rejects(() => client.listClasses("2026-09-05"), BookrLoginError);
+  await client.listClasses("2026-09-05");
+  assert.deepEqual(seenCookies, [bootstrap, bootstrap, bootstrap]);
 });
 
 test("Bookr status-style client never rotates an expiring session or writes KV", async () => {

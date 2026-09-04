@@ -47,7 +47,7 @@ function sanitizeText(value, limit = MAX_TECHNICAL_MESSAGE_LENGTH) {
     .replace(/(?:\.\.?\/|\/)?[^\s<>"']+\.php(?:\?[^\s<>"']*)?/gi, "[redacted action URL]")
     .replace(/(?:\.\.?\/|\/)?[^\s<>"']+\.ics(?:\?[^\s<>"']*)?/gi, "[redacted calendar URL]")
     .replace(/([?&][\w.-]+=)[^&\s]+/g, "$1[redacted]")
-    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "[redacted id]")
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "[redacted id]")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, limit);

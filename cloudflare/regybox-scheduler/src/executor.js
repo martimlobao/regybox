@@ -356,27 +356,28 @@ export async function executePlan({
       return summary;
     }
 
-    const client = platform === "bookr"
-      ? createBookrClientImpl({
-          authCookie: env.BOOKR_AUTH_COOKIE,
-          kv,
-          timezone: env.TIMEZONE || "Europe/Lisbon",
-          now,
-          onTrace: (event) => recordTrace(recorder, event),
-        })
-      : createClient({
-          phpsessid: env.PHPSESSID,
-          regyboxUser: env.REGYBOX_USER,
-          timezone: env.TIMEZONE || "Europe/Lisbon",
-          now,
-          onTrace: (event) => recordTrace(recorder, event),
-        });
+    let client;
     await recordTrace(recorder, {
       scope: "session",
       code: "session_bootstrap_started",
       message: `Starting ${providerName} session bootstrap`,
     });
     try {
+      client = platform === "bookr"
+        ? createBookrClientImpl({
+            authCookie: env.BOOKR_AUTH_COOKIE,
+            kv,
+            timezone: env.TIMEZONE || "Europe/Lisbon",
+            now,
+            onTrace: (event) => recordTrace(recorder, event),
+          })
+        : createClient({
+            phpsessid: env.PHPSESSID,
+            regyboxUser: env.REGYBOX_USER,
+            timezone: env.TIMEZONE || "Europe/Lisbon",
+            now,
+            onTrace: (event) => recordTrace(recorder, event),
+          });
       await client.bootstrapSession();
       await recordTrace(recorder, {
         scope: "session",

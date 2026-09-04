@@ -300,6 +300,10 @@ test("invalid platform status performs no provider or calendar requests", async 
   });
   assert.equal(calls, 0);
   assert.ok(flatChecks(model).some((item) => item.level === "bad" && item.text === "Booking platform is invalid"));
+  const html = renderStatusPage(model);
+  assert.match(html, /<h1>Unknown auto-enroller<\/h1>/);
+  assert.match(html, /Mode: not configured yet · Unknown · checked/);
+  assert.doesNotMatch(html, /<h1>Regybox auto-enroller<\/h1>/);
 });
 
 test("Bookr dispatch configuration is shown as an actionable setup error", async () => {

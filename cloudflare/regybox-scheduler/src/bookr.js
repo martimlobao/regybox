@@ -454,14 +454,15 @@ export function createBookrClient({
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
-    const mergedCookieHeader = mergeAuthCookies(cookieHeader, response);
-    const didRotateCookie = mergedCookieHeader !== cookieHeader;
-    cookieHeader = mergedCookieHeader;
-    // Do not preserve a cookie presented alongside an authentication rejection.
-    // Every other successfully parsed first-party rotation is durable before an
-    // isolate can be reclaimed.
-    if (didRotateCookie && response.status !== 401 && response.status !== 403) {
-      await persistCookieHeader();
+    // An authentication rejection must not replace the last known-good cookie,
+    // even if a stale or malicious Set-Cookie header accompanies the response.
+    if (response.status !== 401 && response.status !== 403) {
+      const mergedCookieHeader = mergeAuthCookies(cookieHeader, response);
+      const didRotateCookie = mergedCookieHeader !== cookieHeader;
+      cookieHeader = mergedCookieHeader;
+      // Every accepted first-party rotation is durable before an isolate can
+      // be reclaimed.
+      if (didRotateCookie) await persistCookieHeader();
     }
     await trace({ level: response.ok ? "info" : "warn", scope: "http", code: "bookr_response_received", message: `Bookr request returned HTTP ${response.status}`, data: { endpointPath: url.pathname, httpStatus: response.status } });
     if (response.status === 401 || response.status === 403) throw new BookrLoginError();
@@ -614,7 +615,7 @@ export async function runBookrOperation({ client, operation = "enroll", classDat
     if (selected.userIsBlocked) throw new BookrBookingError("booking_restricted");
     const remaining = Math.max(0, timeoutSeconds - Math.ceil((now() - startedAt) / 1000));
     if (selected.enrollmentDeadlineExpired || selected.userIsBlocked || selected.timeToEnroll === null || selected.timeToEnroll > remaining) {
-      if (notOpenIsNoop && selected.timeToEnroll !== null) return openingNoop(selected.name, selected, now);
+      if (notOpenIsNoop) return openingNoop(selected.name, selected, now);
       if (selected.timeToEnroll !== null && selected.timeToEnroll > remaining) throw new RegyboxTimeoutError(timeoutSeconds, { timeToEnroll: selected.timeToEnroll });
       throw new ClassNotOpenError();
     }

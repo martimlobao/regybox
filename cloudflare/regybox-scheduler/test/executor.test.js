@@ -9,7 +9,7 @@ import {
   RegyboxLoginError,
   RegyboxTimeoutError,
 } from "../src/regybox.js";
-import { BookrBookingError } from "../src/bookr.js";
+import { BookrBookingError, BookrLoginError } from "../src/bookr.js";
 
 const workerEnv = {
   PHPSESSID: "session",
@@ -182,6 +182,31 @@ test("Bookr execution selects the Bookr client and provider-aware operation", as
   assert.equal(bootstrapCount, 1);
   assert.equal(operationClient, bookrClient);
   assert.equal(summary.operations[0].outcome, "success");
+});
+
+test("Bookr client-construction failures use the bootstrap failure envelope", async () => {
+  const kv = makeKv();
+  const failures = [];
+  const constructionError = new BookrLoginError("client construction failed");
+  const dispatches = [dispatch({ cacheKey: "first" }), dispatch({ cacheKey: "second" })];
+
+  await assert.rejects(
+    executePlan({
+      env: { BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie" },
+      kv,
+      dispatches,
+      createBookrClientImpl: () => { throw constructionError; },
+      onFailure: async (failure) => failures.push(failure),
+    }),
+    (error) => error === constructionError,
+  );
+
+  assert.equal(failures.length, dispatches.length);
+  assert.deepEqual(failures.map(({ payload }) => payload.errorCode), ["login_error", "login_error"]);
+  assert.deepEqual(
+    (await readLastRun(kv)).operations.map(({ operation, outcome, errorCode }) => [operation, outcome, errorCode]),
+    [["enroll", "failure", "login_error"], ["enroll", "failure", "login_error"]],
+  );
 });
 
 test("Bookr restriction failures retain provider-specific error codes", async () => {

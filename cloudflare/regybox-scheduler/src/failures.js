@@ -259,7 +259,7 @@ function sanitizeBookrMessage(value) {
     .replace(/\b(?:sb-[a-z0-9-]+-auth-token)(?:\.\d+)?\s*=\s*[^;\s]+/gi, "[redacted auth cookie]")
     .replace(/\b(?:bearer|basic)\s+[a-z0-9._~+/=-]+/gi, "[redacted credential]")
     .replace(/https?:\/\/[^\s<>"']+/gi, "[redacted URL]")
-    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "[redacted id]")
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "[redacted id]")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 1200);

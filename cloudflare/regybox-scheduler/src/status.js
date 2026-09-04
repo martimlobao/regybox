@@ -534,7 +534,7 @@ export async function buildStatusModel({
 }
 
 export function renderStatusPage(model) {
-  const label = model.platform === "bookr" ? "Bookr.fit" : "Regybox";
+  const label = model.platform === "invalid" ? "Unknown" : platformLabel(model.platform);
   const title = `${label} auto-enroller`;
   const sections = model.sections
     .filter((section) => section.checks.length > 0)
@@ -563,7 +563,7 @@ export function renderStatusPage(model) {
   <h1>${escapeHtml(title)}</h1>
   <p class="sub">Setup checklist — refresh this page after changing settings.</p>
 ${sections}
-  <footer>Mode: ${escapeHtml(model.mode)}${model.platform === "bookr" ? ` · ${escapeHtml(label)}` : ""} · checked ${escapeHtml(model.generatedAt)} ·
+  <footer>Mode: ${escapeHtml(model.mode)}${model.platform === "bookr" || model.platform === "invalid" ? ` · ${escapeHtml(label)}` : ""} · checked ${escapeHtml(model.generatedAt)} ·
   this page is read-only and never shows your credentials.</footer>
 </body>
 </html>`;
