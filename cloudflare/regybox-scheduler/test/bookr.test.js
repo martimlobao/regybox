@@ -203,6 +203,50 @@ test("Bookr client uses only expected endpoints, bootstraps subscription, and ve
   assert.doesNotMatch(JSON.stringify(calls), /access-token|refresh-token/);
 });
 
+test("Bookr authenticated bootstrap without a subscription still permits unenrollment", async () => {
+  const calls = [];
+  let current = apiSession({ currentUserBookingStatus: "booked", canBook: false, canCancel: true });
+  const client = createBookrClient({
+    authCookie: authCookie(),
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      if (url === "https://bookr.fit/dashboard") return dashboardResponse("dashboard without subscription");
+      if (url.includes("athlete-calendar/day")) return jsonResponse({ selectedDaySessions: [current] });
+      assert.equal(options.method, "DELETE");
+      assert.deepEqual(JSON.parse(options.body), { sessionId });
+      current = apiSession({ currentUserBookingStatus: null, canBook: true, canCancel: false });
+      return jsonResponse({ status: "cancelled" });
+    },
+  });
+
+  assert.deepEqual(await client.bootstrapSession(), { authenticated: true, subscriptionId: null });
+  const selected = (await client.listClasses("2026-09-05"))[0];
+  await client.unenroll(selected);
+  assert.deepEqual(calls.map(({ options }) => options.method), ["GET", "GET", "DELETE", "GET"]);
+});
+
+test("Bookr authenticated bootstrap with an ambiguous subscription fails enrollment closed", async () => {
+  let mutationCount = 0;
+  const client = createBookrClient({
+    authCookie: authCookie(),
+    fetchImpl: async (url, options) => {
+      if (url === "https://bookr.fit/dashboard") {
+        return dashboardResponse(
+          `initialSubscription:{"id":"${subscriptionId}"};initialSubscription:{"id":"33333333-3333-4333-8333-333333333333"}`,
+        );
+      }
+      if (url.includes("athlete-calendar/day")) return jsonResponse({ selectedDaySessions: [apiSession()] });
+      mutationCount += 1;
+      assert.fail(`unexpected ${options.method} mutation`);
+    },
+  });
+
+  assert.deepEqual(await client.bootstrapSession(), { authenticated: true, subscriptionId: null });
+  const selected = (await client.listClasses("2026-09-05"))[0];
+  await assert.rejects(() => client.enroll(selected), BookrSubscriptionError);
+  assert.equal(mutationCount, 0);
+});
+
 test("Bookr rejects redirects before an authenticated request can leave its allowlist", async () => {
   const calls = [];
   const client = createBookrClient({

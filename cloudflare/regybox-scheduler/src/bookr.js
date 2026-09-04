@@ -539,7 +539,16 @@ export function createBookrClient({
     if (cached) cookieHeader = cached;
     await refreshIfNeeded();
     const response = await request("/dashboard");
-    subscriptionId = extractInitialSubscriptionId(await responseDocument(response));
+    const document = await responseDocument(response);
+    try {
+      subscriptionId = extractInitialSubscriptionId(document);
+    } catch (error) {
+      // Authentication is established by the successful dashboard response.
+      // Subscription data is only required for enrollment, while unenrollment
+      // needs only the session id and can proceed without it.
+      if (!(error instanceof BookrSubscriptionError)) throw error;
+      subscriptionId = null;
+    }
     await persistCookieHeader();
     return { authenticated: true, subscriptionId };
   }
