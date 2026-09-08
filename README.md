@@ -27,11 +27,15 @@ Choose one platform:
 - **Regybox:** open [regybox.pt](https://www.regybox.pt/app/app_nova/index.php),
   sign in, then use your browser developer tools (**Application → Cookies**) to
   copy the values of `PHPSESSID` and `regybox_user`.
-- **Bookr.fit:** open the [Bookr.fit dashboard](https://bookr.fit/dashboard), sign
-  in, then use **Application → Cookies → bookr.fit** to copy only the logical
+- **Bookr.fit:** in a fresh incognito/private browser window, open the
+  [Bookr.fit dashboard](https://bookr.fit/dashboard) and sign in. Use
+  **Application → Cookies → bookr.fit** to copy only the logical
   `sb-jphimrpybgssduyuziaw-auth-token` cookie. If it is split, copy every present
   `name=value` chunk from `.0` through the highest present suffix in ascending
-  order and join them with `; `. Do not copy unrelated cookies or the `Cookie:` header.
+  order and join them with `; `. Do not copy unrelated cookies or the `Cookie:`
+  header. After saving the cookie as the Worker secret, close the private window
+  without signing out and do not reuse that Bookr session: the Worker must be its
+  only client so it can safely rotate the refresh token.
 
 Keep the values handy for the deploy step and never commit them.
 
@@ -95,7 +99,8 @@ legacy Python CLI, GitHub Action, or GitHub-dispatch execution path.
    `BOOKING_PLATFORM` unset or set to `regybox`. Refresh the status page and
    confirm the existing Regybox checks still pass before changing providers.
 2. In **Settings → Variables and Secrets**, add `BOOKR_AUTH_COOKIE` as a
-   **Secret**. In the browser's cookie storage,
+   **Secret**. Sign in to Bookr.fit in a fresh incognito/private browser window,
+   then in that window's cookie storage,
    copy only the Bookr logical auth cookie
    `sb-jphimrpybgssduyuziaw-auth-token`: use its single `name=value` pair when
    present, or copy every numbered chunk from `.0` through the highest present
@@ -103,7 +108,9 @@ legacy Python CLI, GitHub Action, or GitHub-dispatch execution path.
    shape is `sb-jphimrpybgssduyuziaw-auth-token.0=<value>;`
    `sb-jphimrpybgssduyuziaw-auth-token.1=<value>`. Do not include a `Cookie:`
    header or unrelated cookies, and do not put the value in a text variable,
-   `wrangler.jsonc`, `.env`, or source control.
+   `wrangler.jsonc`, `.env`, or source control. After saving the secret, close
+   the private window without signing out and do not reuse that Bookr session;
+   the Worker exclusively owns its refresh-token rotation.
 3. In the same dashboard section, add or change the plain-text variable
    `BOOKING_PLATFORM` to `bookr`, then deploy the binding change.
 4. Leave `CALENDAR_URL`, `CLASS_MAP`, `TIMEZONE`, and the `REGYBOX_STATE` KV binding
