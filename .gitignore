@@ -239,3 +239,4 @@ cloudflare/regybox-scheduler/.wrangler.deploy.jsonc
 
 # Local Worker dev secrets
 .dev.vars
+.env.new.json
