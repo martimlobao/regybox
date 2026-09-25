@@ -114,6 +114,21 @@ test("a reachable calendar without matching events warns about event names", asy
   assert.equal(calendar?.level, "warn");
 });
 
+test("calendar rate limiting does not suggest replacing the calendar link", async () => {
+  const model = await buildStatusModel({
+    env: workerEnv(),
+    kv: makeKv(),
+    now: () => NOW_MS,
+    createClient: okClient,
+    fetchImpl: async () => new Response(null, { status: 429 }),
+  });
+  const calendar = flatChecks(model).find((item) => item.text.includes("HTTP 429"));
+  assert.equal(calendar?.level, "bad");
+  assert.match(calendar.text, /temporarily limiting requests/);
+  assert.match(calendar.hint, /next scheduled check/);
+  assert.doesNotMatch(calendar.hint, /reset|secret iCal/i);
+});
+
 test("an invalid CLASS_MAP is shown in Setup without hiding the parse error", async () => {
   const model = await buildStatusModel({
     env: workerEnv({ CLASS_MAP: "CrossFit WOD" }),
