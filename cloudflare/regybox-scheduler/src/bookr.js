@@ -289,7 +289,7 @@ export function normalizeBookrSession(value, { now = () => Date.now(), timezone 
       : undefined;
   if (registered === null || waitlisted === null || capacity === undefined) throw new UnparseableError("Bookr returned invalid class capacity");
   const bookingStatus = value.currentUserBookingStatus;
-  if (bookingStatus !== null && bookingStatus !== "booked" && bookingStatus !== "waitlisted") throw new UnparseableError("Bookr returned an invalid booking status");
+  if (bookingStatus !== null && bookingStatus !== "booked" && bookingStatus !== "waitlisted" && bookingStatus !== "attended") throw new UnparseableError("Bookr returned an invalid booking status");
   const openingAt = value.bookingWindowOpensAt ? Date.parse(value.bookingWindowOpensAt) : NaN;
   const observedAt = now();
   const waitlistLimit = value.waitlistLimit === null || value.waitlistLimit === undefined
@@ -315,7 +315,7 @@ export function normalizeBookrSession(value, { now = () => Date.now(), timezone 
     enrollmentDeadlineExpired: Boolean(value.registrationDeadlineReached),
     isOver: endsAt <= observedAt,
     userIsBlocked: Boolean(value.outsideSubscriptionPeriod || value.packLimitReached || value.dailyCategoryLimitReached || value.weeklyLimitReached || value.overlappingSession || value.noShowPenaltyActive),
-    userIsEnrolled: bookingStatus === "booked" || bookingStatus === "waitlisted",
+    userIsEnrolled: bookingStatus === "booked" || bookingStatus === "waitlisted" || bookingStatus === "attended",
     userIsWaitlisted: bookingStatus === "waitlisted",
     timeToStart: null,
     // Keep a just-elapsed opening boundary as an immediate poll when the

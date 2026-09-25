@@ -178,6 +178,29 @@ test("Bookr class normalization discards participant data and retains booking st
   assert.equal(unlimited.isOverbooked, false);
 });
 
+test("Bookr calendar parses an attended class alongside a bookable class", async () => {
+  const client = createBookrClient({
+    authCookie: authCookie(),
+    now: () => Date.parse("2026-09-05T07:30:00.000Z"),
+    fetchImpl: async () => jsonResponse({ selectedDaySessions: [
+      apiSession({ currentUserBookingStatus: "attended", canBook: false }),
+      apiSession({
+        id: "33333333-3333-4333-8333-333333333333",
+        startsAt: "2026-09-05T18:30:00.000Z",
+        endsAt: "2026-09-05T19:20:00.000Z",
+      }),
+    ] }),
+  });
+
+  const classes = await client.listClasses("2026-09-05");
+  assert.equal(classes.length, 2);
+  assert.equal(classes[0].isOver, true);
+  assert.equal(classes[0].userIsEnrolled, true);
+  assert.equal(classes[0].userIsWaitlisted, false);
+  assert.equal(classes[1].isOpen, true);
+  assert.throws(() => normalizeBookrSession(apiSession({ currentUserBookingStatus: "unknown" })), /invalid booking status/);
+});
+
 test("Bookr client uses only expected endpoints, bootstraps subscription, and verifies booking mutation", async () => {
   const calls = [];
   let current = apiSession();
