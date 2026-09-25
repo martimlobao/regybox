@@ -194,6 +194,13 @@ async function calendarCheck(env, { fetchImpl, nowMs }) {
     );
   }
   if (!response.ok) {
+    if (response.status === 429) {
+      return check(
+        "bad",
+        "Calendar service is temporarily limiting requests (HTTP 429)",
+        "Wait a few minutes and refresh this page. The scheduler will try again at its next scheduled check.",
+      );
+    }
     return check(
       "bad",
       `Calendar could not be fetched (HTTP ${response.status})`,
