@@ -47,6 +47,80 @@ test("plan checkpoints retain details without rewriting the history index", asyn
   assert.equal(kv.writes.filter(({ key }) => key === runConstants.RUN_INDEX_KEY).length, 2);
 });
 
+test("unfinished recorder checkpoints distinguish planned, zero, and unknown operations on every view", async () => {
+  const startedMs = Date.parse("2026-09-28T05:28:00Z");
+  for (const count of [2, 0, null]) {
+    const kv = makeKv();
+    const recorder = await createRunRecorder({ kv, mode: "worker", now: () => startedMs });
+    const initialIndex = await kv.get(runConstants.RUN_INDEX_KEY);
+    assert.equal((await readRuns(kv))[0].plannedOperations, null);
+    if (count !== null) await recorder.setPlan(count);
+    assert.equal(await kv.get(runConstants.RUN_INDEX_KEY), initialIndex);
+    assert.equal(kv.writes.length, count === null ? 2 : 3);
+    const writesBeforeViews = kv.writes.length;
+    const detail = await readRun(kv, recorder.id);
+    const summaries = await readRuns(kv);
+    for (const elapsedMs of [1000, 30 * 60 * 1000]) {
+      const nowMs = startedMs + elapsedMs;
+      const detailPages = [renderRunPage(detail, { nowMs }),
+        await (await handleRunRequest(kv, recorder.id, { nowMs })).text()];
+      for (const page of detailPages) {
+        assert.match(page, count === 2 ? /2 operations planned; no operation results recorded/
+          : count === 0 ? /No operations were planned/ : /Plan not recorded; no operation results recorded/);
+        if (count !== 0) assert.doesNotMatch(page, /No operations were planned/);
+      }
+      const model = await buildStatusModel({ env: {}, kv, now: () => nowMs });
+      const summaryPages = [renderRunsPage(summaries, { nowMs }), renderStatusPage(model),
+        await (await handleRunsRequest(kv, { nowMs })).text(),
+        // Older start markers used zero before a plan was saved.
+        renderRunsPage([{ ...summaries[0], plannedOperations: 0 }], { nowMs })];
+      for (const page of summaryPages) {
+        assert.match(page, /plan count unavailable in history; open run details/);
+        assert.doesNotMatch(page, /nothing to do|No operations were planned/);
+      }
+    }
+    assert.equal(kv.writes.length, writesBeforeViews);
+    assert.equal((await readRun(kv, recorder.id)).status, "running");
+    assert.equal(await kv.get(runConstants.RUN_INDEX_KEY), initialIndex);
+  }
+});
+
+test("legacy zero details require a recorded plan and singular plans read correctly", async () => {
+  const startedMs = Date.parse("2026-09-28T05:28:00Z");
+  const run = { id: "0123456789abcdef0123456789abcdef0123", status: "running",
+    startedAt: new Date(startedMs).toISOString(), plannedOperations: 0, operations: [], trace: [] };
+  for (const elapsedMs of [1000, 30 * 60 * 1000]) {
+    const options = { nowMs: startedMs + elapsedMs };
+    assert.match(renderRunPage(run, options), /Plan not recorded/);
+    for (const checkpoint of [
+      { ...run, planRecorded: true },
+      { ...run, trace: [{ code: "plan_built", data: { plannedOperations: 0 } }] },
+    ]) {
+      assert.match(renderRunPage(checkpoint, options), /No operations were planned/);
+    }
+    assert.match(renderRunPage({ ...run, plannedOperations: 1 }, options), /1 operation planned/);
+  }
+  assert.match(renderRunPage({ ...run, status: "noop" }), /No operations were planned/);
+  assert.match(renderRunsPage([{ ...run, status: "failure", plannedOperations: 1 }]), /1 operation planned/);
+});
+
+test("legacy unfinished index counts are unavailable without detail reads or writes", async () => {
+  for (const plannedOperations of [0, 2]) {
+    const kv = makeKv(new Map([[runConstants.RUN_INDEX_KEY, JSON.stringify({ runs: [
+      { id: "0123456789abcdef0123456789abcdef0123", status: "running", plannedOperations },
+      { id: "1123456789abcdef0123456789abcdef0123", status: "noop", plannedOperations: 0 },
+    ] })]]));
+    const reads = [];
+    const get = kv.get;
+    kv.get = async (key) => { reads.push(key); return get(key); };
+    const runs = await readRuns(kv);
+    assert.equal(runs[0].plannedOperations, null);
+    assert.equal(runs[1].plannedOperations, 0);
+    assert.deepEqual(reads, [runConstants.RUN_INDEX_KEY]);
+    assert.equal(kv.writes.length, 0);
+  }
+});
+
 test("unfinished runs become interrupted after 30 minutes on every status view without changing records", async () => {
   const id = "3123456789abcdef0123456789abcdef0123";
   const startedMs = Date.parse("2026-09-28T05:28:00Z");

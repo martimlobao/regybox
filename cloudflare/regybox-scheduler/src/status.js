@@ -474,14 +474,39 @@ function displayedRun(run, nowMs) {
     : run;
 }
 
+function plannedOperationText(count) {
+  return `${count} ${count === 1 ? "operation" : "operations"} planned; no operation results recorded`;
+}
+
+function emptyOperationSummary(run) {
+  if (["running", "interrupted"].includes(run.status)) {
+    return "plan count unavailable in history; open run details for the latest checkpoint";
+  }
+  if (Number.isInteger(run.plannedOperations) && run.plannedOperations > 0) {
+    return plannedOperationText(run.plannedOperations);
+  }
+  return run.plannedOperations === 0 ? "nothing to do" : "plan not recorded; no operation results recorded";
+}
+
+function emptyOperationDetail(run) {
+  if (Number.isInteger(run.plannedOperations) && run.plannedOperations > 0) {
+    return `${plannedOperationText(run.plannedOperations)}.`;
+  }
+  const zeroPlanRecorded = run.planRecorded === true ||
+    (Array.isArray(run.trace) && run.trace.some((event) =>
+      event?.code === "plan_built" && event?.data?.plannedOperations === 0));
+  const unfinished = ["running", "interrupted"].includes(run.status);
+  return run.plannedOperations === 0 && (!unfinished || zeroPlanRecorded)
+    ? "No operations were planned." : "Plan not recorded; no operation results recorded.";
+}
+
 function runCheck(run, nowMs, basePath) {
   run = displayedRun(run, nowMs);
   const when = relativeTime(run.startedAt, nowMs) ?? run.startedAt;
   const operations = Array.isArray(run.operations) ? run.operations : [];
   const operationText = operations.length > 0
     ? operations.map(describeOperation).join("; ")
-    : run.status === "running" ? "run is still in progress"
-      : run.status === "interrupted" ? "no completion recorded" : "nothing to do";
+    : emptyOperationSummary(run);
   return {
     ...check(
       runLevel(run.status),
@@ -640,7 +665,7 @@ export function renderRunsPage(runs, { basePath = "", nowMs = Date.now(), platfo
     run = displayedRun(run, nowMs);
     const operations = Array.isArray(run.operations) ? run.operations : [];
     const summary = operations.length > 0 ? operations.map(describeOperation).join("; ")
-      : run.status === "interrupted" ? "no completion recorded" : "nothing to do";
+      : emptyOperationSummary(run);
     const runLabel = run?.platform === "bookr" ? "Bookr.fit" : "Regybox";
     return `    <tr>
       <td><a href="${escapeHtml(baseHref(basePath, `/runs/${run.id}`))}">${escapeHtml(relativeTime(run.startedAt, nowMs) ?? run.startedAt)}</a></td>
@@ -707,7 +732,7 @@ export function renderRunPage(run, { basePath = "", platform = "regybox", nowMs 
     <dt>Mode</dt><dd>${escapeHtml(run.mode)}</dd>
   </dl>
   <h2>Operations</h2>
-  ${operationRows ? `<table><thead><tr><th>#</th><th>Summary</th><th>Outcome</th></tr></thead><tbody>\n${operationRows}\n  </tbody></table>` : "<p>No operations were planned.</p>"}
+  ${operationRows ? `<table><thead><tr><th>#</th><th>Summary</th><th>Outcome</th></tr></thead><tbody>\n${operationRows}\n  </tbody></table>` : `<p>${escapeHtml(emptyOperationDetail(run))}</p>`}
   <h2>Timeline</h2>
   ${traceRows ? `<table><thead><tr><th>Time</th><th>Elapsed</th><th>Level</th><th>Scope</th><th>Event</th></tr></thead><tbody>\n${traceRows}\n  </tbody></table>` : "<p>No trace events were retained.</p>"}
   ${run.traceTruncated ? `<p class="warn">Trace truncated after ${runConstants.MAX_TRACE_EVENTS} events.</p>` : ""}
