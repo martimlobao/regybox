@@ -238,7 +238,7 @@ export async function createRunRecorder({
     scheduledAt: new Date(Number.isFinite(scheduledAt) ? scheduledAt : startedMs).toISOString(),
     startedAt: new Date(startedMs).toISOString(),
     mode: safeText(mode || "unconfigured", 30),
-    plannedOperations: 0,
+    plannedOperations: null,
     operations: [],
     trace: [],
     traceTruncated: false,
@@ -279,7 +279,11 @@ export async function createRunRecorder({
     },
     async setPlan(plannedOperations) {
       record.plannedOperations = Math.max(0, Number.parseInt(plannedOperations, 10) || 0);
-      await persist();
+      record.planRecorded = true;
+      // The detail checkpoint is useful while a run is active. Its summary
+      // stays discoverable from the start marker until finalization, without
+      // parsing and rewriting the full history index a third time.
+      await writeRecord(kv, record);
     },
     async finalize({ status, operations = [], errorCode } = {}) {
       const finishedMs = now();
@@ -299,7 +303,11 @@ export async function createRunRecorder({
 export async function readRuns(kv) {
   if (!kv) return [];
   try {
-    return await readIndex(kv);
+    // Active summaries are start markers, not plan checkpoints. This also
+    // avoids treating legacy zero counts as confirmed empty plans.
+    return (await readIndex(kv)).map((run) => run?.status === "running"
+      ? { ...run, plannedOperations: null }
+      : run);
   } catch (error) {
     console.warn("regybox: run index read failed:", error);
     return [];

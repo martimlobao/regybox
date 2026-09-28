@@ -316,6 +316,9 @@ export async function executePlan({
       message: `Executing ${dispatches.length} operation(s) in ${mode} mode`,
       data: { mode, plannedOperations: dispatches.length },
     });
+    if (platform === "bookr" && dispatches.length === 0) {
+      return summary;
+    }
     if (mode === "dispatch") {
       for (const [operationIndex, dispatch] of dispatches.entries()) {
         const details = operationDetails(dispatch, platform);

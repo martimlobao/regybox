@@ -543,6 +543,103 @@ test("Bookr session timeZone overrides the configured fallback timezone", () => 
   assert.equal(parsed.start, "07:30");
 });
 
+test("Bookr reuses bounded timezone formatters across repeated session normalization", () => {
+  const original = Intl.DateTimeFormat;
+  const zones = Intl.supportedValuesOf("timeZone").slice(0, 17);
+  const constructed = [];
+  Intl.DateTimeFormat = function (locale, options) {
+    constructed.push(options.timeZone);
+    return new original(locale, options);
+  };
+  try {
+    const session = apiSession({ timeZone: zones[0] });
+    const first = normalizeBookrSession(session);
+    assert.deepEqual(normalizeBookrSession(session), first);
+    assert.deepEqual(constructed, [zones[0]]);
+    for (const timeZone of zones.slice(1)) normalizeBookrSession(apiSession({ timeZone }));
+    assert.deepEqual(normalizeBookrSession(session), first);
+    assert.equal(constructed.filter((zone) => zone === zones[0]).length, 2);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      assert.throws(() => normalizeBookrSession(apiSession({ timeZone: "invalid/timezone" })), /invalid class timezone/);
+    }
+    assert.equal(constructed.filter((zone) => zone === "invalid/timezone").length, 2);
+  } finally {
+    Intl.DateTimeFormat = original;
+  }
+});
+
+test("Bookr cached timezone formatters preserve daylight saving transitions", () => {
+  const normalizeAt = (startsAt, endsAt) => normalizeBookrSession(apiSession({ startsAt, endsAt }));
+  const spring = normalizeAt("2026-03-29T00:30:00.000Z", "2026-03-29T01:30:00.000Z");
+  assert.equal(spring.start, "00:30");
+  assert.equal(spring.end, "02:30");
+  const autumn = normalizeAt("2026-10-25T00:30:00.000Z", "2026-10-25T01:30:00.000Z");
+  assert.equal(autumn.start, "01:30");
+  assert.equal(autumn.end, "01:30");
+});
+
+test("Bookr persists bootstrap once and reuses durable credentials across polls and clients", async () => {
+  const kv = memoryKv();
+  const put = kv.put;
+  let writes = 0;
+  kv.put = async (...args) => { writes += 1; return put(...args); };
+  const options = {
+    authCookie: authCookie(), kv,
+    fetchImpl: async (url) => url.endsWith("/dashboard")
+      ? dashboardResponse()
+      : jsonResponse({ selectedDaySessions: [apiSession()] }),
+  };
+  const client = createBookrClient(options);
+  await client.bootstrapSession();
+  assert.equal(writes, 1);
+  await client.listClasses("2026-09-05");
+  await client.listClasses("2026-09-05");
+  await client.bootstrapSession();
+  await createBookrClient(options).bootstrapSession();
+  assert.equal(writes, 1);
+});
+
+test("Bookr persists each accepted rotation once before returning", async () => {
+  const kv = memoryKv();
+  const put = kv.put;
+  let writes = 0;
+  kv.put = async (...args) => { writes += 1; return put(...args); };
+  const bootstrap = authCookie();
+  const dashboardCookie = authCookie(2_100_000_000);
+  const calendarCookie = authCookie(2_200_000_000);
+  const client = createBookrClient({
+    authCookie: bootstrap, kv,
+    fetchImpl: async (url) => url.endsWith("/dashboard")
+      ? dashboardResponse(undefined, { headers: { "set-cookie": `${dashboardCookie}; Path=/; Secure` } })
+      : jsonResponse({ selectedDaySessions: [apiSession()] }, { headers: { "set-cookie": `${calendarCookie}; Path=/; Secure` } }),
+  });
+  await client.bootstrapSession();
+  assert.equal(writes, 1);
+  assert.equal(await loadBookrSession(kv, bootstrap), dashboardCookie);
+  await client.listClasses("2026-09-05");
+  assert.equal(writes, 2);
+  assert.equal(await loadBookrSession(kv, bootstrap), calendarCookie);
+  await client.listClasses("2026-09-05");
+  assert.equal(writes, 2);
+});
+
+test("Bookr retries initial persistence after a failed write", async () => {
+  const kv = memoryKv();
+  const put = kv.put;
+  let writes = 0;
+  kv.put = async (...args) => {
+    writes += 1;
+    if (writes === 1) throw new Error("KV unavailable");
+    return put(...args);
+  };
+  const bootstrap = authCookie();
+  const client = createBookrClient({ authCookie: bootstrap, kv, fetchImpl: async () => dashboardResponse() });
+  await assert.rejects(() => client.bootstrapSession(), /KV unavailable/);
+  await client.bootstrapSession();
+  assert.equal(writes, 2);
+  assert.equal(await loadBookrSession(kv, bootstrap), bootstrap);
+});
+
 test("Bookr verifies an ambiguous booking result without replaying the mutation", async () => {
   let state = apiSession();
   let mutationCount = 0;
@@ -934,6 +1031,9 @@ test("Bookr network refresh failures are provider-safe and non-login errors", as
 
 test("Bookr retries a pre-response refresh failure and persists the successful rotation", async () => {
   const kv = memoryKv();
+  const put = kv.put;
+  let writes = 0;
+  kv.put = async (...args) => { writes += 1; return put(...args); };
   const original = authCookie(1);
   const rotated = encodeBookrSession({
     access_token: "recovered-access",
@@ -962,6 +1062,7 @@ test("Bookr retries a pre-response refresh failure and persists the successful r
   await client.bootstrapSession();
   assert.equal(refreshCalls, 2);
   assert.deepEqual(waits, [250]);
+  assert.equal(writes, 1);
   assert.equal(await loadBookrSession(kv, original), rotated);
 });
 
