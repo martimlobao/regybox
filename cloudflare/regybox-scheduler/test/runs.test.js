@@ -14,6 +14,7 @@ import {
   handleRunRequest,
   handleRunsRequest,
   renderRunPage,
+  renderRunsPage,
   renderStatusPage,
 } from "../src/status.js";
 import worker, { handleScheduled } from "../src/index.js";
@@ -32,6 +33,51 @@ function makeKv(existing = new Map()) {
     },
   };
 }
+
+test("plan checkpoints retain details without rewriting the history index", async () => {
+  const kv = makeKv();
+  const recorder = await createRunRecorder({ kv, mode: "worker", now: () => 0 });
+  const initialIndex = await kv.get(runConstants.RUN_INDEX_KEY);
+  await recorder.setPlan(2);
+  assert.equal((await readRun(kv, recorder.id)).plannedOperations, 2);
+  assert.equal(await kv.get(runConstants.RUN_INDEX_KEY), initialIndex);
+  assert.equal(kv.writes.filter(({ key }) => key === runConstants.RUN_INDEX_KEY).length, 1);
+  await recorder.finalize({ operations: [] });
+  assert.equal((await readRuns(kv))[0].plannedOperations, 2);
+  assert.equal(kv.writes.filter(({ key }) => key === runConstants.RUN_INDEX_KEY).length, 2);
+});
+
+test("unfinished runs become interrupted after 30 minutes on every status view without changing records", async () => {
+  const id = "3123456789abcdef0123456789abcdef0123";
+  const startedMs = Date.parse("2026-09-28T05:28:00Z");
+  const run = { id, status: "running", startedAt: new Date(startedMs).toISOString(),
+    scheduledAt: new Date(startedMs).toISOString(), mode: "worker", operations: [], trace: [] };
+  const stored = JSON.stringify(run);
+  const kv = makeKv(new Map([
+    [`${runConstants.RUN_PREFIX}${id}`, stored],
+    [runConstants.RUN_INDEX_KEY, JSON.stringify({ runs: [run] })],
+  ]));
+  const before = startedMs + 30 * 60 * 1000 - 1;
+  const after = before + 1;
+  for (const render of [renderRunPage, (value, options) => renderRunsPage([value], options)]) {
+    assert.match(render(run, { nowMs: before }), /still running/);
+    const interrupted = render(run, { nowMs: after });
+    assert.match(interrupted, /interrupted/);
+    assert.match(interrupted, /no completion recorded/);
+    assert.doesNotMatch(interrupted, /still running/);
+    assert.doesNotMatch(interrupted, /<dt>Finished<\/dt>/);
+    assert.doesNotMatch(render({ ...run, status: "success", finishedAt: run.startedAt, durationMs: 10 }, { nowMs: after }), /interrupted/);
+  }
+  const model = await buildStatusModel({ env: {}, kv, now: () => after });
+  const page = renderStatusPage(model);
+  assert.match(page, /interrupted/);
+  assert.doesNotMatch(page, /still running/);
+  assert.match(await (await handleRunRequest(kv, id, { nowMs: after })).text(), /interrupted/);
+  assert.match(await (await handleRunsRequest(kv, { nowMs: after })).text(), /interrupted/);
+  assert.equal(await kv.get(`${runConstants.RUN_PREFIX}${id}`), stored);
+  assert.equal(kv.writes.length, 0);
+  assert.equal(run.status, "running");
+});
 
 test("run records start durably, sanitize traces, and finalize with retained summaries", async () => {
   const kv = makeKv();

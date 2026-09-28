@@ -342,7 +342,7 @@ async function bookrCheck(env, { createClient, nowMs, kv }) {
           "warn",
           "Bookr.fit session needs refresh",
           "The saved session is still structurally valid, but its access token is expiring. " +
-            "This read-only status check did not rotate it; the scheduler will refresh it on its next run.",
+            "This read-only status check did not rotate it; the scheduler will refresh it when booking work next requires it.",
         ),
       ];
     }
@@ -448,14 +448,14 @@ function activityCheck(activity, nowMs) {
 }
 
 function runLevel(status) {
-  if (status === "failure") return "bad";
+  if (status === "failure" || status === "interrupted") return "bad";
   if (status === "partial" || status === "running") return "warn";
   if (status === "success") return "ok";
   return "off";
 }
 
-function durationText(durationMs) {
-  if (!Number.isFinite(durationMs)) return "still running";
+function durationText(durationMs, status) {
+  if (!Number.isFinite(durationMs)) return status === "interrupted" ? "no completion recorded" : "still running";
   if (durationMs < 1000) return `${durationMs}ms`;
   const seconds = Math.round(durationMs / 1000);
   if (seconds < 60) return `${seconds}s`;
@@ -467,16 +467,25 @@ function baseHref(basePath, suffix = "") {
   return `${base}${suffix}` || "/";
 }
 
+function displayedRun(run, nowMs) {
+  const startedMs = Date.parse(run.startedAt);
+  return run.status === "running" && Number.isFinite(startedMs) && nowMs - startedMs >= 30 * 60 * 1000
+    ? { ...run, status: "interrupted" }
+    : run;
+}
+
 function runCheck(run, nowMs, basePath) {
+  run = displayedRun(run, nowMs);
   const when = relativeTime(run.startedAt, nowMs) ?? run.startedAt;
   const operations = Array.isArray(run.operations) ? run.operations : [];
   const operationText = operations.length > 0
     ? operations.map(describeOperation).join("; ")
-    : run.status === "running" ? "run is still in progress" : "nothing to do";
+    : run.status === "running" ? "run is still in progress"
+      : run.status === "interrupted" ? "no completion recorded" : "nothing to do";
   return {
     ...check(
       runLevel(run.status),
-      `${when} — ${recordPrefix(run)}${run.status} in ${durationText(run.durationMs)} — ${operationText}`,
+      `${when} — ${recordPrefix(run)}${run.status} · ${durationText(run.durationMs, run.status)} — ${operationText}`,
       run.traceTruncated ? "The retained trace reached its 500-event limit." : undefined,
     ),
     href: baseHref(basePath, `/runs/${run.id}`),
@@ -628,14 +637,16 @@ export function renderRunsPage(runs, { basePath = "", nowMs = Date.now(), platfo
   const currentPlatform = platform === "bookr" ? "bookr" : "regybox";
   const showPlatform = runs.some((run) => recordPlatform(run) !== currentPlatform);
   const rows = runs.map((run) => {
+    run = displayedRun(run, nowMs);
     const operations = Array.isArray(run.operations) ? run.operations : [];
-    const summary = operations.length > 0 ? operations.map(describeOperation).join("; ") : "nothing to do";
+    const summary = operations.length > 0 ? operations.map(describeOperation).join("; ")
+      : run.status === "interrupted" ? "no completion recorded" : "nothing to do";
     const runLabel = run?.platform === "bookr" ? "Bookr.fit" : "Regybox";
     return `    <tr>
       <td><a href="${escapeHtml(baseHref(basePath, `/runs/${run.id}`))}">${escapeHtml(relativeTime(run.startedAt, nowMs) ?? run.startedAt)}</a></td>
       ${showPlatform ? `<td>${escapeHtml(runLabel)}</td>` : ""}
       <td>${escapeHtml(run.status)}</td>
-      <td>${escapeHtml(durationText(run.durationMs))}</td>
+      <td>${escapeHtml(durationText(run.durationMs, run.status))}</td>
       <td>${escapeHtml(summary)}</td>
     </tr>`;
   }).join("\n");
@@ -658,7 +669,8 @@ export function renderRunsPage(runs, { basePath = "", nowMs = Date.now(), platfo
 </html>`;
 }
 
-export function renderRunPage(run, { basePath = "", platform = "regybox" } = {}) {
+export function renderRunPage(run, { basePath = "", platform = "regybox", nowMs = Date.now() } = {}) {
+  run = displayedRun(run, nowMs);
   const label = recordLabel(run);
   const operations = Array.isArray(run.operations) ? run.operations : [];
   const operationRows = operations.map((operation, index) =>
@@ -686,7 +698,7 @@ export function renderRunPage(run, { basePath = "", platform = "regybox" } = {})
 </head>
 <body>
   <h1>${escapeHtml(label)} run details</h1>
-  <p class="sub">Run ${escapeHtml(run.id)} · ${escapeHtml(run.status)} · ${escapeHtml(durationText(run.durationMs))}</p>
+  <p class="sub">Run ${escapeHtml(run.id)} · ${escapeHtml(run.status)} · ${escapeHtml(durationText(run.durationMs, run.status))}</p>
   <p><a href="${escapeHtml(baseHref(basePath, "/runs"))}">Back to run history</a></p>
   <dl>
     <dt>Scheduled</dt><dd>${escapeHtml(run.scheduledAt)}</dd>

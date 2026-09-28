@@ -295,7 +295,10 @@ Secrets**, then you're back in business.
   calendar and cache decisions, session startup, polling and retry waits, enrollment
   attempts, notifications, and terminal outcomes. Up to 400 summaries and seven days
   of detail are retained; each trace is capped at 500 events and clearly marked if
-  truncated. **Recent activity** remains a compact list of bookings, cancellations,
+  truncated. A run without a saved completion is shown as **interrupted** after
+  30 minutes; its original record remains available for inspection. Bookr idle
+  runs skip authentication until there is booking or cancellation work to perform.
+  **Recent activity** remains a compact list of bookings, cancellations,
   and failures, and **Last run** preserves the previous summary view.
 - **Failure email link**: opens a read-only incident report containing safe parser and
   operation details. The link works for seven days. Open the status page once after

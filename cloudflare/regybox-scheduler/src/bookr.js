@@ -258,10 +258,26 @@ export async function loadBookrSession(kv, bootstrapCookie) {
   }
 }
 
+const MAX_DATE_FORMATTERS = 16;
+const dateFormatters = new Map();
+
+function formatterInZone(timezone) {
+  let formatter = dateFormatters.get(timezone);
+  if (!formatter) {
+    // Construct before updating the cache so invalid zones still fail closed.
+    formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    });
+    if (dateFormatters.size >= MAX_DATE_FORMATTERS) {
+      dateFormatters.delete(dateFormatters.keys().next().value);
+    }
+    dateFormatters.set(timezone, formatter);
+  }
+  return formatter;
+}
+
 function partsInZone(timestamp, timezone) {
-  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-  }).formatToParts(new Date(timestamp)).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  const parts = Object.fromEntries(formatterInZone(timezone).formatToParts(new Date(timestamp)).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
   return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
 }
 
@@ -513,11 +529,16 @@ export function createBookrClient({
   if (!authCookie) throw new BookrLoginError("BOOKR_AUTH_COOKIE is required");
   const bootstrapCookie = parseBookrAuthCookie(authCookie).cookieHeader;
   let cookieHeader = bootstrapCookie;
+  let lastDurablyPersistedCookie = null;
   let subscriptionId = null;
   const trace = async (event) => { try { await onTrace(safeTrace(event)); } catch { /* tracing is best effort */ } };
 
   async function persistCookieHeader() {
-    if (persistSession) await saveBookrSession(kv, bootstrapCookie, cookieHeader);
+    if (!persistSession || !kv?.put || cookieHeader === lastDurablyPersistedCookie) return;
+    const cookieToPersist = cookieHeader;
+    await saveBookrSession(kv, bootstrapCookie, cookieToPersist);
+    // A failed KV write must remain retryable and must never imply durability.
+    lastDurablyPersistedCookie = cookieToPersist;
   }
 
   async function request(path, { method = "GET", body, mutation = false } = {}) {
@@ -633,7 +654,10 @@ export function createBookrClient({
     // A status probe may safely read the worker's current encrypted session, but
     // persistSession controls all writes and refresh persistence.
     const cached = await loadBookrSession(kv, bootstrapCookie);
-    if (cached) cookieHeader = cached;
+    if (cached) {
+      cookieHeader = cached;
+      lastDurablyPersistedCookie = cached;
+    }
     await refreshIfNeeded();
     const response = await request("/dashboard");
     const document = await responseDocument(response);

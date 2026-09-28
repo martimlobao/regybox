@@ -209,31 +209,30 @@ test("Bookr client-construction failures use the bootstrap failure envelope", as
   );
 });
 
-test("a zero-operation Bookr bootstrap failure persists a failed last-run status", async () => {
+test("a zero-operation Bookr run skips client construction and persists its last-run summary", async () => {
   const kv = makeKv();
-  const bootstrapError = new BookrLoginError();
+  let clientConstructions = 0;
 
-  await assert.rejects(
-    executePlan({
-      env: { BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie" },
-      kv,
-      dispatches: [],
-      createBookrClientImpl: () => ({
-        bootstrapSession: async () => { throw bootstrapError; },
-      }),
-      onFailure: async () => {},
-    }),
-    (error) => error === bootstrapError,
-  );
+  const summary = await executePlan({
+    env: { BOOKING_PLATFORM: "bookr", BOOKR_AUTH_COOKIE: "auth-cookie" },
+    kv,
+    dispatches: [],
+    createBookrClientImpl: () => {
+      clientConstructions += 1;
+      throw new Error("Idle runs must not construct a Bookr client");
+    },
+    onFailure: async () => {},
+  });
 
+  assert.equal(clientConstructions, 0);
   const lastRun = await readLastRun(kv);
+  assert.deepEqual(lastRun, summary);
   assert.deepEqual(lastRun, {
     ranAt: lastRun.ranAt,
     mode: "worker",
     plannedOperations: 0,
     operations: [],
     platform: "bookr",
-    status: "failure",
   });
 });
 

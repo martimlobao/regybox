@@ -279,7 +279,10 @@ export async function createRunRecorder({
     },
     async setPlan(plannedOperations) {
       record.plannedOperations = Math.max(0, Number.parseInt(plannedOperations, 10) || 0);
-      await persist();
+      // The detail checkpoint is useful while a run is active. Its summary
+      // stays discoverable from the start marker until finalization, without
+      // parsing and rewriting the full history index a third time.
+      await writeRecord(kv, record);
     },
     async finalize({ status, operations = [], errorCode } = {}) {
       const finishedMs = now();
