@@ -1305,6 +1305,86 @@ test("past stale enrolled KV entries do not dispatch unenroll", async () => {
   assert.deepEqual(plan.dispatches, []);
 });
 
+test("ongoing calendar event leaving the upcoming window does not trigger unenrollment", async () => {
+  const env = { ...baseEnv, BOOKING_PLATFORM: "bookr", TIMEZONE: "Europe/Lisbon" };
+  for (const start of ["20261005T080000Z", "20261005T090000"]) {
+    for (const recurring of [false, true]) {
+      const icsText = [
+        "BEGIN:VCALENDAR", "BEGIN:VEVENT", "UID:ongoing-class", "SUMMARY:Crossfit",
+        `DTSTART:${start}`, ...(recurring ? ["RRULE:FREQ=DAILY;COUNT=1"] : []),
+        "END:VEVENT", "END:VCALENDAR",
+      ].join("\r\n");
+      // Get the real cache key from expansion, including floating and UTC
+      // fingerprints, rather than assuming the fingerprint is a true instant.
+      const beforeStart = await buildPlan({ env, kv: makeKv(), icsText, now: new Date("2026-10-05T07:58:00Z") });
+      const enrollment = beforeStart.dispatches[0];
+      const key = enrollment.inputs["cache-key"];
+      const state = {
+        state: "enrolled", classDate: "2026-10-05", classTime: "09:00", classType: "WOD",
+        calendarEventName: "Crossfit", calendarFingerprint: enrollment.inputs["calendar-fingerprint"],
+      };
+      for (const instant of ["2026-10-05T08:00:00Z", "2026-10-05T08:28:28.330Z", "2026-10-05T09:28:00Z"]) {
+        const traces = [];
+        const kv = makeKv(new Map([[key, JSON.stringify(state)]]));
+        const plan = await buildPlan({ env, kv, icsText, now: new Date(instant), onTrace: async (trace) => traces.push(trace) });
+        assert.deepEqual(plan.dispatches, [], `${start}, recurring=${recurring}, now=${instant}`);
+        assert.deepEqual(kv.writes, []);
+        if (plan.events.length === 0) {
+          assert.ok(traces.some((trace) => trace.code === "calendar_unenrollment_skipped" && trace.data.reason === "class_started_or_start_unknown"));
+        }
+      }
+    }
+  }
+});
+
+test("removed events trigger cancellation only before their local class start", async () => {
+  const cases = [
+    ["Europe/Lisbon", "2026-10-05", "09:00", "2026-10-05T07:59:59Z", true],
+    ["Europe/Lisbon", "2026-10-05", "09:00", "2026-10-05T08:00:00Z", false],
+    ["Europe/Lisbon", "2026-10-05", "09:00", "2026-10-05T08:28:00Z", false],
+    ["Europe/Lisbon", "2026-12-05", "09:00", "2026-12-05T08:59:59Z", true],
+    ["Europe/Lisbon", "2026-12-05", "09:00", "2026-12-05T09:00:00Z", false],
+    ["America/New_York", "2026-10-05", "09:00", "2026-10-05T12:59:59Z", true],
+    ["America/New_York", "2026-10-05", "09:00", "2026-10-05T13:28:00Z", false],
+    ["Asia/Kolkata", "2026-10-06", "00:15", "2026-10-05T18:44:59Z", true],
+    ["Asia/Kolkata", "2026-10-06", "00:15", "2026-10-05T18:45:00Z", false],
+    // On rollback, 01:30 must not become a future class again at 01:15.
+    ["Europe/Lisbon", "2026-10-25", "01:30", "2026-10-25T00:29:59Z", true],
+    ["Europe/Lisbon", "2026-10-25", "01:30", "2026-10-25T01:15:00Z", false],
+    // A skipped local time cannot justify a cancellation.
+    ["Europe/Lisbon", "2026-03-29", "01:30", "2026-03-29T00:00:00Z", false],
+  ];
+  for (const [timeZone, classDate, classTime, instant, shouldUnenroll] of cases) {
+    const key = "regybox:v2:calendar:bookr:removed-class";
+    const state = { state: "enrolled", classDate, classTime, classType: "WOD" };
+    const kv = makeKv(new Map([[key, JSON.stringify(state)]]));
+    const traces = [];
+    const plan = await buildPlan({
+      env: { ...baseEnv, BOOKING_PLATFORM: "bookr", TIMEZONE: timeZone }, kv,
+      icsText: "BEGIN:VCALENDAR\r\nEND:VCALENDAR", now: new Date(instant),
+      onTrace: async (trace) => traces.push(trace),
+    });
+    assert.deepEqual(plan.dispatches.map((dispatch) => dispatch.operation), shouldUnenroll ? ["unenroll"] : [], `${timeZone}, ${classDate}, ${instant}`);
+    assert.equal(traces.at(-1).data.reason, shouldUnenroll ? "future_slot_absent_from_calendar" : "class_started_or_start_unknown");
+    assert.deepEqual(kv.writes, []);
+  }
+});
+
+test("incomplete or invalid cached class times cannot trigger unenrollment", async () => {
+  for (const slot of [
+    {}, { classDate: "2026-10-06" }, { classTime: "09:00" },
+    { classDate: "2026-02-30", classTime: "09:00" },
+    { classDate: "2026-10-06", classTime: "25:00" },
+  ]) {
+    const key = "regybox:v1:calendar:unknown-class";
+    const plan = await buildPlan({
+      env: baseEnv, kv: makeKv(new Map([[key, JSON.stringify({ state: "enrolled", classType: "WOD", ...slot })]])),
+      icsText: "BEGIN:VCALENDAR\r\nEND:VCALENDAR", now: new Date("2026-10-05T08:28:00Z"),
+    });
+    assert.deepEqual(plan.dispatches, []);
+  }
+});
+
 test("missing calendar event names fail before stale KV sweep", async () => {
   const key = "regybox:v1:calendar:old-class:2026-06-18T06:30:00.000Z";
   const kv = makeKv(
