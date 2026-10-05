@@ -574,11 +574,49 @@ async function readJson(kv, key) {
   }
 }
 
-function cachedEventIsFuture(cached, now) {
-  if (!cached?.classDate || !cached?.classTime) {
-    return true;
-  }
-  return new Date(`${cached.classDate}T${cached.classTime}:00Z`) >= now;
+function cachedEventFutureCheck(now, timeZone) {
+  const zonedParts = createZonedDateParts(timeZone);
+  const currentParts = zonedParts(now);
+  const today = `${currentParts.year}-${currentParts.month}-${currentParts.day}`;
+  const startsBySlot = new Map();
+  const localTimestamp = (date) => {
+    const parts = zonedParts(date);
+    return Date.parse(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:00Z`);
+  };
+  const isFuture = (cached) => {
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(cached?.classDate ?? "") ||
+      !/^\d{2}:\d{2}$/.test(cached?.classTime ?? "") ||
+      cached.classDate < today
+    ) {
+      return false;
+    }
+    const slot = `${cached.classDate}T${cached.classTime}:00Z`;
+    if (!startsBySlot.has(slot)) {
+      // The cache stores a local class slot, not a UTC instant. Resolve it in
+      // the same zone used to produce classDate/classTime. The fingerprint
+      // cannot supply this: floating iCal starts also use a synthetic Z there.
+      const wallTime = Date.parse(slot);
+      const candidates = new Set();
+      if (Number.isFinite(wallTime) && new Date(wallTime).toISOString() === slot.replace("Z", ".000Z")) {
+        // Sample both sides of a DST transition. An absent local time has no
+        // candidate; a repeated time uses its earliest possible start so it
+        // cannot become eligible for cancellation again when clocks go back.
+        for (const delta of [-86_400_000, 0, 86_400_000]) {
+          const sample = wallTime + delta;
+          const offset = localTimestamp(new Date(sample)) - sample;
+          const candidate = wallTime - offset;
+          if (localTimestamp(new Date(candidate)) === wallTime) {
+            candidates.add(candidate);
+          }
+        }
+      }
+      startsBySlot.set(slot, candidates.size ? Math.min(...candidates) : null);
+    }
+    const start = startsBySlot.get(slot);
+    return start !== null && start > now.getTime();
+  };
+  return { isFuture, today };
 }
 
 function classSlotKey(classDate, classTime, classType) {
@@ -645,12 +683,14 @@ export async function buildPlan({ env, kv, icsText, now = new Date(), onTrace = 
   const cachePrefix = calendarKvPrefix(platform);
   const lookaheadHours = defaultLookaheadHours(env);
   const classRules = resolveClassRules(env);
+  const timeZone = env.TIMEZONE || "Europe/Lisbon";
+  const { isFuture: cachedEventIsFuture, today: localToday } = cachedEventFutureCheck(now, timeZone);
   const events = expandCalendarEvents({
     icsText,
     now,
     lookaheadHours,
     classRules,
-    timeZone: env.TIMEZONE || "Europe/Lisbon",
+    timeZone,
     cachePrefix,
   });
   await onTrace({
@@ -669,7 +709,7 @@ export async function buildPlan({ env, kv, icsText, now = new Date(), onTrace = 
   const cachedByName = new Map(cachedKvEntries);
   const enrolledSlots = new Set(
     cachedKvEntries
-      .filter(([, cached]) => cached?.state === "enrolled" && cachedEventIsFuture(cached, now))
+      .filter(([, cached]) => cached?.state === "enrolled" && cachedEventIsFuture(cached))
       .map(([, cached]) => cachedSlotKey(cached))
       .filter(Boolean),
   );
@@ -749,12 +789,34 @@ export async function buildPlan({ env, kv, icsText, now = new Date(), onTrace = 
   }
 
   for (const [name, cached] of cachedKvEntries) {
-    if (
-      !activeKeys.has(name) &&
-      !activeSlots.has(cachedSlotKey(cached)) &&
-      cached?.state === "enrolled" &&
-      cachedEventIsFuture(cached, now)
-    ) {
+    if (cached?.state !== "enrolled" || activeKeys.has(name) || activeSlots.has(cachedSlotKey(cached))) {
+      continue;
+    }
+    // Old retained enrollments need neither timezone resolution nor a trace
+    // on every cron run. Today's rolled-out slots still get a decision trace.
+    if (cached.classDate < localToday) {
+      continue;
+    }
+    // Absence from the upcoming-event window is evidence of removal only
+    // while the cached class is still in the future. Started events naturally
+    // leave this window even when they remain on the source calendar.
+    const shouldUnenroll = cachedEventIsFuture(cached);
+    await onTrace({
+      scope: "calendar",
+      code: shouldUnenroll ? "calendar_unenrollment_scheduled" : "calendar_unenrollment_skipped",
+      message: shouldUnenroll
+        ? `Scheduled unenrollment for ${cached.classType} on ${cached.classDate} at ${cached.classTime}: future slot absent from calendar`
+        : `Skipped unenrollment for ${cached.classType} on ${cached.classDate} at ${cached.classTime}: class has started or its start is unknown`,
+      data: {
+        operation: "unenroll",
+        classDate: cached.classDate,
+        classTime: cached.classTime,
+        classType: cached.classType,
+        decision: shouldUnenroll ? "dispatch" : "skip",
+        reason: shouldUnenroll ? "future_slot_absent_from_calendar" : "class_started_or_start_unknown",
+      },
+    });
+    if (shouldUnenroll) {
       dispatches.push(
         dispatchPayload({
           operation: "unenroll",
