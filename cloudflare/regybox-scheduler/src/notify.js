@@ -73,18 +73,20 @@ export function composeEmail({
   incidentUrl,
   runUrl,
   platform = "regybox",
+  userIsWaitlisted = false,
 }) {
   const operationName = operationLabel(operation);
   const operationNoun = operationName === "unenroll" ? "unenrollment" : "enrollment";
   const label = providerLabel(platform);
 
   if (kind === "success") {
+    const waitlisted = operationName === "enroll" && userIsWaitlisted;
     const bodyLines = [
-      `Your ${label} auto-${operationNoun} completed successfully.`,
+      waitlisted ? `You have been added to the ${label} waitlist.` : `Your ${label} auto-${operationNoun} completed successfully.`,
       "",
       `Class: ${summary}`,
       "",
-      "No errors were detected.",
+      waitlisted ? "Your place in the class is not confirmed. Check the booking platform for waitlist updates." : "No errors were detected.",
     ];
     if (statusUrl) {
       bodyLines.push("", `Status page: ${statusUrl}`);
@@ -93,7 +95,7 @@ export function composeEmail({
       bodyLines.push("", `Run details: ${runUrl}`);
     }
     return {
-      subject: `${label} Auto-${operationName}: success for ${summary}`,
+      subject: `${label} Auto-${operationName}: ${waitlisted ? "waitlisted" : "success"} for ${summary}`,
       body: bodyLines.join("\n"),
     };
   }
@@ -188,6 +190,7 @@ export async function notifyResult({ env, kv, dispatch, result, statusUrl, runUr
         statusUrl,
         runUrl,
         platform,
+        userIsWaitlisted: result.userIsWaitlisted === true,
       }),
       { platform },
     );

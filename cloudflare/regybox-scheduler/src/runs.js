@@ -42,6 +42,7 @@ const DATA_FIELDS = new Set([
   "fetchLimit",
   "isOpen",
   "userIsEnrolled",
+  "userIsWaitlisted",
   "isFull",
   "enrollmentDeadlineExpired",
   "remainingSeconds",

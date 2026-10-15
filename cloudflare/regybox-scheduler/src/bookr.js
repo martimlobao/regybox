@@ -333,6 +333,7 @@ export function normalizeBookrSession(value, { now = () => Date.now(), timezone 
     userIsBlocked: Boolean(value.outsideSubscriptionPeriod || value.packLimitReached || value.dailyCategoryLimitReached || value.weeklyLimitReached || value.overlappingSession || value.noShowPenaltyActive),
     userIsEnrolled: bookingStatus === "booked" || bookingStatus === "waitlisted" || bookingStatus === "attended",
     userIsWaitlisted: bookingStatus === "waitlisted",
+    enrollmentOpensAt: Number.isFinite(openingAt) ? new Date(openingAt).toISOString() : null,
     timeToStart: null,
     // Keep a just-elapsed opening boundary as an immediate poll when the
     // server has not flipped canBook yet; null means no usable opening signal.
@@ -509,7 +510,7 @@ function bookrResult(operation, status, classType, extra = {}) { return { operat
 function openingNoop(classType, session, now) {
   return bookrResult("enroll", "noop", classType, {
     cacheState: "not_open",
-    enrollmentOpensAt: session.timeToEnroll === null ? null : new Date(now() + session.timeToEnroll * 1000).toISOString(),
+    enrollmentOpensAt: session.timeToEnroll === null ? null : session.enrollmentOpensAt ?? new Date(now() + session.timeToEnroll * 1000).toISOString(),
     lastCheckedAt: new Date(now()).toISOString(),
   });
 }
@@ -695,6 +696,9 @@ export function createBookrClient({
       // Validate success JSON, but authoritative success is the read-back below.
       await responseJson(response);
     } catch (error) {
+      // This explicit rejection guarantees no booking occurred. Let the caller
+      // retry an opening-boundary race without another calendar round trip.
+      if (error instanceof BookrBookingError && error.reason === "booking_window_not_open") throw error;
       // A lost transport has no authoritative response, and a successful HTTP
       // status with an unreadable body may still mean Bookr applied the change.
       // Both outcomes are ambiguous; deterministic 4xx/auth/restriction errors
@@ -790,18 +794,48 @@ export async function runBookrOperation({ client, operation = "enroll", classDat
     if (selected.userIsEnrolled) return bookrResult("enroll", "noop", selected.name);
     if (selected.isOverbooked) throw new ClassIsOverbookedError();
     if (selected.enrollmentDeadlineExpired) throw new BookrBookingError("registration_deadline_passed");
-    if (selected.isOpen && !selected.userIsBlocked) {
-      await client.enroll(selected);
-      return bookrResult("enroll", "success", selected.name);
-    }
     if (selected.userIsBlocked) throw new BookrBookingError("booking_restricted");
+    const openingMs = Date.parse(selected.enrollmentOpensAt ?? "");
+    const untilOpeningMs = openingMs - now();
+    // Near a known opening, reuse the selected session and submit at its exact
+    // timestamp. A calendar fetch after the boundary costs a full round trip.
+    const imminentOpening = selected.timeToEnroll !== null && Number.isFinite(openingMs) &&
+      untilOpeningMs <= 10_000 && untilOpeningMs >= -OPENING_BOUNDARY_GRACE_MS;
+    if (selected.isOpen || imminentOpening) {
+      if (!selected.isOpen && untilOpeningMs > 0) {
+        if (openingMs >= startedAt + timeoutSeconds * 1000) {
+          if (notOpenIsNoop) return openingNoop(selected.name, selected, now);
+          throw new RegyboxTimeoutError(timeoutSeconds, { timeToEnroll: selected.timeToEnroll });
+        }
+        await trace({ level: "info", scope: "bookr", code: "enrollment_wait", message: "Waiting for the exact Bookr opening time", data: { enrollmentOpensAt: selected.enrollmentOpensAt, waitSeconds: untilOpeningMs / 1000 } });
+        // Tracing must not move the target time later.
+        await sleep(Math.max(0, openingMs - now()));
+      }
+      if (now() - startedAt >= timeoutSeconds * 1000) throw new RegyboxTimeoutError(timeoutSeconds);
+      try {
+        const verified = await client.enroll(selected);
+        const waitlisted = verified?.userIsWaitlisted === true;
+        await trace({ level: "info", scope: "bookr", code: "enrollment_success", message: waitlisted ? "Joined the Bookr waitlist; a class place is not confirmed" : "Bookr enrollment confirmed", data: { userIsWaitlisted: waitlisted } });
+        return bookrResult("enroll", "success", selected.name, waitlisted ? { userIsWaitlisted: true } : {});
+      } catch (error) {
+        // Retry only a definitive not-open rejection, never an ambiguous POST.
+        if (!(error instanceof BookrBookingError) || error.reason !== "booking_window_not_open") throw error;
+        await sleep(Math.min(250, Math.max(0, startedAt + timeoutSeconds * 1000 - now())));
+        continue;
+      }
+    }
     const remaining = Math.max(0, timeoutSeconds - Math.ceil((now() - startedAt) / 1000));
     if (selected.enrollmentDeadlineExpired || selected.userIsBlocked || selected.timeToEnroll === null || selected.timeToEnroll > remaining) {
       if (notOpenIsNoop) return openingNoop(selected.name, selected, now);
       if (selected.timeToEnroll !== null && selected.timeToEnroll > remaining) throw new RegyboxTimeoutError(timeoutSeconds, { timeToEnroll: selected.timeToEnroll });
       throw new ClassNotOpenError();
     }
-    const wait = selected.timeToEnroll > 60 ? 60 : selected.timeToEnroll > 10 ? 10 : 1;
+    const pollWait = selected.timeToEnroll > 60 ? 60 : selected.timeToEnroll > 10 ? 10 : 0.25;
+    // Leave time for the next calendar response before entering the final
+    // ten-second window; a coarse sleep must not run through the opening.
+    const wait = Number.isFinite(openingMs) && untilOpeningMs > 10_000
+      ? Math.min(pollWait, (untilOpeningMs - 10_000) / 1000)
+      : pollWait;
     await trace({ level: "info", scope: "bookr", code: "enrollment_wait", message: "Bookr enrollment is not open yet", data: { timerSeconds: selected.timeToEnroll, waitSeconds: wait } });
     await sleep(wait * 1000);
   }
