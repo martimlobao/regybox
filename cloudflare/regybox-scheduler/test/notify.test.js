@@ -96,6 +96,20 @@ test("waitlist results explicitly identify an unconfirmed place in the email sub
   assert.doesNotMatch(messages[1].body, /waitlist/);
 });
 
+test("email latency is recorded separately from the verified booking", async () => {
+  let clock = 0;
+  const events = [];
+  await notifyResult({
+    env: emailEnv, dispatch: dispatch(), result: { status: "success" },
+    now: () => clock, onTrace: async (event) => events.push(event),
+    send: async () => { clock += 8900; },
+  });
+  assert.equal(events[0].code, "notification_started");
+  assert.match(events[0].message, /already verified/);
+  assert.equal(events[1].code, "notification_sent");
+  assert.equal(events[1].data.durationMs, 8900);
+});
+
 test("success unenrollment email includes the optional worker status page", () => {
   assert.deepEqual(
     composeEmail({

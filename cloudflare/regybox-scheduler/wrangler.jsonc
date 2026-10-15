@@ -23,6 +23,10 @@
   "triggers": {
     "crons": ["28,58 * * * *"]
   },
+  "durable_objects": {
+    "bindings": [{ "name": "BOOKR_COORDINATOR", "class_name": "BookrCoordinator" }]
+  },
+  "migrations": [{ "tag": "v1-bookr-coordinator", "new_sqlite_classes": ["BookrCoordinator"] }],
   "observability": {
     "logs": {
       "enabled": true

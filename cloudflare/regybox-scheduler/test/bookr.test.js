@@ -22,6 +22,7 @@ import {
   saveBookrSession,
 } from "../src/bookr.js";
 import { errorPayload, safeErrorMessage } from "../src/failures.js";
+import { createRunRecorder, readRun } from "../src/runs.js";
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
@@ -163,7 +164,7 @@ test("Bookr class normalization discards participant data and retains booking st
     registeredParticipants: [{ id: "a", name: "private" }], waitlistedParticipants: [{ id: "b", note: "private" }], currentUserBookingStatus: "waitlisted",
   }));
   assert.deepEqual(Object.keys(parsed).sort(), [
-    "canCancel", "curCapacity", "date", "details", "end", "enrollmentDeadlineExpired", "enrollmentOpensAt", "id", "isFull", "isOpen", "isOver", "isOverbooked", "maxCapacity", "name", "start", "timeToEnroll", "timeToStart", "userIsBlocked", "userIsEnrolled", "userIsWaitlisted",
+    "canCancel", "curCapacity", "date", "details", "end", "enrollmentDeadlineExpired", "enrollmentOpensAt", "id", "isFull", "isOpen", "isOver", "isOverbooked", "maxCapacity", "name", "start", "timeToEnroll", "timeToStart", "userIsBlocked", "userIsEnrolled", "userIsWaitlisted", "waitlistCount",
   ].sort());
   assert.equal(parsed.curCapacity, 1);
   assert.equal(parsed.userIsWaitlisted, true);
@@ -426,8 +427,8 @@ test("Bookr books at the exact opening without a calendar round trip and preserv
   assert.equal(trace.at(-1).data.userIsWaitlisted, true);
 });
 
-test("Bookr leaves room for calendar latency before the final opening wait", async () => {
-  let clock = Date.parse("2026-09-01T17:29:49Z");
+test("Bookr waits locally for two minutes from its initial lookup without further calendar polling", async () => {
+  let clock = Date.parse("2026-09-01T17:28:00Z");
   const opening = Date.parse("2026-09-01T17:30:00Z");
   const waits = [];
   const result = await runBookrOperation({
@@ -444,10 +445,56 @@ test("Bookr leaves room for calendar latency before the final opening wait", asy
       },
     },
     classDate: "2026-09-05", classTime: "07:30", classType: "WOD Rato",
+    maxPolls: 1,
     now: () => clock, sleep: async (ms) => { waits.push(ms); clock += ms; },
   });
   assert.equal(result.status, "success");
-  assert.deepEqual(waits, [500, 9500]);
+  assert.deepEqual(waits, [119500]);
+});
+
+test("retained Bookr traces show request latency, opening offset, capacity and waitlist outcome without private data", async () => {
+  let clock = Date.parse("2026-09-01T17:29:59Z");
+  const opening = Date.parse("2026-09-01T17:30:00Z");
+  const kv = memoryKv();
+  const recorder = await createRunRecorder({ kv, platform: "bookr", mode: "worker", now: () => clock });
+  let booked = false;
+  let reads = 0;
+  const onTrace = async (event) => recorder.trace(event);
+  const client = createBookrClient({
+    authCookie: authCookie(), now: () => clock, onTrace,
+    fetchImpl: async (url, options) => {
+      if (url.endsWith("/dashboard")) return dashboardResponse();
+      if (options.method === "POST") {
+        clock += 900;
+        booked = true;
+        return jsonResponse({ status: "booked", private: "private-response" });
+      }
+      reads += 1;
+      clock += 100;
+      return jsonResponse({ selectedDaySessions: [apiSession({
+        canBook: false, bookingWindowOpensAt: new Date(opening).toISOString(),
+        registeredParticipants: booked ? Array.from({ length: 14 }, () => ({ name: "private-participant", email: "private@example.test" })) : [],
+        waitlistedParticipants: booked ? [{ name: "private-user" }] : [],
+        currentUserBookingStatus: booked ? "waitlisted" : null,
+      })] });
+    },
+  });
+  await client.bootstrapSession();
+  await runBookrOperation({ client, classDate: "2026-09-05", classTime: "07:30", classType: "WOD Rato", now: () => clock, sleep: async (ms) => { clock += ms; }, onTrace });
+  await recorder.finalize({ operations: [{ operation: "enroll", outcome: "success" }] });
+  const run = await readRun(kv, recorder.id);
+  const sent = run.trace.find((event) => event.code === "bookr_request_started" && event.data.method === "POST");
+  const received = run.trace.find((event) => event.code === "bookr_response_received" && event.data.requestId === sent.data.requestId);
+  assert.equal(sent.data.openingOffsetMs, 0);
+  assert.equal(received.data.durationMs, 900);
+  assert.equal(received.data.httpStatus, 200);
+  const verified = run.trace.find((event) => event.code === "mutation_verified");
+  assert.equal(verified.data.capacity, 14);
+  assert.equal(verified.data.registeredCount, 14);
+  assert.equal(verified.data.waitlistCount, 1);
+  assert.equal(verified.data.userIsWaitlisted, true);
+  assert.equal(reads, 2); // Initial snapshot plus authoritative verification.
+  assert.doesNotMatch(JSON.stringify(run), /private-participant|private-user|private-response|private@example|access-token|refresh-token|11111111-1111|\?date=/);
 });
 
 test("Bookr never submits past its timeout or through known booking restrictions", async () => {

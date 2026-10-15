@@ -324,6 +324,7 @@ export function normalizeBookrSession(value, { now = () => Date.now(), timezone 
     end: end.time,
     maxCapacity: capacity,
     curCapacity: registered,
+    waitlistCount: waitlisted,
     isFull,
     isOverbooked: isFull && waitlistLimit !== null && waitlisted >= waitlistLimit,
     isOpen: Boolean(value.canBook),
@@ -532,36 +533,58 @@ export function createBookrClient({
   let cookieHeader = bootstrapCookie;
   let lastDurablyPersistedCookie = null;
   let subscriptionId = null;
+  let requestSequence = 0;
+  const initialDays = new Map();
   const trace = async (event) => { try { await onTrace(safeTrace(event)); } catch { /* tracing is best effort */ } };
 
   async function persistCookieHeader() {
     if (!persistSession || !kv?.put || cookieHeader === lastDurablyPersistedCookie) return;
     const cookieToPersist = cookieHeader;
-    await saveBookrSession(kv, bootstrapCookie, cookieToPersist);
+    const persistenceStartedAt = now();
+    await trace({ level: "info", scope: "session", code: "bookr_credentials_write_started", message: "Persisting encrypted Bookr credentials" });
+    try {
+      await saveBookrSession(kv, bootstrapCookie, cookieToPersist);
+    } catch (error) {
+      await trace({ level: "error", scope: "session", code: "bookr_credentials_write_failed", message: "Encrypted Bookr credential persistence failed", data: { durationMs: now() - persistenceStartedAt } });
+      throw error;
+    }
+    await trace({ level: "info", scope: "session", code: "bookr_credentials_written", message: "Encrypted Bookr credentials persisted", data: { durationMs: now() - persistenceStartedAt } });
     // A failed KV write must remain retryable and must never imply durability.
     lastDurablyPersistedCookie = cookieToPersist;
   }
 
-  async function request(path, { method = "GET", body, mutation = false } = {}) {
+  async function request(path, { method = "GET", body, mutation = false, openingAt, context = {} } = {}) {
     const resolvedMethod = String(method).toUpperCase();
     const url = new URL(path, BOOKR_ORIGIN);
     if (!isAllowedBookrRequest(url, resolvedMethod)) throw new Error("Bookr request used a disallowed endpoint");
-    const response = await fetchImpl(url.href, {
-      method: resolvedMethod,
-      // Do not follow a first-party redirect with a manually supplied Cookie
-      // header: the endpoint allowlist must remain true for the complete hop.
-      // Cloudflare Workers rejects redirect:"error" before issuing the fetch;
-      // manual lets us inspect and reject the response ourselves.
-      redirect: "manual",
-      cache: "no-store",
-      headers: {
-        Accept: resolvedMethod === "GET" ? "application/json, text/html;q=0.9" : "application/json",
-        Cookie: cookieHeader,
-        "Cache-Control": "no-store",
-        ...(body ? { "Content-Type": "application/json" } : {}),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
+    const requestId = ++requestSequence;
+    const requestStartedAt = now();
+    const openingMs = Date.parse(openingAt ?? "");
+    const requestData = { ...context, requestId, method: resolvedMethod, endpointPath: url.pathname, ...(Number.isFinite(openingMs) ? { openingOffsetMs: requestStartedAt - openingMs } : {}) };
+    await trace({ level: "info", scope: "http", code: "bookr_request_started", message: `Bookr ${resolvedMethod} request started`, data: requestData });
+    let response;
+    try {
+      response = await fetchImpl(url.href, {
+        method: resolvedMethod,
+        // Do not follow a first-party redirect with a manually supplied Cookie
+        // header: the endpoint allowlist must remain true for the complete hop.
+        // Cloudflare Workers rejects redirect:"error" before issuing the fetch;
+        // manual lets us inspect and reject the response ourselves.
+        redirect: "manual",
+        cache: "no-store",
+        headers: {
+          Accept: resolvedMethod === "GET" ? "application/json, text/html;q=0.9" : "application/json",
+          Cookie: cookieHeader,
+          "Cache-Control": "no-store",
+          ...(body ? { "Content-Type": "application/json" } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    } catch (error) {
+      await trace({ level: "error", scope: "http", code: "bookr_request_failed", message: "Bookr request failed before an HTTP response", data: { ...requestData, durationMs: now() - requestStartedAt } });
+      throw error;
+    }
+    await trace({ level: response.ok ? "info" : "warn", scope: "http", code: "bookr_response_received", message: `Bookr ${resolvedMethod} request returned HTTP ${response.status}`, data: { ...requestData, httpStatus: response.status, durationMs: now() - requestStartedAt } });
     // Reject before inspecting Set-Cookie or the body. A redirect is never
     // allowed to establish state, even when it happens to include a location
     // on the same origin.
@@ -582,7 +605,6 @@ export function createBookrClient({
         throw error;
       }
     }
-    await trace({ level: response.ok ? "info" : "warn", scope: "http", code: "bookr_response_received", message: `Bookr request returned HTTP ${response.status}`, data: { endpointPath: url.pathname, httpStatus: response.status } });
     if (response.status === 401 || response.status === 403) throw new BookrLoginError();
     if (!response.ok) throw await bookrResponseError(response);
     return response;
@@ -599,6 +621,8 @@ export function createBookrClient({
     let lastStatus = null;
     for (let attempt = 1; attempt <= MAX_REFRESH_ATTEMPTS; attempt += 1) {
       let response;
+      const refreshStartedAt = now();
+      await trace({ level: "info", scope: "session", code: "bookr_refresh_started", message: "Refreshing Bookr login", data: { attempt } });
       try {
         response = await fetchImpl(`${SUPABASE_ORIGIN}/auth/v1/token?grant_type=refresh_token`, {
           method: "POST",
@@ -615,11 +639,13 @@ export function createBookrClient({
           body: JSON.stringify({ refresh_token: decoded.refreshToken }),
         });
       } catch {
+        await trace({ level: "warn", scope: "session", code: "bookr_refresh_transport_failed", message: "Bookr login refresh failed before an HTTP response", data: { attempt, durationMs: now() - refreshStartedAt } });
         if (attempt === MAX_REFRESH_ATTEMPTS) throw new BookrRefreshError();
         const delayMs = Number(refreshBackoffMs(attempt));
         if (Number.isFinite(delayMs) && delayMs > 0) await refreshSleep(delayMs);
         continue;
       }
+      await trace({ level: response.ok ? "info" : "warn", scope: "session", code: "bookr_refresh_response", message: `Bookr login refresh returned HTTP ${response.status}`, data: { attempt, httpStatus: response.status, durationMs: now() - refreshStartedAt } });
       // Do not treat a redirect as a refresh response: it must not be retried,
       // parsed, or allowed to replace the durable auth cookie.
       rejectRedirectResponse(response, new BookrRefreshError(response.status));
@@ -642,13 +668,18 @@ export function createBookrClient({
     throw new BookrRefreshError(lastStatus);
   }
 
-  async function listClasses(classDate) {
+  async function listClasses(classDate, { reason = "lookup" } = {}) {
     if (!validClassDate(classDate)) throw new UnparseableError("Bookr class date must use YYYY-MM-DD");
     await refreshIfNeeded();
-    const response = await request(`/api/dashboard/athlete-calendar/day?date=${encodeURIComponent(classDate)}`);
+    const response = await request(`/api/dashboard/athlete-calendar/day?date=${encodeURIComponent(classDate)}`, { context: { classDate, reason } });
     const payload = await responseJson(response);
     if (!payload || !Array.isArray(payload.selectedDaySessions)) throw new UnparseableError("Bookr returned an invalid class calendar");
     return payload.selectedDaySessions.map((session) => normalizeBookrSession(session, { now, timezone }));
+  }
+
+  async function initialClassesForDate(classDate) {
+    if (!initialDays.has(classDate)) initialDays.set(classDate, listClasses(classDate));
+    return initialDays.get(classDate);
   }
 
   async function bootstrapSession() {
@@ -676,10 +707,27 @@ export function createBookrClient({
   }
 
   async function verify(sessionId, expected) {
-    const session = (await listClasses(expected.date)).find((candidate) => candidate.id === sessionId);
-    if (!session) throw new UnparseableError("Bookr did not return the changed class");
+    const verificationStartedAt = now();
+    await trace({ level: "info", scope: "bookr", code: "mutation_verification_started", message: "Reading Bookr calendar once to verify the booking change", data: { operation: expected.operation } });
+    let sessions;
+    try {
+      sessions = await listClasses(expected.date, { reason: "verification" });
+    } catch (error) {
+      await trace({ level: "error", scope: "bookr", code: "mutation_verification_failed", message: "Could not read Bookr state to verify the booking change", data: { operation: expected.operation, durationMs: now() - verificationStartedAt, reason: "read_back_failed" } });
+      throw error;
+    }
+    initialDays.set(expected.date, Promise.resolve(sessions));
+    const session = sessions.find((candidate) => candidate.id === sessionId);
+    if (!session) {
+      await trace({ level: "error", scope: "bookr", code: "mutation_verification_failed", message: "Bookr read-back did not include the changed class", data: { operation: expected.operation, durationMs: now() - verificationStartedAt, reason: "class_missing" } });
+      throw new UnparseableError("Bookr did not return the changed class");
+    }
     const actual = expected.operation === "enroll" ? session.userIsEnrolled : !session.userIsEnrolled;
-    if (!actual) throw new BookrMutationVerificationError();
+    if (!actual) {
+      await trace({ level: "error", scope: "bookr", code: "mutation_verification_failed", message: "Bookr read-back did not confirm the requested booking state", data: { operation: expected.operation, durationMs: now() - verificationStartedAt, reason: "state_not_confirmed", userIsEnrolled: session.userIsEnrolled, userIsWaitlisted: session.userIsWaitlisted } });
+      throw new BookrMutationVerificationError();
+    }
+    await trace({ level: "info", scope: "bookr", code: "mutation_verified", message: session.userIsWaitlisted ? "Bookr read-back confirms waitlist placement" : "Bookr read-back confirms the booking change", data: { operation: expected.operation, durationMs: now() - verificationStartedAt, userIsEnrolled: session.userIsEnrolled, userIsWaitlisted: session.userIsWaitlisted, capacity: session.maxCapacity, registeredCount: session.curCapacity, waitlistCount: session.waitlistCount } });
     return session;
   }
 
@@ -691,6 +739,8 @@ export function createBookrClient({
       response = await request("/api/dashboard/athlete-class-bookings", {
         method: operation === "enroll" ? "POST" : "DELETE",
         mutation: true,
+        context: { operation, classDate: selected.date, classTime: selected.start },
+        openingAt: operation === "enroll" ? selected.enrollmentOpensAt : undefined,
         body: operation === "enroll" ? { sessionId: selected.id, subscriptionId } : { sessionId: selected.id },
       });
       // Validate success JSON, but authoritative success is the read-back below.
@@ -731,7 +781,7 @@ export function createBookrClient({
     }
   }
 
-  return { timezone, bootstrapSession, listClasses, enroll: (session) => mutate("enroll", session), unenroll: (session) => mutate("unenroll", session) };
+  return { timezone, bootstrapSession, listClasses, initialClassesForDate, enroll: (session) => mutate("enroll", session), unenroll: (session) => mutate("unenroll", session) };
 }
 
 /**
@@ -782,69 +832,60 @@ export async function runBookrOperation({ client, operation = "enroll", classDat
   const normalizedTime = String(classTime).padStart(5, "0");
   const trace = async (event) => { try { await onTrace(safeTrace(event)); } catch { /* best effort */ } };
   const startedAt = now();
-  for (let poll = 0; poll < maxPolls && now() - startedAt < timeoutSeconds * 1000; poll += 1) {
-    const selected = selectSession(await client.listClasses(classDate), { classDate, classTime: normalizedTime, classTypes, operation });
-    await trace({ level: "info", scope: "bookr", code: "class_state_observed", message: "Parsed Bookr class state", data: { fetchCount: poll + 1, isOpen: selected.isOpen, userIsEnrolled: selected.userIsEnrolled, isFull: selected.isFull } });
-    if (operation === "unenroll") {
-      if (!selected.userIsEnrolled) return bookrResult("unenroll", "noop", selected.name);
-      if (!selected.canCancel) throw new BookrBookingError("cancellation_window_closed");
-      await client.unenroll(selected);
-      return bookrResult("unenroll", "success", selected.name);
-    }
-    if (selected.userIsEnrolled) return bookrResult("enroll", "noop", selected.name);
-    if (selected.isOverbooked) throw new ClassIsOverbookedError();
-    if (selected.enrollmentDeadlineExpired) throw new BookrBookingError("registration_deadline_passed");
-    if (selected.userIsBlocked) throw new BookrBookingError("booking_restricted");
-    const openingMs = Date.parse(selected.enrollmentOpensAt ?? "");
-    const untilOpeningMs = openingMs - now();
-    // Near a known opening, reuse the selected session and submit at its exact
-    // timestamp. A calendar fetch after the boundary costs a full round trip.
-    const imminentOpening = selected.timeToEnroll !== null && Number.isFinite(openingMs) &&
-      untilOpeningMs <= 10_000 && untilOpeningMs >= -OPENING_BOUNDARY_GRACE_MS;
-    if (selected.isOpen || imminentOpening) {
-      if (!selected.isOpen && untilOpeningMs > 0) {
-        if (openingMs >= startedAt + timeoutSeconds * 1000) {
-          if (notOpenIsNoop) return openingNoop(selected.name, selected, now);
-          throw new RegyboxTimeoutError(timeoutSeconds, { timeToEnroll: selected.timeToEnroll });
-        }
-        await trace({ level: "info", scope: "bookr", code: "enrollment_wait", message: "Waiting for the exact Bookr opening time", data: { enrollmentOpensAt: selected.enrollmentOpensAt, waitSeconds: untilOpeningMs / 1000 } });
-        // Tracing must not move the target time later.
-        await sleep(Math.max(0, openingMs - now()));
-      }
-      const operationDeadline = startedAt + timeoutSeconds * 1000;
-      const retryDeadline = Math.min(operationDeadline, now() + OPENING_BOUNDARY_GRACE_MS);
-      while (now() < retryDeadline) {
-        try {
-          const verified = await client.enroll(selected);
-          const waitlisted = verified?.userIsWaitlisted === true;
-          await trace({ level: "info", scope: "bookr", code: "enrollment_success", message: waitlisted ? "Joined the Bookr waitlist; a class place is not confirmed" : "Bookr enrollment confirmed", data: { userIsWaitlisted: waitlisted } });
-          return bookrResult("enroll", "success", selected.name, waitlisted ? { userIsWaitlisted: true } : {});
-        } catch (error) {
-          // Retry only a definitive not-open rejection, never an ambiguous POST.
-          // Reuse the session: another calendar read adds avoidable latency.
-          if (!(error instanceof BookrBookingError) || error.reason !== "booking_window_not_open") throw error;
-          await sleep(Math.min(500, Math.max(0, retryDeadline - now())));
-        }
-      }
-      if (now() >= operationDeadline) throw new RegyboxTimeoutError(timeoutSeconds);
-      throw new ClassNotOpenError("Bookr enrollment remained closed after the opening retry window");
-    }
-    const remaining = Math.max(0, timeoutSeconds - Math.ceil((now() - startedAt) / 1000));
-    if (selected.enrollmentDeadlineExpired || selected.userIsBlocked || selected.timeToEnroll === null || selected.timeToEnroll > remaining) {
+  const operationDeadline = startedAt + timeoutSeconds * 1000;
+  if (maxPolls < 1 || now() >= operationDeadline) throw new RegyboxTimeoutError(timeoutSeconds);
+  // Read the provider calendar once. Its absolute opening timestamp is enough
+  // to wait locally; only a mutation read-back needs another calendar request.
+  const selected = selectSession(await (client.initialClassesForDate ?? client.listClasses)(classDate), { classDate, classTime: normalizedTime, classTypes, operation });
+  const stateData = (session) => ({
+    isOpen: session.isOpen, userIsEnrolled: session.userIsEnrolled,
+    userIsWaitlisted: session.userIsWaitlisted, capacity: session.maxCapacity,
+    registeredCount: session.curCapacity, waitlistCount: session.waitlistCount,
+  });
+  await trace({ level: "info", scope: "bookr", code: "class_state_observed", message: "Initial Bookr class lookup completed", data: { fetchCount: 1, ...stateData(selected), enrollmentOpensAt: selected.enrollmentOpensAt } });
+  if (operation === "unenroll") {
+    if (!selected.userIsEnrolled) return bookrResult("unenroll", "noop", selected.name);
+    if (!selected.canCancel) throw new BookrBookingError("cancellation_window_closed");
+    await client.unenroll(selected);
+    return bookrResult("unenroll", "success", selected.name);
+  }
+  if (selected.userIsEnrolled) return bookrResult("enroll", "noop", selected.name, selected.userIsWaitlisted ? { userIsWaitlisted: true } : {});
+  if (selected.isOverbooked) throw new ClassIsOverbookedError();
+  if (selected.enrollmentDeadlineExpired) throw new BookrBookingError("registration_deadline_passed");
+  if (selected.userIsBlocked) throw new BookrBookingError("booking_restricted");
+  const openingMs = Date.parse(selected.enrollmentOpensAt ?? "");
+  if (!selected.isOpen) {
+    if (selected.timeToEnroll === null || !Number.isFinite(openingMs) || openingMs >= operationDeadline) {
       if (notOpenIsNoop) return openingNoop(selected.name, selected, now);
-      if (selected.timeToEnroll !== null && selected.timeToEnroll > remaining) throw new RegyboxTimeoutError(timeoutSeconds, { timeToEnroll: selected.timeToEnroll });
+      if (Number.isFinite(openingMs) && openingMs >= operationDeadline) throw new RegyboxTimeoutError(timeoutSeconds, { timeToEnroll: selected.timeToEnroll });
       throw new ClassNotOpenError();
     }
-    const pollWait = selected.timeToEnroll > 60 ? 60 : selected.timeToEnroll > 10 ? 10 : 0.5;
-    // Leave time for the next calendar response before entering the final
-    // ten-second window; a coarse sleep must not run through the opening.
-    const wait = Number.isFinite(openingMs) && untilOpeningMs > 10_000
-      ? Math.min(pollWait, (untilOpeningMs - 10_000) / 1000)
-      : pollWait;
-    await trace({ level: "info", scope: "bookr", code: "enrollment_wait", message: "Bookr enrollment is not open yet", data: { timerSeconds: selected.timeToEnroll, waitSeconds: wait } });
-    await sleep(wait * 1000);
+    await trace({ level: "info", scope: "bookr", code: "enrollment_wait", message: "Waiting locally until Bookr opens; no calendar polling", data: { enrollmentOpensAt: selected.enrollmentOpensAt, waitSeconds: Math.max(0, openingMs - now()) / 1000 } });
+    // Logging overhead must not move the target time later.
+    if (openingMs > now()) await sleep(Math.max(0, openingMs - now()));
   }
-  throw new RegyboxTimeoutError(timeoutSeconds);
+  const retryDeadline = Math.min(operationDeadline, now() + OPENING_BOUNDARY_GRACE_MS);
+  let attempt = 0;
+  while (now() < retryDeadline) {
+    attempt += 1;
+    const attemptStartedAt = now();
+    await trace({ level: "info", scope: "bookr", code: "enrollment_attempt", message: `Submitting Bookr booking attempt ${attempt}`, data: { attempt, ...(Number.isFinite(openingMs) ? { openingOffsetMs: attemptStartedAt - openingMs } : {}) } });
+    try {
+      const verified = await client.enroll(selected);
+      const waitlisted = verified?.userIsWaitlisted === true;
+      await trace({ level: "info", scope: "bookr", code: "enrollment_success", message: waitlisted ? "Joined the Bookr waitlist; a class place is not confirmed" : "Bookr enrollment confirmed", data: { attempt, durationMs: now() - attemptStartedAt, ...stateData(verified ?? selected), userIsWaitlisted: waitlisted } });
+      return bookrResult("enroll", "success", selected.name, waitlisted ? { userIsWaitlisted: true } : {});
+    } catch (error) {
+      const retryable = error instanceof BookrBookingError && error.reason === "booking_window_not_open";
+      const waitMs = Math.min(500, Math.max(0, retryDeadline - now()));
+      await trace({ level: "warn", scope: "bookr", code: "enrollment_attempt_failed", message: retryable ? "Bookr still reports not open; retrying the booking directly" : "Bookr booking attempt failed; it will not be replayed", data: { attempt, durationMs: now() - attemptStartedAt, reason: retryable ? "booking_window_not_open" : error instanceof BookrMutationVerificationError ? "mutation_unverified" : "booking_failed", ...(retryable ? { nextRetryMs: waitMs } : {}) } });
+      if (!retryable) throw error;
+      if (waitMs > 0) await sleep(waitMs);
+    }
+  }
+  await trace({ level: "error", scope: "bookr", code: "opening_retry_exhausted", message: "Bookr opening retry budget exhausted", data: { attempt, durationMs: now() - startedAt } });
+  if (now() >= operationDeadline) throw new RegyboxTimeoutError(timeoutSeconds);
+  throw new ClassNotOpenError("Bookr enrollment remained closed after the opening retry window");
 }
 
 export const BOOKR_AUTH_COOKIE_NAME = AUTH_COOKIE;

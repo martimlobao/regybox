@@ -1,5 +1,5 @@
 import { buildFailureFingerprint, errorPayload, safeErrorMessage, safeErrorValue } from "./failures.js";
-import { notifyFailure, notifyResult } from "./notify.js";
+import { notifyFailure, notifyResult, prepareWaitlistNotification } from "./notify.js";
 import { createBookrClient, runBookrOperation } from "./bookr.js";
 import { UnparseableError, createRegyboxClient, runOperation } from "./regybox.js";
 import { recordIncident, resolveStatusUrl } from "./incidents.js";
@@ -296,7 +296,7 @@ export async function executePlan({
       return notifyFailureImpl({ env, kv, ...notification, statusUrl, incidentUrl, runUrl });
     });
   const reportResult =
-    onResult ?? ((notification) => notifyResultImpl({ env, kv, ...notification, statusUrl, runUrl }));
+    onResult ?? ((notification) => notifyResultImpl({ env, kv, ...notification, statusUrl, runUrl, now, onTrace: (event) => recordTrace(recorder, event) }));
   const startedAt = now();
   const operations = [];
   const activity = [];
@@ -490,14 +490,36 @@ export async function executePlan({
         await reportFailure({ dispatch, error, payload, fingerprint });
         continue;
       }
-      const cacheState = await writeState({ kv, details, result });
+      await recordTrace(recorder, {
+        scope: "operation", operationIndex, code: "booking_result_ready",
+        message: result.userIsWaitlisted ? "Booking verified: waitlisted; starting cache and notification work" : "Booking result ready; starting cache and notification work",
+        data: { operation: details.operation, outcome: result.status, userIsWaitlisted: result.userIsWaitlisted === true },
+      });
+      // Persist delivery intent before the planner can skip this booking. A
+      // later run drains it even when the booking cache already says enrolled.
+      try {
+        await prepareWaitlistNotification({ env, dispatch, result, statusUrl, runUrl });
+      } catch (error) {
+        await recordTrace(recorder, { level: "error", scope: "notification", operationIndex, code: "notification_intent_write_failed", message: "Could not persist the waitlist email; booking cache remains unchanged so a later run can recover delivery" });
+        throw error;
+      }
+      let cacheState;
+      const cacheStartedAt = now();
+      await recordTrace(recorder, { scope: "cache", operationIndex, code: "cache_write_started", message: "Writing booking cache" });
+      try {
+        cacheState = await writeState({ kv, details, result });
+      } catch (error) {
+        await recordTrace(recorder, { level: "error", scope: "cache", operationIndex, code: "cache_write_failed", message: "Booking cache write failed after the provider result; notification will still be attempted", data: { durationMs: now() - cacheStartedAt } });
+        await reportResult({ dispatch, result });
+        throw error;
+      }
       if (cacheState) {
         await recordTrace(recorder, {
           scope: "cache",
           operationIndex,
           code: "cache_state_written",
           message: `Cached ${cacheState} state for ${operationDescription(details)}`,
-          data: { operation: details.operation, cacheState },
+          data: { operation: details.operation, cacheState, durationMs: now() - cacheStartedAt },
         });
       }
       await reportResult({ dispatch, result });

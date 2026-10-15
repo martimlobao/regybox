@@ -308,6 +308,24 @@ Secrets**, then you're back in business.
   (searchable, kept for a few days). Every structured timeline event is also emitted
   there and starts with `regybox:` plus its run ID, making website and Cloudflare
   evidence easy to correlate.
+- **Booking timing**: Bookr reads each required class day once per run,
+  waits locally until the exact opening timestamp, and submits without polling the
+  calendar. An explicit "not open yet" rejection retries the booking directly
+  after 0.5 seconds, for at most 30 seconds and within the operation timeout.
+  A successful or ambiguous booking attempt still requires a calendar read-back.
+  The timeline records request starts, methods, response times, opening offsets,
+  attempt numbers, confirmed occupancy, and waitlist counts. Counts are snapshots;
+  the Worker does not infer a personal queue position from participant lists.
+  Booking verification, cache writes, and email delivery have separate entries
+  and durations, so a slow email cannot be mistaken for a late booking.
+- **Bookr run coordination**: overlapping scheduled invocations run sequentially
+  through a SQLite Durable Object. Deploy the current `wrangler.jsonc`, including
+  its `BOOKR_COORDINATOR` binding and migration; the deploy button and updater
+  include these automatically. Waitlist emails use a separate durable delivery
+  queue, retried on later runs even when the booking is already cached. Pending
+  notices and delivery receipts expire after seven days. Delivery is at least once:
+  an interruption after SMTP accepts a message but before the receipt is saved
+  can cause a duplicate email.
 - **Privacy**: run records use allowlisted fields and never retain cookies, headers,
   raw HTML, calendar URLs or contents, email-bearing event/cache identifiers, query
   strings, tokens, stack traces, or complete action URLs. Protect the Worker with
