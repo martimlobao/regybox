@@ -479,11 +479,12 @@ test("Bookr retries only explicit opening rejections and never replays ambiguous
       canBook: false, bookingWindowOpensAt: new Date(clock).toISOString(),
     }), { now: () => clock });
     let attempts = 0;
+    let reads = 0;
     const waits = [];
     const error = reason === "ambiguous" ? new BookrMutationVerificationError() : new BookrBookingError(reason);
     const operation = runBookrOperation({
       client: {
-        listClasses: async () => [selected],
+        listClasses: async () => { reads += 1; return [selected]; },
         enroll: async () => {
           attempts += 1;
           if (attempts === 1) throw error;
@@ -491,18 +492,47 @@ test("Bookr retries only explicit opening rejections and never replays ambiguous
         },
       },
       classDate: "2026-09-05", classTime: "07:30", classType: "WOD Rato",
+      maxPolls: 1,
       now: () => clock,
       sleep: async (ms) => { waits.push(ms); clock += ms; },
     });
     if (reason === "booking_window_not_open") {
       assert.equal((await operation).status, "success");
       assert.equal(attempts, 2);
-      assert.deepEqual(waits, [250]);
+      assert.equal(reads, 1);
+      assert.deepEqual(waits, [500]);
     } else {
       await assert.rejects(operation, (caught) => caught === error);
       assert.equal(attempts, 1);
       assert.deepEqual(waits, []);
     }
+  }
+});
+
+test("Bookr opening retries stop at the operation timeout or the bounded opening grace", async () => {
+  for (const timeoutSeconds of [1.25, 900]) {
+    let clock = Date.parse("2026-09-01T17:30:00Z");
+    const startedAt = clock;
+    const selected = normalizeBookrSession(apiSession({
+      canBook: false, bookingWindowOpensAt: new Date(clock).toISOString(),
+    }), { now: () => clock });
+    const waits = [];
+    let attempts = 0;
+    await assert.rejects(runBookrOperation({
+      client: {
+        listClasses: async () => [selected],
+        enroll: async () => {
+          attempts += 1;
+          throw new BookrBookingError("booking_window_not_open");
+        },
+      },
+      classDate: "2026-09-05", classTime: "07:30", classType: "WOD Rato",
+      timeoutSeconds, maxPolls: 1, now: () => clock,
+      sleep: async (ms) => { waits.push(ms); clock += ms; },
+    }), timeoutSeconds === 900 ? /remained closed/ : /Timed out/);
+    assert.equal(clock - startedAt, Math.min(timeoutSeconds * 1000, 30_000));
+    assert.equal(attempts, timeoutSeconds === 900 ? 60 : 3);
+    assert.ok(waits.every((ms) => ms <= 500));
   }
 });
 

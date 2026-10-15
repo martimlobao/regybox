@@ -811,18 +811,23 @@ export async function runBookrOperation({ client, operation = "enroll", classDat
         // Tracing must not move the target time later.
         await sleep(Math.max(0, openingMs - now()));
       }
-      if (now() - startedAt >= timeoutSeconds * 1000) throw new RegyboxTimeoutError(timeoutSeconds);
-      try {
-        const verified = await client.enroll(selected);
-        const waitlisted = verified?.userIsWaitlisted === true;
-        await trace({ level: "info", scope: "bookr", code: "enrollment_success", message: waitlisted ? "Joined the Bookr waitlist; a class place is not confirmed" : "Bookr enrollment confirmed", data: { userIsWaitlisted: waitlisted } });
-        return bookrResult("enroll", "success", selected.name, waitlisted ? { userIsWaitlisted: true } : {});
-      } catch (error) {
-        // Retry only a definitive not-open rejection, never an ambiguous POST.
-        if (!(error instanceof BookrBookingError) || error.reason !== "booking_window_not_open") throw error;
-        await sleep(Math.min(250, Math.max(0, startedAt + timeoutSeconds * 1000 - now())));
-        continue;
+      const operationDeadline = startedAt + timeoutSeconds * 1000;
+      const retryDeadline = Math.min(operationDeadline, now() + OPENING_BOUNDARY_GRACE_MS);
+      while (now() < retryDeadline) {
+        try {
+          const verified = await client.enroll(selected);
+          const waitlisted = verified?.userIsWaitlisted === true;
+          await trace({ level: "info", scope: "bookr", code: "enrollment_success", message: waitlisted ? "Joined the Bookr waitlist; a class place is not confirmed" : "Bookr enrollment confirmed", data: { userIsWaitlisted: waitlisted } });
+          return bookrResult("enroll", "success", selected.name, waitlisted ? { userIsWaitlisted: true } : {});
+        } catch (error) {
+          // Retry only a definitive not-open rejection, never an ambiguous POST.
+          // Reuse the session: another calendar read adds avoidable latency.
+          if (!(error instanceof BookrBookingError) || error.reason !== "booking_window_not_open") throw error;
+          await sleep(Math.min(500, Math.max(0, retryDeadline - now())));
+        }
       }
+      if (now() >= operationDeadline) throw new RegyboxTimeoutError(timeoutSeconds);
+      throw new ClassNotOpenError("Bookr enrollment remained closed after the opening retry window");
     }
     const remaining = Math.max(0, timeoutSeconds - Math.ceil((now() - startedAt) / 1000));
     if (selected.enrollmentDeadlineExpired || selected.userIsBlocked || selected.timeToEnroll === null || selected.timeToEnroll > remaining) {
@@ -830,7 +835,7 @@ export async function runBookrOperation({ client, operation = "enroll", classDat
       if (selected.timeToEnroll !== null && selected.timeToEnroll > remaining) throw new RegyboxTimeoutError(timeoutSeconds, { timeToEnroll: selected.timeToEnroll });
       throw new ClassNotOpenError();
     }
-    const pollWait = selected.timeToEnroll > 60 ? 60 : selected.timeToEnroll > 10 ? 10 : 0.25;
+    const pollWait = selected.timeToEnroll > 60 ? 60 : selected.timeToEnroll > 10 ? 10 : 0.5;
     // Leave time for the next calendar response before entering the final
     // ten-second window; a coarse sleep must not run through the opening.
     const wait = Number.isFinite(openingMs) && untilOpeningMs > 10_000
