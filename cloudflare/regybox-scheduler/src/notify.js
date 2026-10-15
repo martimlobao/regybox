@@ -73,18 +73,20 @@ export function composeEmail({
   incidentUrl,
   runUrl,
   platform = "regybox",
+  userIsWaitlisted = false,
 }) {
   const operationName = operationLabel(operation);
   const operationNoun = operationName === "unenroll" ? "unenrollment" : "enrollment";
   const label = providerLabel(platform);
 
   if (kind === "success") {
+    const waitlisted = operationName === "enroll" && userIsWaitlisted;
     const bodyLines = [
-      `Your ${label} auto-${operationNoun} completed successfully.`,
+      waitlisted ? `You have been added to the ${label} waitlist.` : `Your ${label} auto-${operationNoun} completed successfully.`,
       "",
       `Class: ${summary}`,
       "",
-      "No errors were detected.",
+      waitlisted ? "Your place in the class is not confirmed. Check the booking platform for waitlist updates." : "No errors were detected.",
     ];
     if (statusUrl) {
       bodyLines.push("", `Status page: ${statusUrl}`);
@@ -93,7 +95,7 @@ export function composeEmail({
       bodyLines.push("", `Run details: ${runUrl}`);
     }
     return {
-      subject: `${label} Auto-${operationName}: success for ${summary}`,
+      subject: `${label} Auto-${operationName}: ${waitlisted ? "waitlisted" : "success"} for ${summary}`,
       body: bodyLines.join("\n"),
     };
   }
@@ -168,12 +170,52 @@ export async function sendEmail(env, { subject, body }, { mailerFactory, platfor
   );
 }
 
+/** Persist waitlist delivery separately from the booking cache. */
+export async function prepareWaitlistNotification({ env, dispatch, result, statusUrl, runUrl }) {
+  const store = env.REGYBOX_NOTIFICATIONS;
+  if (!store || !emailConfigured(env) || dispatch.operation !== "enroll" || result.userIsWaitlisted !== true) return null;
+  const inputs = dispatch.inputs ?? {};
+  const identity = JSON.stringify([dispatchPlatform(dispatch, env), inputs["class-date"], inputs["class-time"], inputs["class-type"]]);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity));
+  const key = `notification:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  let record = await store.get(key);
+  if (!record) {
+    record = {
+      state: "pending", expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      dispatch: { operation: "enroll", platform: dispatchPlatform(dispatch, env), inputs: {
+        "class-date": inputs["class-date"], "class-time": inputs["class-time"], "class-type": inputs["class-type"],
+      } }, statusUrl, runUrl,
+    };
+    await store.put(key, record);
+  }
+  return { key, record };
+}
+
+/** Drain pending delivery even when the booking planner skips cached classes. */
+export async function retryPendingNotifications(env, { onTrace = async () => {}, send = sendEmail } = {}) {
+  const store = env.REGYBOX_NOTIFICATIONS;
+  if (!store) return;
+  const entries = await store.list({ prefix: "notification:", limit: 1000 });
+  for (const [key, record] of entries) {
+    if (record.expiresAt <= Date.now()) {
+      await store.delete(key);
+    } else if (record.state === "pending") {
+      await notifyResult({ env, dispatch: record.dispatch, result: { status: "success", userIsWaitlisted: true }, statusUrl: record.statusUrl, runUrl: record.runUrl, onTrace, send });
+    }
+  }
+}
+
 /** Notify successful worker results; noops are intentionally silent. */
-export async function notifyResult({ env, kv, dispatch, result, statusUrl, runUrl, send = sendEmail }) {
-  if (!emailConfigured(env) || result.status !== "success") {
+export async function notifyResult({ env, kv, dispatch, result, statusUrl, runUrl, send = sendEmail, onTrace = async () => {}, now = () => Date.now() }) {
+  if (!emailConfigured(env) || (result.status !== "success" && !(result.status === "noop" && result.userIsWaitlisted === true && env.REGYBOX_NOTIFICATIONS))) {
     return;
   }
   const platform = dispatchPlatform(dispatch, env);
+  const delivery = await prepareWaitlistNotification({ env, dispatch, result, statusUrl, runUrl });
+  if (delivery?.record.state === "sent") return;
+  const trace = async (event) => { try { await onTrace(event); } catch { /* best effort */ } };
+  const startedAt = now();
+  await trace({ scope: "notification", code: "notification_started", message: "Sending confirmation email; the booking result is already verified", data: { userIsWaitlisted: result.userIsWaitlisted === true } });
   try {
     await send(
       env,
@@ -188,11 +230,15 @@ export async function notifyResult({ env, kv, dispatch, result, statusUrl, runUr
         statusUrl,
         runUrl,
         platform,
+        userIsWaitlisted: result.userIsWaitlisted === true,
       }),
       { platform },
     );
+    if (delivery) await env.REGYBOX_NOTIFICATIONS.put(delivery.key, { ...delivery.record, state: "sent" });
+    await trace({ scope: "notification", code: "notification_sent", message: "Confirmation email sent", data: { notificationStatus: "sent", durationMs: now() - startedAt } });
     console.log(`regybox: email sent (${dispatch.operation} success)`);
   } catch (error) {
+    await trace({ level: "warn", scope: "notification", code: "notification_failed", message: delivery ? "Email delivery failed; the waitlist notice remains queued for retry" : "Confirmation email delivery failed", data: { notificationStatus: delivery ? "pending" : "failed", durationMs: now() - startedAt } });
     console.warn(
       "regybox: success notification email failed:",
       safeErrorValue(error, { platform }),

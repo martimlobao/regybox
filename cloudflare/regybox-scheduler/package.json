@@ -16,6 +16,9 @@
   },
   "cloudflare": {
     "bindings": {
+      "BOOKR_COORDINATOR": {
+        "description": "Created automatically to serialize Bookr runs and retain pending waitlist notification delivery."
+      },
       "REGYBOX_STATE": {
         "description": "Created automatically to remember which classes have already been handled."
       },

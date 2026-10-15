@@ -7,7 +7,14 @@ import {
   expandCalendarEvents,
   normalizeList,
 } from "../src/index.js";
-import worker from "../src/index.js";
+import worker, { BookrCoordinator } from "../src/index.js";
+
+function scheduleBookr(event, env) {
+  const coordinator = new BookrCoordinator({ storage: { list: async () => new Map() } }, env);
+  return coordinator.fetch(new Request("https://coordinator.internal/run", {
+    method: "POST", body: JSON.stringify({ scheduledAt: event.scheduledTime }),
+  }));
+}
 
 const baseEnv = {
   GITHUB_OWNER: "martim",
@@ -94,7 +101,7 @@ test("Bookr calendar errors are redacted before reaching the console", async () 
   console.error = (...args) => errors.push(args);
   try {
     await assert.rejects(
-      worker.scheduled(
+      scheduleBookr(
         { scheduledTime: "2026-09-04T00:00:00.000Z" },
         {
           BOOKING_PLATFORM: "bookr",
@@ -128,7 +135,7 @@ test("Bookr calendar fetch diagnostics retain the calendar subsystem and HTTP st
   console.error = (...args) => errors.push(args);
   try {
     await assert.rejects(
-      worker.scheduled(
+      scheduleBookr(
         { scheduledTime: "2026-09-04T00:00:00.000Z" },
         {
           BOOKING_PLATFORM: "bookr",

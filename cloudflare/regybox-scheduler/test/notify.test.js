@@ -73,6 +73,43 @@ test("class summaries and success email content match the action notification wo
   );
 });
 
+test("waitlist results explicitly identify an unconfirmed place in the email subject and body", async () => {
+  const messages = [];
+  for (const userIsWaitlisted of [true, false]) {
+    await notifyResult({
+      env: { ...emailEnv, BOOKING_PLATFORM: "bookr" },
+      dispatch: dispatch(),
+      result: { status: "success", userIsWaitlisted },
+      statusUrl: "https://status.example.test",
+      runUrl: "https://status.example.test/runs/test",
+      send: async (_env, message) => messages.push(message),
+    });
+  }
+  assert.match(messages[0].subject, /Bookr.fit Auto-enroll: waitlisted/);
+  assert.match(messages[0].body, /added to the Bookr.fit waitlist/);
+  assert.match(messages[0].body, /place in the class is not confirmed/);
+  assert.doesNotMatch(messages[0].body, /completed successfully|No errors/);
+  assert.match(messages[0].body, /Status page: https:\/\/status.example.test/);
+  assert.match(messages[0].body, /Run details:/);
+  assert.match(messages[1].subject, /success/);
+  assert.match(messages[1].body, /completed successfully/);
+  assert.doesNotMatch(messages[1].body, /waitlist/);
+});
+
+test("email latency is recorded separately from the verified booking", async () => {
+  let clock = 0;
+  const events = [];
+  await notifyResult({
+    env: emailEnv, dispatch: dispatch(), result: { status: "success" },
+    now: () => clock, onTrace: async (event) => events.push(event),
+    send: async () => { clock += 8900; },
+  });
+  assert.equal(events[0].code, "notification_started");
+  assert.match(events[0].message, /already verified/);
+  assert.equal(events[1].code, "notification_sent");
+  assert.equal(events[1].data.durationMs, 8900);
+});
+
 test("success unenrollment email includes the optional worker status page", () => {
   assert.deepEqual(
     composeEmail({
