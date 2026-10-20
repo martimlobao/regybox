@@ -112,6 +112,15 @@ export function mergeDeploymentConfig({ deploymentText, upstreamText }) {
   } else if (Array.isArray(deployment.kv_namespaces)) {
     merged.kv_namespaces = deployment.kv_namespaces;
   }
+  // Email Sending is an account-owned binding. The generic upstream template
+  // cannot name a deployment's authorized sender and recipient.
+  if (Array.isArray(deployment.send_email)) {
+    const deploymentBindings = new Set(deployment.send_email.map((binding) => binding.name));
+    merged.send_email = [
+      ...(merged.send_email ?? []).filter((binding) => !deploymentBindings.has(binding.name)),
+      ...deployment.send_email,
+    ];
+  }
 
   // Variables and secrets belong to the user's Cloudflare dashboard. Keeping
   // them out of future deployments prevents an upstream update from replacing

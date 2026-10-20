@@ -124,8 +124,9 @@ legacy Python CLI, GitHub Action, or GitHub-dispatch execution path.
    **Bookr.fit login**, **active subscription**, and **calendar** checks before
    relying on the next scheduled run.
 
-For a manual Wrangler deployment, enter the secret interactively (so it does not
-enter shell history), then deploy with the non-secret selection. Cloudflare's
+For a manual Wrangler deployment of a copied Worker template, enter the secret
+interactively (so it does not enter shell history), then deploy with the
+non-secret selection. Cloudflare's
 [secrets documentation](https://developers.cloudflare.com/workers/configuration/secrets/)
 also recommends interactive secret updates for sensitive values:
 
@@ -134,6 +135,14 @@ cd cloudflare/regybox-scheduler
 bunx wrangler secret put BOOKR_AUTH_COOKIE
 BOOKING_PLATFORM=bookr CF_KV_NAMESPACE_ID=<your-kv-namespace-id> bun run deploy:manual
 ```
+
+This repository's production deployment reads the booking platform from its
+existing dashboard variable; the tracked production profile controls only the
+Cloudflare account, KV namespace, and email transport.
+`bun run deploy:manual` explicitly uses local environment values even when that
+profile is present. Use it only when you intend to deploy a different Worker
+configuration; normal `bun run deploy` and `make deploy-worker` use the tracked
+production profile.
 
 To roll back, set `BOOKING_PLATFORM` to `regybox`, deploy that binding change,
 and confirm the original Regybox login and calendar checks are green. The
@@ -257,6 +266,71 @@ emails include a private, hard-to-guess link to a sanitized incident report with
 details needed for troubleshooting. Reports expire after seven days and never contain
 cookies, passwords, calendar links, full booking URLs, or URL query tokens.
 
+#### Cloudflare Email (No Gmail Password)
+
+If your domain uses Cloudflare Email Routing, the Worker can send notifications
+directly from an address on that domain to a verified destination mailbox.
+[Sending to verified destinations is free](https://developers.cloudflare.com/email-service/platform/pricing/).
+
+This repository's tracked
+[`deploy/production-worker.json`](./deploy/production-worker.json) selects
+Cloudflare native email and names four required private inputs. Supply them in
+an ignored `.env.production` at the repository root or as exported environment
+variables in CI:
+
+```dotenv
+REGYBOX_PRODUCTION_ACCOUNT_ID=<cloudflare-account-id>
+REGYBOX_PRODUCTION_KV_NAMESPACE_ID=<existing-kv-namespace-id>
+REGYBOX_PRODUCTION_EMAIL_FROM=sender@example.test
+REGYBOX_PRODUCTION_EMAIL_TO=recipient@example.test
+```
+
+Normal `bun run deploy` and `make deploy-worker` deployments from this repository
+use those inputs to generate the restricted `EMAIL_SENDER` binding. Deployment
+stops before Wrangler if any are missing. Stale `.env` email settings and
+dashboard variables cannot change the selected native provider or addresses.
+The profile stays outside the one-click Worker template, so other accounts do
+not inherit these settings.
+
+For your own one-click deployment, set these Worker variables in **Settings →
+Variables and Secrets**:
+
+```dotenv
+EMAIL_PROVIDER=cloudflare
+EMAIL_FROM=bookings@example.test
+EMAIL_TO=your-verified-mailbox@example.test
+```
+
+Verify the exact recipient address in Cloudflare, including when it is a forwarding
+alias. Use a different sender address to avoid Gmail's self-sending deduplication.
+Add an email sending binding named `EMAIL_SENDER` to your deployment's
+`wrangler.jsonc`, restricted to the same sender and verified recipient, for
+example:
+
+```json
+"send_email": [{
+  "name": "EMAIL_SENDER",
+  "allowed_sender_addresses": ["bookings@example.test"],
+  "allowed_destination_addresses": ["your-verified-mailbox@example.test"]
+}]
+```
+
+Keep that binding in the deployment repository so a normal redeploy includes it.
+The automatic updater retains account-owned email bindings while applying
+upstream Worker changes.
+
+Native sending does not use `EMAIL_USERNAME` or `EMAIL_PASSWORD`. If sending fails,
+the Worker reports the failure without falling back to SMTP or marking a failure
+notification as delivered. Booking results are independent of email delivery.
+When moving an existing SMTP deployment to a source-controlled native email
+configuration, check whether `EMAIL_TO` is already a secret and resolve any
+same-name binding conflict before deploying the new text variable. The old SMTP
+credentials are unused by the native provider.
+
+#### SMTP (Including Gmail)
+
+SMTP remains the default when `EMAIL_PROVIDER` is unset (or set to `smtp`).
+
 1. If you use Gmail, create an [App Password](https://myaccount.google.com/apppasswords)
    — a special password just for this Worker; your normal password never leaves
    Google. Give it any name (for example `regybox`) and copy the generated value.
@@ -324,8 +398,8 @@ Secrets**, then you're back in business.
   include these automatically. Waitlist emails use a separate durable delivery
   queue, retried on later runs even when the booking is already cached. Pending
   notices and delivery receipts expire after seven days. Delivery is at least once:
-  an interruption after SMTP accepts a message but before the receipt is saved
-  can cause a duplicate email.
+  if Cloudflare native email or SMTP accepts a message but the delivery receipt
+  cannot be saved, a later retry can send a duplicate email.
 - **Privacy**: run records use allowlisted fields and never retain cookies, headers,
   raw HTML, calendar URLs or contents, email-bearing event/cache identifiers, query
   strings, tokens, stack traces, or complete action URLs. Protect the Worker with

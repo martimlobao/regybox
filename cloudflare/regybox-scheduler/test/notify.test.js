@@ -223,6 +223,90 @@ test("email configuration requires each non-empty SMTP credential and recipient"
   assert.equal(emailConfigured({ ...emailEnv, EMAIL_TO: "" }), false);
 });
 
+function nativeEmailEnv(send = async () => {}) {
+  return {
+    EMAIL_PROVIDER: "cloudflare",
+    EMAIL_FROM: "bookings@example.test",
+    EMAIL_TO: "owner@example.test",
+    EMAIL_SENDER: { send },
+  };
+}
+
+test("native email requires a sender, recipient and binding, without SMTP credentials", () => {
+  const env = nativeEmailEnv();
+  assert.equal(emailConfigured(env), true);
+  for (const name of ["EMAIL_FROM", "EMAIL_TO", "EMAIL_SENDER"]) {
+    assert.equal(emailConfigured({ ...env, [name]: undefined }), false);
+  }
+  assert.equal(emailConfigured({ ...env, EMAIL_FROM: " " }), false);
+  assert.equal(emailConfigured({ ...env, EMAIL_TO: " " }), false);
+  assert.equal(emailConfigured({ ...emailEnv, EMAIL_PROVIDER: "unknown" }), false);
+  assert.equal(emailConfigured({ ...emailEnv, EMAIL_PROVIDER: "cloudflare" }), false);
+});
+
+test("native email uses the configured sender and never loads SMTP", async () => {
+  const messages = [];
+  const env = nativeEmailEnv(async (message) => messages.push(message));
+  await sendEmail(
+    { ...emailEnv, ...env },
+    { subject: "Bookr notification", body: "Class booked." },
+    {
+      platform: "bookr",
+      mailerFactory: async () => { throw new Error("SMTP must not load"); },
+    },
+  );
+  assert.deepEqual(messages, [{
+    from: { name: "Bookr.fit Auto-enroll", email: "bookings@example.test" },
+    to: "owner@example.test",
+    subject: "Bookr notification",
+    text: "Class booked.",
+  }]);
+});
+
+test("a rejected native send propagates without a fallback or duplicate attempt", async () => {
+  let sends = 0;
+  const env = nativeEmailEnv(async () => {
+    sends += 1;
+    throw new Error("Cloudflare rejected email");
+  });
+  await assert.rejects(
+    sendEmail({ ...emailEnv, ...env }, { subject: "Test", body: "Test" }, {
+      mailerFactory: async () => { throw new Error("SMTP must not load"); },
+    }),
+    /Cloudflare rejected email/,
+  );
+  assert.equal(sends, 1);
+});
+
+test("native notifications send success and retain failure dedupe only after acceptance", async () => {
+  const messages = [];
+  const env = nativeEmailEnv(async (message) => messages.push(message));
+  const kv = makeKv();
+  const item = dispatch();
+  await notifyResult({ env, kv, dispatch: item, result: { status: "success" } });
+  assert.equal(messages.length, 1);
+  assert.deepEqual(kv.writes, []);
+  const notification = {
+    env, kv, dispatch: item, error: new Error("failed"), payload: failurePayload,
+    fingerprint: "failure:enroll:login_error",
+  };
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    await notifyFailure({ ...notification, env: nativeEmailEnv(async () => {
+      throw new Error("Cloudflare unavailable");
+    }) });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.deepEqual(kv.writes, []);
+  await notifyFailure(notification);
+  assert.equal(messages.length, 2);
+  assert.equal(kv.writes.length, 1);
+  await notifyFailure(notification);
+  assert.equal(messages.length, 2);
+});
+
 test("sendEmail uses the worker-mailer SMTP API through an injectable transport", async () => {
   let connection;
   let message;

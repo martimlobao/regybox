@@ -1,0 +1,9 @@
+{
+  "accountIdEnv": "REGYBOX_PRODUCTION_ACCOUNT_ID",
+  "kvNamespaceIdEnv": "REGYBOX_PRODUCTION_KV_NAMESPACE_ID",
+  "email": {
+    "provider": "cloudflare",
+    "fromEnv": "REGYBOX_PRODUCTION_EMAIL_FROM",
+    "toEnv": "REGYBOX_PRODUCTION_EMAIL_TO"
+  }
+}

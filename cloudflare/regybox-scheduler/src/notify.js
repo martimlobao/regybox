@@ -53,8 +53,19 @@ function failureSteps(payload) {
       ];
 }
 
-/** Return whether every SMTP setting required to send notifications is present. */
+function emailProvider(env) {
+  return String(env?.EMAIL_PROVIDER ?? "smtp").trim().toLowerCase();
+}
+
+/** Return whether the selected email transport is configured. */
 export function emailConfigured(env) {
+  if (emailProvider(env) === "cloudflare") {
+    return configured(env?.EMAIL_FROM) && configured(env?.EMAIL_TO) &&
+      typeof env?.EMAIL_SENDER?.send === "function";
+  }
+  if (emailProvider(env) !== "smtp") {
+    return false;
+  }
   return ["EMAIL_USERNAME", "EMAIL_PASSWORD", "EMAIL_TO"].every((name) => configured(env?.[name]));
 }
 
@@ -135,8 +146,24 @@ export function composeEmail({
   };
 }
 
-/** Send a message through worker-mailer without loading Worker-only sockets under Node. */
+/** Send through the selected transport; never retry an ambiguous send through SMTP. */
 export async function sendEmail(env, { subject, body }, { mailerFactory, platform = "regybox" } = {}) {
+  if (!emailConfigured(env)) {
+    throw new Error("Email notification transport is not configured.");
+  }
+  if (emailProvider(env) === "cloudflare") {
+    // Structured EmailMessageBuilder API: https://developers.cloudflare.com/email-service/api/send-emails/workers-api/#interface
+    await env.EMAIL_SENDER.send({
+      from: {
+        name: env.EMAIL_FROM_NAME || `${providerLabel(platform)} Auto-enroll`,
+        email: env.EMAIL_FROM.trim(),
+      },
+      to: env.EMAIL_TO.trim(),
+      subject,
+      text: body,
+    });
+    return;
+  }
   const createMailer =
     mailerFactory ??
     (async () => {
