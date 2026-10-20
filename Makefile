@@ -69,7 +69,7 @@ check-worker-fixtures:
 	test "$$(find tests/html_examples -maxdepth 1 -type f -name '*.html' -exec basename {} \; | sort)" = "$$(find cloudflare/regybox-scheduler/test/fixtures -maxdepth 1 -type f -name '*.html' -exec basename {} \; | sort)"
 
 deploy-worker:
-	cd cloudflare/regybox-scheduler && bun run deploy:manual
+	cd cloudflare/regybox-scheduler && bun run deploy:production
 
 ########
 # Fixes (keep sequential to avoid races)

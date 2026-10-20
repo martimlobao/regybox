@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "deploy": "wrangler deploy",
-    "deploy:manual": "node scripts/render-wrangler-config.mjs && wrangler deploy -c .wrangler.deploy.jsonc"
+    "deploy": "node scripts/render-wrangler-config.mjs && wrangler deploy -c .wrangler.deploy.jsonc",
+    "deploy:manual": "node scripts/render-wrangler-config.mjs --manual && wrangler deploy -c .wrangler.deploy.jsonc",
+    "deploy:production": "node scripts/render-wrangler-config.mjs --production && wrangler deploy -c .wrangler.deploy.jsonc"
   },
   "dependencies": {
     "parse5": "^8.0.1",

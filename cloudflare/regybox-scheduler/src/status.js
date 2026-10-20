@@ -159,7 +159,9 @@ function setupChecks(env, platform = "regybox") {
       check(
         "off",
         "Email notifications are off",
-        "Optional. Add EMAIL_USERNAME, EMAIL_PASSWORD and EMAIL_TO to get an email " +
+        "Optional. Configure Cloudflare email with EMAIL_PROVIDER=cloudflare, EMAIL_SENDER, " +
+          "EMAIL_FROM and EMAIL_TO, or SMTP with EMAIL_USERNAME, EMAIL_PASSWORD and EMAIL_TO, " +
+          "to get an email " +
           "when you are enrolled or when something needs your attention.",
       ),
     );

@@ -54,6 +54,28 @@ test("automatic updates keep the Worker identity and dashboard-owned platform va
   assert.equal(merged.$schema, "https://example.test/wrangler.schema.json");
 });
 
+test("automatic updates retain deployment-owned native email bindings", () => {
+  const deployment = JSON.parse(deploymentConfig);
+  deployment.send_email = [{
+    name: "EMAIL_SENDER",
+    allowed_sender_addresses: ["bookings@example.test"],
+    allowed_destination_addresses: ["owner@example.test"],
+  }];
+  const merged = JSON.parse(mergeDeploymentConfig({
+    deploymentText: JSON.stringify(deployment),
+    upstreamText: upstreamConfig,
+  }));
+  assert.deepEqual(merged.send_email, deployment.send_email);
+  assert.equal(merged.vars, undefined);
+  const upstream = JSON.parse(stripJsoncComments(upstreamConfig));
+  upstream.send_email = [{ name: "EMAIL_SENDER", allowed_sender_addresses: ["other@example.test"] }];
+  const sameName = JSON.parse(mergeDeploymentConfig({
+    deploymentText: JSON.stringify(deployment),
+    upstreamText: JSON.stringify(upstream),
+  }));
+  assert.deepEqual(sameName.send_email, deployment.send_email);
+});
+
 test("automatic updates preserve deployment KV bindings when upstream bindings are absent", () => {
   for (const upstreamNamespaces of [undefined, []]) {
     const upstream = JSON.parse(stripJsoncComments(upstreamConfig));

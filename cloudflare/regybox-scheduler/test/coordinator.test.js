@@ -83,6 +83,43 @@ test("failed waitlist email is retried independently of an enrolled cache and su
   assert.equal([...store.values.values()][0].state, "sent");
 });
 
+test("native email sends waitlist content from the durable outbox after a failed attempt", async () => {
+  const store = storage();
+  const messages = [];
+  let attempts = 0;
+  const env = {
+    ...emailEnv,
+    EMAIL_PROVIDER: "cloudflare",
+    EMAIL_FROM: "bookings@example.test",
+    EMAIL_TO: "owner@example.test",
+    REGYBOX_NOTIFICATIONS: store,
+    EMAIL_SENDER: { send: async (message) => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("native email unavailable");
+      messages.push(message);
+    } },
+  };
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    await notifyResult({ env, dispatch, result });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal([...store.values.values()][0].state, "pending");
+  await retryPendingNotifications({ ...env, REGYBOX_NOTIFICATIONS: storage(store.values) });
+  await retryPendingNotifications(env);
+  assert.equal(attempts, 2);
+  assert.equal([...store.values.values()][0].state, "sent");
+  assert.equal(messages.length, 1);
+  assert.deepEqual(messages[0].from, {
+    name: "Bookr.fit Auto-enroll", email: "bookings@example.test",
+  });
+  assert.equal(messages[0].to, "owner@example.test");
+  assert.match(messages[0].subject, /waitlisted/);
+  assert.match(messages[0].text, /place in the class is not confirmed/);
+});
+
 test("a queued waitlist notice survives interruption before sending", async () => {
   const store = storage();
   const env = { ...emailEnv, REGYBOX_NOTIFICATIONS: store };
