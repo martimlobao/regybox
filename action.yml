@@ -229,7 +229,7 @@ runs:
         fi
     - name: Send confirmation email
       if: always() && inputs.send-email != 'false' && env.SHOULD_SEND_EMAIL == 'true'
-      uses: dawidd6/action-send-mail@67ce3558d613188179559c61d3565140cf389968
+      uses: dawidd6/action-send-mail@47af4a10b540781705f283a2cf1a9650713ac795
       with:
         server_address: ${{ inputs.email-server }}
         server_port: ${{ inputs.email-port }}
