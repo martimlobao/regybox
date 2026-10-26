@@ -12,6 +12,8 @@ ignore = [
   "EM102",  # f-string-in-exception
   "G001",  # logging-string-format
   "G004",  # logging-f-string
+  "RUF105",  # noqa-comments
+  "RUF201",  # rule-codes-in-selectors
   "TRY003",  # raise-vanilla-args
   "T201",  # print
   # from https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
