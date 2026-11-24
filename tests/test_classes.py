@@ -471,7 +471,7 @@ def test_get_classes_tags_retries_empty_class_response() -> None:
             "regybox.classes.get_classes_html",
             side_effect=["<html><body></body></html>", open_html],
         ) as mock_get,
-        patch("regybox.classes.time.sleep") as mock_sleep,
+        patch("regybox.classes.time", spec=["sleep"]) as mock_time,
     ):
         classes = _get_classes_tags_with_retry(
             1234567890000, retry_total=3, retry_backoff_factor=0.25
@@ -479,7 +479,7 @@ def test_get_classes_tags_retries_empty_class_response() -> None:
 
     assert len(classes) == 1
     assert mock_get.call_count == 2
-    mock_sleep.assert_called_once_with(0.25)
+    mock_time.sleep.assert_called_once_with(0.25)
 
 
 def test_get_classes_tags_empty_retry_budget_can_be_overridden() -> None:
@@ -488,7 +488,7 @@ def test_get_classes_tags_empty_retry_budget_can_be_overridden() -> None:
         patch(
             "regybox.classes.get_classes_html", return_value="<html><body></body></html>"
         ) as mock_get,
-        patch("regybox.classes.time.sleep") as mock_sleep,
+        patch("regybox.classes.time", spec=["sleep"]) as mock_time,
     ):
         classes = _get_classes_tags_with_retry(
             1234567890000, retry_total=5, retry_backoff_factor=0.01
@@ -496,8 +496,8 @@ def test_get_classes_tags_empty_retry_budget_can_be_overridden() -> None:
 
     assert classes == []
     assert mock_get.call_count == 6
-    assert mock_sleep.call_count == 5
-    assert sum(call.args[0] for call in mock_sleep.call_args_list) < 1
+    assert mock_time.sleep.call_count == 5
+    assert sum(call.args[0] for call in mock_time.sleep.call_args_list) < 1
 
 
 def test_get_classes_returns_list_of_classes() -> None:

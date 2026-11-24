@@ -4,7 +4,7 @@ This module defines the Calendar class, which is responsible for fetching and
 parsing the calendar specified by CALENDAR_URL.
 """
 
-import datetime
+import datetime as dt
 from typing import cast
 
 import icalendar
@@ -55,7 +55,7 @@ class Calendar(metaclass=Singleton):
 
     def find(
         self,
-        when: datetime.datetime | datetime.date,
+        when: dt.datetime | dt.date,
         event_name: str | None = None,
     ) -> icalendar.cal.Event | None:
         """Find an event in the calendar with a given time and name.
@@ -77,12 +77,12 @@ class Calendar(metaclass=Singleton):
         )
         for event in events:
             if (
-                type(event["DTSTART"].dt) is datetime.date
-                and type(when) is datetime.datetime
+                type(event["DTSTART"].dt) is dt.date
+                and type(when) is dt.datetime
                 and event["DTSTART"].dt != when.date()
             ):
                 continue
-            if type(event["DTSTART"].dt) is datetime.date and type(when) is datetime.datetime:
+            if type(event["DTSTART"].dt) is dt.date and type(when) is dt.datetime:
                 continue
             if normalized_event_name and not event.get("SUMMARY"):
                 continue
@@ -98,8 +98,8 @@ class Calendar(metaclass=Singleton):
 
     def interval(
         self,
-        start: datetime.datetime | datetime.date,
-        end: datetime.datetime | datetime.date,
+        start: dt.datetime | dt.date,
+        end: dt.datetime | dt.date,
     ) -> list[icalendar.cal.Event]:
         """Retrieve a list of events within the specified interval.
 
@@ -119,8 +119,8 @@ class Calendar(metaclass=Singleton):
 
 
 def check_cal(
-    date: datetime.date,
-    time: datetime.time,
+    date: dt.date,
+    time: dt.time,
     event_name: str | None = None,
     class_type: str | None = None,
 ) -> bool:
@@ -139,7 +139,7 @@ def check_cal(
         UnplannedClassError: If the event does not exist at the specified date
         and time.
     """
-    when: datetime.datetime = datetime.datetime.combine(date, time)
+    when: dt.datetime = dt.datetime.combine(date, time)
     if not Calendar().calendar:
         return True
     if not Calendar().find(when=when, event_name=event_name):

@@ -1,5 +1,6 @@
-import datetime
+import datetime as dt
 import logging
+import time
 import tomllib
 from importlib import resources
 from pathlib import Path
@@ -476,8 +477,11 @@ def test_main_retries_not_open_noop_when_enrollment_opens_within_timeout(
         patch("regybox.regybox.check_cal"),
         patch("regybox.regybox.get_classes", return_value=[closed_class]),
         patch("regybox.regybox.pick_class", side_effect=[closed_class, open_class]),
-        patch("regybox.regybox.time.monotonic", side_effect=[0, 0, 60]),
-        patch("regybox.regybox.time.sleep") as sleep_mock,
+        patch(
+            "regybox.regybox.time",
+            spec=["monotonic", "sleep"],
+            monotonic=MagicMock(side_effect=[0, 0, 60]),
+        ) as time_mock,
     ):
         result = main(
             class_date="2026-03-10",
@@ -489,7 +493,7 @@ def test_main_retries_not_open_noop_when_enrollment_opens_within_timeout(
         )
 
     assert result == OperationResult(operation="enroll", status="success", class_type="WOD Rato")
-    sleep_mock.assert_called_once_with(60)
+    time_mock.sleep.assert_called_once_with(60)
     open_class.enroll.assert_called_once_with()
     structured_messages = [
         record.getMessage()
@@ -551,7 +555,7 @@ def test_main_treats_not_open_without_timer_as_noop_when_requested() -> None:
 
 
 def test_main_timeout_is_noop_when_requested() -> None:
-    with patch("regybox.regybox.START", datetime.datetime.now(datetime.UTC)):
+    with patch("regybox.regybox.START", dt.datetime.now(dt.UTC)):
         result = main(
             class_date="2026-03-10",
             class_time="06:30",
@@ -767,7 +771,7 @@ def test_main_waits_then_enrolls_when_class_opens_later(
             side_effect=[[closed_class], [open_class]],
         ),
         patch("regybox.regybox.pick_class", side_effect=[closed_class, open_class]),
-        patch("regybox.regybox.time.sleep"),
+        patch("regybox.regybox.time", spec=["monotonic", "sleep"], monotonic=time.monotonic),
     ):
         main(
             class_date="2026-03-10",
