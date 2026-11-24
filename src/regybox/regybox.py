@@ -5,7 +5,7 @@ Regybox application. It retrieves the classes for a specified date, picks a
 class based on criteria, and enrolls in the class.
 """
 
-import datetime
+import datetime as dt
 import math
 import time
 from dataclasses import dataclass
@@ -23,7 +23,7 @@ from regybox.exceptions import (
 )
 from regybox.utils.times import secs_to_str
 
-START: datetime.datetime = datetime.datetime.now(TIMEZONE)
+START: dt.datetime = dt.datetime.now(TIMEZONE)
 DEFAULT_CALENDAR_EVENT_NAME: str = "CrossFit"
 SHORT_WAIT: int = 1
 MED_WAIT: int = 10
@@ -121,8 +121,8 @@ def _closed_enrollment_result(
             f"Enrollment is not open; opens in {secs_to_str(time_to_enroll)}; "
             "returning no-op result"
         )
-        last_checked_at = datetime.datetime.now(TIMEZONE)
-        enrollment_opens_at = last_checked_at + datetime.timedelta(seconds=time_to_enroll)
+        last_checked_at = dt.datetime.now(TIMEZONE)
+        enrollment_opens_at = last_checked_at + dt.timedelta(seconds=time_to_enroll)
         LOGGER.info(
             "REGYBOX_CACHE_STATE=not_open "
             f"enrollment_opens_at={enrollment_opens_at.isoformat()} "
@@ -151,14 +151,14 @@ def _class_is_overbooked(class_: Class) -> bool:
     return _class_bool(class_, "is_overbooked") and _class_bool(class_, "is_full")
 
 
-def _raise_overbooked(*, resolved_class_type: str, date: datetime.date, class_time: str) -> None:
+def _raise_overbooked(*, resolved_class_type: str, date: dt.date, class_time: str) -> None:
     LOGGER.info(f"{resolved_class_type} on {date.isoformat()} at {class_time} is overbooked")
     raise ClassIsOverbookedError
 
 
 def _pick_requested_class(
     *,
-    date: datetime.date,
+    date: dt.date,
     class_time: str,
     class_types: list[str],
     options: OperationOptions,
@@ -184,7 +184,7 @@ def _pick_requested_class(
 
 def _pick_unenroll_class(
     *,
-    date: datetime.date,
+    date: dt.date,
     class_time: str,
     class_types: list[str],
 ) -> Class | OperationResult:
@@ -218,7 +218,7 @@ def _enroll_selected_class(
     *,
     class_: Class,
     resolved_class_type: str,
-    date: datetime.date,
+    date: dt.date,
     class_time: str,
 ) -> OperationResult:
     if _class_bool(class_, "user_is_enrolled"):
@@ -248,7 +248,7 @@ def _enroll_selected_class(
             status="noop",
             class_type=resolved_class_type,
         )
-    LOGGER.info(f"Runtime: {(datetime.datetime.now(TIMEZONE) - START).total_seconds():.3f}")
+    LOGGER.info(f"Runtime: {(dt.datetime.now(TIMEZONE) - START).total_seconds():.3f}")
     return _operation_result(
         operation="enroll",
         status="success",
@@ -258,7 +258,7 @@ def _enroll_selected_class(
 
 def _wait_for_enrollable_class(
     *,
-    date: datetime.date,
+    date: dt.date,
     class_time: str,
     class_types: list[str],
     timeout: int,
@@ -376,9 +376,9 @@ def main(
         raise ValueError("class_type must include at least one class name.")
     LOGGER.info(f"Started at {START.isoformat()}")
     if not class_date:
-        date: datetime.date = (datetime.datetime.now(TIMEZONE) + datetime.timedelta(days=2)).date()
+        date: dt.date = (dt.datetime.now(TIMEZONE) + dt.timedelta(days=2)).date()
     else:
-        date = (datetime.datetime.strptime(class_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE)).date()
+        date = (dt.datetime.strptime(class_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE)).date()
 
     if check_calendar:
         calendar_event_name: str = (
@@ -388,7 +388,7 @@ def main(
         )
         check_cal(
             date=date,
-            time=datetime.datetime.strptime(class_time, "%H:%M").replace(tzinfo=TIMEZONE).timetz(),
+            time=dt.datetime.strptime(class_time, "%H:%M").replace(tzinfo=TIMEZONE).timetz(),
             event_name=calendar_event_name,
             class_type=class_types[0],
         )
@@ -442,7 +442,7 @@ def list_classes(class_date: str) -> None:
     Args:
         class_date: The date of the classes in the format 'YYYY-MM-DD'.
     """
-    date = (datetime.datetime.strptime(class_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE)).date()
+    date = (dt.datetime.strptime(class_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE)).date()
     classes: list[Class] = get_classes(date.year, date.month, date.day)
 
     # Prepare data and calculate column widths

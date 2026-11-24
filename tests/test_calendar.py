@@ -1,4 +1,4 @@
-import datetime
+import datetime as dt
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -10,33 +10,26 @@ from regybox.utils.singleton import Singleton
 
 
 def test_check_cal(mock_requests_get: pytest.MonkeyPatch) -> None:  # noqa: ARG001
-    assert check_cal(datetime.date(2012, 2, 13), datetime.time(10, 0)) is True
+    assert check_cal(dt.date(2012, 2, 13), dt.time(10, 0)) is True
     with pytest.raises(UnplannedClassError):
-        check_cal(datetime.date(2012, 2, 13), datetime.time(10, 0), event_name="foo")
-    assert (
-        check_cal(datetime.date(2012, 2, 13), datetime.time(10, 0), event_name="crossfit") is True
-    )
-    assert (
-        check_cal(datetime.date(2012, 2, 13), datetime.time(10, 0), event_name="  CrossFit  ")
-        is True
-    )
+        check_cal(dt.date(2012, 2, 13), dt.time(10, 0), event_name="foo")
+    assert check_cal(dt.date(2012, 2, 13), dt.time(10, 0), event_name="crossfit") is True
+    assert check_cal(dt.date(2012, 2, 13), dt.time(10, 0), event_name="  CrossFit  ") is True
 
     calendar = Calendar()
     timezone = ZoneInfo("Europe/Vaduz")
-    assert calendar.find(when=datetime.datetime(2012, 2, 13, 10, 0, tzinfo=timezone)) is not None
-    assert calendar.find(when=datetime.datetime(2012, 2, 13, 9, 0, tzinfo=timezone)) is None
-    assert calendar.find(when=datetime.datetime(2012, 2, 13, 10, 0, tzinfo=TIMEZONE)) is None
-    assert calendar.find(when=datetime.datetime(2012, 2, 13, 9, 0, tzinfo=TIMEZONE)) is not None
+    assert calendar.find(when=dt.datetime(2012, 2, 13, 10, 0, tzinfo=timezone)) is not None
+    assert calendar.find(when=dt.datetime(2012, 2, 13, 9, 0, tzinfo=timezone)) is None
+    assert calendar.find(when=dt.datetime(2012, 2, 13, 10, 0, tzinfo=TIMEZONE)) is None
+    assert calendar.find(when=dt.datetime(2012, 2, 13, 9, 0, tzinfo=TIMEZONE)) is not None
     assert (
-        calendar.find(
-            when=datetime.datetime(2012, 2, 13, 10, 0, tzinfo=timezone), event_name="foo"
-        )
+        calendar.find(when=dt.datetime(2012, 2, 13, 10, 0, tzinfo=timezone), event_name="foo")
         is None
     )
     assert (
         calendar.interval(
-            datetime.datetime(2012, 2, 13, 10, 0, tzinfo=timezone),
-            datetime.datetime(2012, 2, 13, 11, 0, tzinfo=timezone),
+            dt.datetime(2012, 2, 13, 10, 0, tzinfo=timezone),
+            dt.datetime(2012, 2, 13, 11, 0, tzinfo=timezone),
         )
         != []
     )
@@ -47,8 +40,8 @@ def test_check_cal_error_includes_normalized_event_name(
 ) -> None:
     with pytest.raises(UnplannedClassError) as exc_info:
         check_cal(
-            datetime.date(2012, 2, 13),
-            datetime.time(10, 0),
+            dt.date(2012, 2, 13),
+            dt.time(10, 0),
             event_name="  foo  ",
             class_type="WOD Rato",
         )
@@ -64,8 +57,8 @@ def test_check_cal_error_uses_requested_event_placeholder_when_no_event_name(
 ) -> None:
     with pytest.raises(UnplannedClassError) as exc_info:
         check_cal(
-            datetime.date(2012, 2, 13),
-            datetime.time(11, 0),
+            dt.date(2012, 2, 13),
+            dt.time(11, 0),
             event_name=None,
             class_type="WOD Rato",
         )
@@ -82,7 +75,7 @@ def test_check_cal_returns_true_when_no_calendar_url(monkeypatch: pytest.MonkeyP
     if Calendar in Singleton._instances:
         del Singleton._instances[Calendar]
     try:
-        assert check_cal(datetime.date(2012, 2, 13), datetime.time(10, 0)) is True
+        assert check_cal(dt.date(2012, 2, 13), dt.time(10, 0)) is True
     finally:
         if Calendar in Singleton._instances:
             del Singleton._instances[Calendar]

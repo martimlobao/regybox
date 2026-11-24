@@ -1,6 +1,6 @@
 """Provide classes and functions for interacting with CrossFit classes."""
 
-import datetime
+import datetime as dt
 import re
 import time
 from dataclasses import dataclass, field
@@ -138,7 +138,7 @@ class Class:
 
         self.name = name.text.strip()
         self.details = ftfy.fix_text(details.text.strip())
-        self.date = datetime.datetime.fromtimestamp(date, tz=TIMEZONE).date().isoformat()
+        self.date = dt.datetime.fromtimestamp(date, tz=TIMEZONE).date().isoformat()
         self.start, *_, self.end = time_.text.split()
         cap_parts: list[str] = capacity.text.split()
         cur_capacity: int | None = parse_capacity_value(cap_parts[0])
@@ -451,7 +451,7 @@ def get_classes_tags(year: int, month: int, day: int) -> list[Tag]:
     Raises:
         NoClassesFoundError: If no classes are found for the specified date.
     """
-    timestamp: int = int(datetime.datetime(year, month, day, tzinfo=TIMEZONE).timestamp() * 1000)
+    timestamp: int = int(dt.datetime(year, month, day, tzinfo=TIMEZONE).timestamp() * 1000)
     classes = _get_classes_tags_with_retry(timestamp)
     if not classes:
         raise NoClassesFoundError(class_date=f"{year}-{month}-{day}")

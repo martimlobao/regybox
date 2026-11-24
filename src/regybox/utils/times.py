@@ -1,6 +1,6 @@
 """Provide utility functions for time-related operations."""
 
-import datetime
+import datetime as dt
 
 
 def secs_to_str(seconds: int) -> str:
@@ -12,4 +12,4 @@ def secs_to_str(seconds: int) -> str:
     Returns:
         The string representation of the duration in the format "HH:MM:SS".
     """
-    return str(datetime.timedelta(seconds=seconds))
+    return str(dt.timedelta(seconds=seconds))
